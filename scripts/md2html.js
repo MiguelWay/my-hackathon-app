@@ -21,7 +21,7 @@ const H3S = S + "font-size:14pt;font-weight:bold;";
 const PS = S + "font-size:14pt;";
 const LIS = S + "font-size:14pt;";
 // Red, bold question mark for every open point.
-const RED_Q = '<span style="color:#cc0000;font-weight:bold">?</span>';
+const RED_Q = '<font color="#cc0000"><b>?</b></font>';
 
 const esc = (s) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
