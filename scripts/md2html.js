@@ -40,6 +40,7 @@ for (const raw of md.split(/\r?\n/)) {
   if (line.trim() === "") { closeAll(); continue; }
 
   let m;
+  if (line === "---") { closeAll(); out.push("<hr>"); continue; }
   if ((m = line.match(/^# (.*)$/))) { closeAll(); out.push(`<h1>${inline(m[1])}</h1>`); continue; }
   if ((m = line.match(/^## (.*)$/))) { closeAll(); out.push(`<h2>${inline(m[1])}</h2>`); continue; }
   if ((m = line.match(/^### (.*)$/))) { closeAll(); out.push(`<h3>${inline(m[1])}</h3>`); continue; }
@@ -74,7 +75,16 @@ for (const raw of md.split(/\r?\n/)) {
 closeAll();
 
 const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Statement of Intent</title></head>
+<html><head><meta charset="utf-8"><title>Statement of Intent</title>
+<style>
+body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 12pt; line-height: 1.45; }
+h1 { font-size: 20pt; }
+h2 { font-size: 15pt; }
+h3 { font-size: 13pt; }
+p { margin: 6pt 0; }
+li { margin: 2pt 0; }
+</style>
+</head>
 <body>
 ${out.join("\n")}
 </body></html>
