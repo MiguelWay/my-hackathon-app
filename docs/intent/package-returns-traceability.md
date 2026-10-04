@@ -112,7 +112,7 @@ The app produces an **Excel export containing all rows, with the returned packag
 The operator removes the closed stores from the source database, so the member count drops and dead stores are gone. The app is **read-only on the source** — it only produces the flagged list.
 
 **Open / to confirm:**
-- Confirm this step is entirely manual (the app never writes back to the source).
+- ❓ Confirm this step is entirely manual (the app never writes back to the source).
 
 ---
 
