@@ -1,4 +1,4 @@
-# Statement of Intent — Package Returns & Store Traceability App
+why i# Statement of Intent — Package Returns & Store Traceability App
 
 **Status:** IN PROGRESS — interview ongoing, **not yet confirmed**. Open questions at the bottom.
 **Date started:** 2026-10-04
@@ -23,7 +23,9 @@ packages by reason, and produce a clearly-flagged export so that closed/returnin
 - The sending list is **extracted from another (source) database**, stored in an **Excel
   spreadsheet**, and used to **print the labels**.
 - **One uploaded file contains thousands of retail stores** (rows), with all columns per store —
-  including the **unique sender ID** and the store's **rasca y gana codes**.
+  including the **unique sender ID**.
+- The **rasca y gana codes are associated with each store's sending ID**, but the app **does NOT
+  track the individual rasca y gana codes**.
 - **Separate files are uploaded over time** (e.g. one per sending round).
 - The app must **ingest and store these files with all their columns**.
 - **Google Sheets** is an alternative source of send files; **Playwright can read them** — this is
@@ -92,12 +94,15 @@ rows with all columns.
 - ❓ Campaign = one file? (can a campaign span multiple uploads?)
 - ❓ How is customer + campaign identified on upload — chosen in-app or inferred from the file?
 - ❓ Are columns always the same across customers/files, or must the app map varying column names?
+- ❓ **How does the app find the sending ID** — auto-read the column header, or does the uploader
+  specify the column name? _(raised by user)_
 - ❓ Same store in several campaigns (or same ID twice)?
 - ❓ Is the Google Sheets / Playwright path still wanted for v1?
 
 **Step 2 — Parse & store the rows.** App ingests the file into Supabase.
 - ❓ Is one row = one store, or one row = one package?
-- ❓ How many rasca y gana codes per store, and how are they stored/used?
+- ✅ Rasca y gana codes are associated with each store's sending ID; the app does **not** track the
+  individual codes.
 - ❓ Is the unique sender ID unique across campaigns, or only within a campaign?
 
 **Step 3 — Print labels & ship (physical, outside app).** Labels printed; packages sent via Correos
@@ -162,7 +167,8 @@ falls.
    Auth cover it?
 5. **Constraints:** any binding limits (data volume, OCR accuracy expectations, offline use, device —
    phone camera vs desktop/scanner)?
-6. **Explicit out-of-scope** items for v1.
+4. **Explicit out-of-scope** items for v1.
+5. **Sending-ID column detection** — auto-read the header, or does the uploader name the column?
 
 ## Known tech context (from setup, not part of the intent)
 - Env: macOS, Zed editor, Node at `~/.local/node/bin`.
