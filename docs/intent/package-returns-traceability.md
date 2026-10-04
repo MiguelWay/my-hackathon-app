@@ -76,6 +76,83 @@ packages by reason, and produce a clearly-flagged export so that closed/returnin
 3. Keep the store database accurate by identifying **closed stores** so they're removed and the
    member count reflects reality.
 
+## End-to-end process (step by step, with open points)
+
+_Legend: ✅ decided · ❓ open_
+
+**Step 0 — Source list exists (outside the app).** The sending list lives in another database,
+exported to Excel, and used to print labels.
+- ❓ Is the Excel produced per customer, per campaign, or both?
+- ❓ Is the Excel exactly what gets uploaded, or does it need cleanup first?
+
+**Step 1 — Upload the send file.** A permitted user uploads the file; it contains thousands of store
+rows with all columns.
+- ✅ Only certain users may upload.
+- ✅ One file = thousands of stores; separate files uploaded over time.
+- ❓ Campaign = one file? (can a campaign span multiple uploads?)
+- ❓ How is customer + campaign identified on upload — chosen in-app or inferred from the file?
+- ❓ Are columns always the same across customers/files, or must the app map varying column names?
+- ❓ Same store in several campaigns (or same ID twice)?
+- ❓ Is the Google Sheets / Playwright path still wanted for v1?
+
+**Step 2 — Parse & store the rows.** App ingests the file into Supabase.
+- ❓ Is one row = one store, or one row = one package?
+- ❓ How many rasca y gana codes per store, and how are they stored/used?
+- ❓ Is the unique sender ID unique across campaigns, or only within a campaign?
+
+**Step 3 — Print labels & ship (physical, outside app).** Labels printed; packages sent via Correos
+España.
+- ❓ Does the app need to know the ship date, or is upload enough?
+
+**Step 4 — Capture the return.** Someone photographs the returned label.
+- ✅ Multiple people can do this concurrently.
+- ❓ Device: phone camera in-app, a scanner, or photo upload from a computer?
+- ❓ Which role(s) can process returns?
+- ❓ Bad/partial photo handling — retake prompt / manual entry fallback?
+
+**Step 5 — OCR reads the label.** App extracts the unique ID.
+- ❓ Read only the ID, or also store name/address as a sanity check?
+- ❓ OCR accuracy expectation; is a manual ID-entry fallback required?
+- ❓ Any constraint on which OCR engine/library?
+
+**Step 6 — Match to the outbound record.**
+- ❓ Match scope: within the campaign / the customer / the whole system?
+- ❓ What if the ID isn't found (misread / not yet uploaded)?
+- ❓ How to handle the same package scanned twice (duplicate return)?
+
+**Step 7 — Choose the return category.** App shows the list; person picks one; row marked returned.
+- ✅ Prompt is a pre-shown list of 3–5 categories, after OCR.
+- ✅ Known so far: tienda cerrada, dirección desconocida o incorrecta.
+- ❓ The exact full set of categories ← the big one.
+- ❓ Can a category be corrected/edited later, and by whom?
+- ✅ "Closed" is per campaign (not global to the customer).
+
+**Step 8 — Resend (optional second action).** Original ID ↔ new ID must be linked.
+- ❓ How is a resend initiated — a new uploaded file, or an in-app action?
+- ❓ Does the new sender ID come from a new send file, or is it generated in-app?
+- ❓ How is the link shown; does it chain across multiple resends?
+
+**Step 9 — Reporting.** Return-rate reports by category, with graphs.
+- ❓ Metric definition — rate denominator: per campaign / per store / over time?
+- ❓ Which breakdowns/charts matter most?
+- ❓ Which roles can view reports?
+
+**Step 10 — Export the flagged list (main value).** Excel with all rows, returned packages marked.
+- ❓ Exact columns and marking convention (column / colour / status word?).
+- ❓ Scope: per campaign / per customer / everything?
+- ❓ Format: .xlsx only?
+
+**Step 11 — Prune the source database (manual, outside app).** Closed stores drop out; member count
+falls.
+- ✅ App is read-only on the source; it only produces the flagged list.
+
+**Cross-cutting (not tied to one step).**
+- ❓ User roles/permissions model (uploader vs return-processor vs admin) — does Supabase Auth cover it?
+- ❓ Binding constraint — data volume, OCR accuracy, device, offline requirement?
+- ❓ Multi-tenant isolation — how strictly are customers' data kept separate?
+- ❓ Success metric — any sharper number than the qualitative outcomes?
+- ❓ Explicit out-of-scope for v1.
+
 ## Open questions (to resolve before spec)
 1. **Exact full set of return categories** (the 3–5).
 2. ~~Hierarchy~~ **RESOLVED:** `Customer (1 master DB) → Campaign(s) → uploaded file → store rows →
