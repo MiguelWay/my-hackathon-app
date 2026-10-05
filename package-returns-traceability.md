@@ -6,136 +6,105 @@
 
 **One-liner:** Track physical packages sent to retail stores (via Correos España), classify returned packages by reason, and produce a clearly-flagged export so that closed/returning stores are not sent to again — plus reporting on return rates.
 
-_Each step below shows what happens, followed by the points that are still open or unconfirmed for that step._
+_Each step shows what happens and the decisions made, followed by the points that are still open. Open points are marked with a red question mark. Items marked "Zed proposal" are my suggestions awaiting your confirmation._
+
+**Terminology:** Sender unique code = Sender ID = sending ID = package ID = ID = id. The sender ID equals the Rasca y Gana code. (That association is handled by another app.)
 
 ---
 
 ## Step 0 — The source list is created (outside the app)
 
-The sending list lives in another database, is exported to an Excel file, and that file is used to print the labels.
+There is **one master database per customer**. Each campaign is a **sub-list created from the master database** (the "campaign list"), and that list is used to print the labels. The list is uploaded to the app as an **Excel file**, and the app must **read the column names and never change them**.
 
 **Open / to confirm:**
-- Is the Excel produced per customer, per campaign, or both?
-- Is the Excel exactly what gets uploaded, or does it need cleanup first?
+- ? Do column names stay fixed, or must the app map varying names? (Your notes say both "column names will not change" and "app maps varying column names" — which is it?)
+- ? Is each campaign list stored separately per campaign (one master DB, many campaign lists)?
 
 ## Step 1 — A user uploads the send file
 
-A permitted user uploads the file into the app. One file contains **thousands of retail-store rows**, with all columns per store, **including the unique sender ID**. The **rasca y gana codes are associated with each store's sending ID**, but the app **does not track the individual rasca y gana codes**. Separate files are uploaded over time (one per sending round). Only certain users are allowed to upload.
+A permitted user uploads the campaign list. **A campaign can have multiple uploads**, and each upload is a **new list of packages to be sent**. Each upload must contain the package **sender ID** (column names are consistent). The **customer and campaign are chosen via form fields** (field names still to be defined). Per campaign a store appears **once**, and an **ID cannot appear twice**. The **Google Sheets / Playwright** input path is deferred to **V2**.
 
 **Open / to confirm:**
-- Is one campaign = one file? (Can a campaign span multiple uploads?)
-- How is the customer + campaign identified on upload — chosen in-app, or inferred from the file?
-- Are columns always the same across customers/files, or must the app map varying column names?
-- How does the app find the sending ID — auto-read the column header, or does the uploader specify the column name? (raised by user)
-- Can the same store appear in several campaigns (or the same ID twice)?
-- Is the Google Sheets / Playwright input path still wanted for v1?
+- ? How does the app find the sending ID — auto-read the header, the uploader names the column, or auto-read then confirm? **Zed proposal:** auto-detect the likely column and show a one-click confirm, remembered per customer.
+- ? Form field names for Customer and Campaign still to be defined.
+- ? Reconcile "fixed column names" vs "map varying column names" (same as Step 0).
 
-## Step 2 — The app parses and stores the rows
+## Step 2 — The app stores the rows
 
-The uploaded file is ingested into Supabase, storing every row with all of its columns.
+**One row = one store = one Sender ID = one package.** The **sender ID is unique only within a campaign**. The app stores every row with all of its columns.
 
 **Open / to confirm:**
-- Is one row = one store, or one row = one package?
-- Is the unique sender ID unique across campaigns, or only within a campaign?
+- ? Storage: **Supabase (Postgres)** vs **Google Sheets/Drive**? **Zed proposal:** use **Supabase as the system of record**, keep Excel/Sheets for import/export. Reasons: concurrent multi-user writes, roles/permissions, relational links (customer → campaign → package → resend), uniqueness guarantees, report queries, and scale (thousands of rows × many campaigns). Sheets struggle with concurrent writes, permissions, and relational integrity. You already have Supabase connected.
 
 ## Step 3 — Labels are printed and packages ship (outside the app)
 
-Labels are printed from the list, and the physical packages are sent to the retail stores via Correos España.
+Labels are printed from the campaign list, and the packages are sent via Correos España. **Each package label contains the package ID.** The **ship date is a form field, not mandatory**.
+
+**No open points at this stage.**
+
+## Step 4 — Package returns (capture and categorise)
+
+Each returned package carries the **original sender ID**. The user records that value together with the **return reason**, chosen from a dropdown of five: **tienda cerrada, ausente, dirección incorrecta, estacionada, otro**.
+
+On **campaign setup**, a form field defines the **Name_Code** for each sender ID; the OCR uses that to read the photos. Return packages are **photographed**, and the OCR reads the **Name_Code and the Sender ID**. The Sender ID is **auto-read into the database and validated**, and the app then **asks for the return reason** (dropdown). Photos must use **minimal disk space**, and at the end of each campaign the files can be deleted. **Campaign form fields: start date, stop date.**
+
+Using a phone camera + OCR is **optional** — it is a trade-off of time and disk space versus doing it manually.
 
 **Open / to confirm:**
-- Does the app need to know the ship date, or is the upload enough?
+- ? Roles allowed to process returns: you said "Users" — does that mean **any** user (while only uploads are restricted), or a specific role?
+- ? Which OCR engine? **Zed proposal (3 choices):** (1) **Google ML Kit Text Recognition** — on-device, free, best for a mobile app; (2) **Apple Vision** (`VNRecognizeTextRequest`) — on-device, free, if iOS/macOS; (3) **Tesseract / tesseract.js** — free, self-hosted/on-device, runs on a server or desktop. Cloud OCR (Google Vision, AWS Textract, Azure) is more accurate but costs per call. **Also consider:** if the sender ID could be printed as a **barcode or QR**, scanning would be far more reliable than OCR.
+- ? Time estimate for the OCR flow: **Zed estimate:** ~10–20 s per package (photo 5–10 s + OCR 1–3 s + reason 5 s), versus ~30–60 s manual — worthwhile at volume.
+- ? Bad/partial photo → **manual entry** (already decided).
 
-## Step 4 — A returned package is photographed
+## Step 5 — Resending of packages
 
-When a package comes back, someone **photographs its label**. Multiple people can do this at the same time (concurrent).
-
-**Open / to confirm:**
-- Device: phone camera in the app, a scanner, or a photo uploaded from a computer?
-- Which role(s) are allowed to process returns?
-- How is a bad/partial photo handled — retake prompt, or manual entry fallback?
-
-## Step 5 — OCR reads the unique ID
-
-The app reads the label photo and extracts the **unique ID** from it.
+Returned packages can be **resent to other retailers**. After the sender ID is known and registered, a **new label with a new sender ID** is applied. The app must **register the new sender ID and associate it with the return package's original ID** — this is why **multiple sender-ID files can be uploaded per campaign**. Match scope is **within the campaign**. If the ID is not found, the package **cannot be resent**. Duplicates do not exist: the original sender ID is marked as a return, the package is reused with a new label, and the key point is linking the **original sender ID** to the **new sender ID** so the **Rasca y Gana codes** can be tracked. A resend is initiated by **uploading a new Excel sheet into the campaign**.
 
 **Open / to confirm:**
-- Read only the ID, or also the store name/address as a sanity check?
-- OCR accuracy expectation — and is a manual ID-entry fallback required?
-- Any constraint on which OCR engine/library must be used?
+- ? How is the link shown, and does it chain across multiple resends? **Zed proposal:** keep one "lineage" ID per physical package; each resend adds a link (original sender ID → new sender ID, with date and reason). The app shows a **timeline chain**, and the export carries a `Resend Of` / lineage column. Example: A → returned (tienda cerrada) → resent as B → B returned → resent as C.
 
-## Step 6 — The return is matched to the outbound row
+## Step 6 — Reporting
 
-The extracted ID is matched against the stored sending list to find that package's original row.
+Reports on **return rates by category**, using graphs. This is secondary to the main output. The **return-rate denominator is per campaign**.
 
 **Open / to confirm:**
-- Match scope: within the campaign, the customer, or the whole system?
-- What happens if the ID isn't found (misread, or not yet uploaded)?
-- How is the same package scanned twice handled (duplicate return)?
+- ? Which breakdowns/charts matter most? **Zed proposal:** (a) return rate by category (bar), per campaign; (b) return-rate trend over time (line), per campaign; (c) top returning stores (bar/table); (d) resend volume; (e) a per-customer overview for admins.
+- ? Which roles can view reports? **Zed proposal:** admins see everything; customer-scoped users see only their customer's campaigns.
 
-## Step 7 — A return category is chosen
+## Step 7 — Export the flagged list (main value)
 
-After the OCR reads the ID, the app **presents a list of 3–5 return categories** and the person **picks one**. The row is then marked as returned. Categories identified so far: **tienda cerrada** (store closed) and **dirección desconocida o incorrecta** (unknown or incorrect address). A store flagged **closed is scoped to the campaign** (not global to the customer).
-
-**Open / to confirm:**
-- The exact full set of categories (the list is 3–5; only 2 are named so far). ← biggest open item
-- Can a category be corrected/edited later, and by whom?
-
-## Step 8 — Resend (optional second action)
-
-A returned package can be **sent again**. The **original sending ID must be matched to the new sender ID**, which gives full sending traceability.
+The app produces an **Excel export containing all rows, with the returned packages clearly marked**, so those stores are not sent to again. **Scope: per campaign and per customer.**
 
 **Open / to confirm:**
-- How is a resend initiated — a new uploaded file, or an in-app action?
-- Does the new sender ID come from a new send file, or is it generated in-app?
-- How is the link shown, and does it chain across multiple resends?
+- ? Exact columns and marking convention. **Zed proposal:** keep all original columns **unchanged** and append new columns — `Return Status` (OK / RETURNED), `Return Reason`, `Resend Of` — **and** colour-fill the returned rows (light red) via conditional formatting, so it is both machine-readable and visually obvious.
+- ? Format. **Zed proposal:** **.xlsx** — it supports cell colours and multiple sheets (one per campaign or customer as needed).
 
-## Step 9 — Reporting
+## Step 8 — The source database is pruned (outside the app)
 
-Reports on **return rates by category**, using graphs. This is secondary to the main output.
+The operator removes the closed stores from the source database, so the member count drops. The app is **read-only on the source** at this point; writing back is a possible **V2**.
 
-**Open / to confirm:**
-- Metric definition — what is the return-rate denominator: per campaign, per store, or over time?
-- Which breakdowns/charts matter most?
-- Which roles can view reports?
-
-## Step 10 — Export the flagged list (main value)
-
-The app produces an **Excel export containing all rows, with the returned packages clearly marked**, so those stores are not sent to again in future.
-
-**Open / to confirm:**
-- Exact columns, and the marking convention (a column, a colour, or a status word?).
-- Scope of the export: per campaign, per customer, or everything?
-- Format: .xlsx only?
-
-## Step 11 — The source database is pruned (outside the app)
-
-The operator removes the closed stores from the source database, so the member count drops and dead stores are gone. The app is **read-only on the source** — it only produces the flagged list.
-
-**Open / to confirm:**
-- ❓ Confirm this step is entirely manual (the app never writes back to the source).
+**No open points at this stage** (V2 noted).
 
 ---
 
-## Cross-cutting points (not tied to a single step)
+## Cross-cutting points (still open)
 
 **Open / to confirm:**
-- User roles/permissions model (uploader vs return-processor vs admin) — does Supabase Auth cover it?
-- Binding constraint — data volume, OCR accuracy, device, or offline requirement?
-- Multi-tenant isolation — how strictly are customers' data kept separate?
-- Success metric — any sharper number than the qualitative outcomes below?
-- Explicit out-of-scope items for v1.
-
----
+- ? User roles/permissions model (uploader vs return-processor vs admin) — does Supabase Auth cover it?
+- ? Binding constraint — data volume, OCR accuracy, device, or offline requirement?
+- ? Multi-tenant isolation — how strictly are customers' data kept separate?
+- ? Success metric — any sharper number than the qualitative outcomes below?
+- ? Explicit out-of-scope items for v1.
 
 ## Business outcomes (why it matters)
 
 1. Reduce/eliminate re-sending to stores that keep returning packages → less shipping cost and wasted stock.
 2. See which categories cause the most returns (e.g. closed stores) → act on the biggest cause.
-3. Keep the store database accurate by identifying closed stores so they're removed and the member count reflects reality.
+3. Keep the store database accurate by identifying closed stores so they are removed and the member count reflects reality.
 
 ## Data model
 
-Customer (1 master store DB each) → Campaigns (many per customer) → uploaded file (thousands of store rows) → packages → returns (categorized; "closed" scoped per campaign) → flagged export.
+Customer (1 master DB each) → Campaigns (many per customer) → campaign lists (multiple uploads) → store rows / packages → returns (reason; "closed" scoped per campaign) → resends (linked sender IDs) → flagged export.
 
 ## Known tech context (from setup, not part of the intent)
 
