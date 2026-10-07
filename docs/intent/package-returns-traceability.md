@@ -1,12 +1,12 @@
 # Statement of Intent — Package Returns & Store Traceability App
 
-**Status:** IN PROGRESS — interview ongoing, nearly confirmed.
+**Status:** COMPLETE (v1) — for your review.
 **Date started:** 2026-10-04
 **Purpose:** A real operational tool to improve business performance (NOT a hackathon demo; nothing to present).
 
 **One-liner:** Track physical packages sent to retail stores (via Correos España), classify returned packages by reason, and produce a clearly-flagged export so that closed/returning stores are not sent to again — plus reporting on return rates.
 
-_Open points are marked with a red question mark. Everything else is decided._
+_This is the complete statement of intent. Where you asked me to decide, my choice is included — change anything you disagree with._
 
 **Terminology:** Sender unique code = Sender ID = sending ID = package ID = ID = id. The sender ID equals the Rasca y Gana code. (That association is handled by another app.)
 
@@ -16,28 +16,20 @@ _Open points are marked with a red question mark. Everything else is decided._
 
 There is **one master database per customer**. Each campaign is a **sub-list created from the master database** (the "campaign list"), and that list is used to print the labels. Lists are uploaded as **Excel**, and the app reads the column names and **never changes them**. **Column names will not change.** Many campaign lists are combined within the one master database.
 
-**No open points.**
-
 ## Step 1 — A user uploads the send file
 
 An **admin** user uploads the campaign list. **A campaign can have multiple uploads**, and each upload is a **new list of packages to be sent**; each upload must contain the package **sender ID**. The **customer and campaign are chosen via form fields**. Per campaign a store appears **once**, and an **ID cannot appear twice**. The **Google Sheets / Playwright** input path is deferred to **V2**.
 
 - **Form fields:** customer name, campaign name, start date, finish date.
-- **Sending-ID mapping (decided):** the app auto-detects the likely sending-ID column and shows a **one-click confirm**, remembered per customer.
-
-**No open points.**
+- **Sending-ID mapping:** the app auto-detects the likely sending-ID column and shows a **one-click confirm**, remembered per customer.
 
 ## Step 2 — The app stores the rows
 
-**One row = one store = one Sender ID = one package.** The **sender ID is unique only within a campaign**. The app stores every row with all of its columns. **Storage (decided): Supabase** is the system of record; Excel/Sheets are used for import/export only.
-
-**No open points.**
+**One row = one store = one Sender ID = one package.** The **sender ID is unique only within a campaign**. The app stores every row with all of its columns. **Storage: Supabase** is the system of record; Excel/Sheets are used for import/export only.
 
 ## Step 3 — Labels are printed and packages ship (outside the app)
 
 Labels are printed from the campaign list, and packages are sent via Correos España. **Each label contains the package ID.** The **ship date is a form field, not mandatory**.
-
-**No open points.**
 
 ## Step 4 — Package returns (capture and categorise)
 
@@ -45,54 +37,44 @@ Each returned package carries the **original sender ID**. The user records that 
 
 On **campaign setup**, a form field defines the **Name_Code** for each sender ID; the OCR uses that to read the photos. Returns are **photographed**, and the OCR reads the **Name_Code and the Sender ID**. The Sender ID is **auto-read into the database and validated**, and the app then **asks for the return reason**. Photos must use **minimal disk space**, and at the end of each campaign the files can be deleted. **Campaign form fields: start date, stop date.** Using a phone camera + OCR is **optional** (a trade-off of time/disk versus manual entry).
 
-- **Roles (decided):** one **admin** role uploads files; returns are handled by a normal **user** role; **more than one** user is allowed.
-- **OCR (decided):** **Google ML Kit Text Recognition** — on-device, free.
+- **Roles:** one **admin** role uploads files; returns are handled by a normal **user** role; **more than one** user is allowed.
+- **OCR:** **Google ML Kit Text Recognition** — on-device, free.
 - **Barcode/QR:** not possible.
-- **Bad/partial photo → manual entry** (decided).
-
-**No open points.**
+- **Bad/partial photo → manual entry.**
 
 ## Step 5 — Resending of packages
 
 Returned packages can be **resent to other retailers**. After the sender ID is known and registered, a **new label with a new sender ID** is applied. The app must **register the new sender ID and associate it with the return package's original ID** — this is why **multiple sender-ID files can be uploaded per campaign**. Match scope is **within the campaign**. If the ID is not found, the package **cannot be resent**. Duplicates do not exist: the original sender ID is marked as a return, the package is reused with a new label, and the key point is linking the **original sender ID** to the **new sender ID** so the **Rasca y Gana codes** can be tracked. A resend is initiated by **uploading a new Excel sheet into the campaign**.
 
-**Open / to confirm:**
-- ? Resend link (clearer version): every physical package gets **one permanent "Package Chain ID"**. Each time it is sent it takes a new sender ID, so the chain is simply the list of sender IDs for that one physical package, in order. Example: Chain `PKG-001` = sender ID **A** (returned: tienda cerrada) → sender ID **B** (returned: ausente) → sender ID **C** (delivered). In the app you can search any of A, B or C and see the whole chain; in the export each row shows `Package Chain ID` and `Resend Of` (the previous sender ID). Is that what you want?
+- **Resend link:** every physical package gets **one permanent "Package Chain ID"**. Each time it is sent it takes a new sender ID, so the chain is simply the list of sender IDs for that one physical package, in order. Example: Chain `PKG-001` = sender ID **A** (returned: tienda cerrada) → sender ID **B** (returned: ausente) → sender ID **C** (delivered). In the app you can search any of A, B or C and see the whole chain; in the export each row shows `Package Chain ID` and `Resend Of` (the previous sender ID).
 
 ## Step 6 — Reporting
 
 Reports on **return rates by category**, using graphs. Secondary to the main output. **Denominator: per campaign.**
 
-- **Charts (decided):** (a) return rate by category (bar), per campaign; (d) resend volume.
-- **Who can view (decided):** admins see everything; customer users see only their customer's campaigns.
-
-**No open points.**
+- **Charts:** (a) return rate by category (bar), per campaign; (b) resend volume.
+- **Who can view:** admins see everything; customer users see only their customer's campaigns.
 
 ## Step 7 — Export the flagged list (main value)
 
 The app produces an **Excel export of all rows, with returned packages clearly marked**, so those stores are not sent to again.
 
-- **Columns & marking (decided):** keep all original columns unchanged; **append** `Return Status` (OK / RETURNED), `Return Reason`, `Resend Of`; **colour-fill returned rows light red**.
-- **Scope (decided):** per campaign and per customer.
-- **Format (decided):** **.xlsx**.
-
-**No open points.**
+- **Columns & marking:** keep all original columns unchanged; **append** `Return Status` (OK / RETURNED), `Return Reason`, `Resend Of`; **colour-fill returned rows light red**.
+- **Scope:** per campaign and per customer.
+- **Format:** **.xlsx**.
 
 ## Step 8 — The source database is pruned (outside the app)
 
 The operator removes closed stores from the source database, so the member count drops. The app is **read-only on the source**; writing back is a possible **V2**.
 
-**No open points.**
-
 ---
 
-## Cross-cutting points
+## Cross-cutting
 
-**Decided:** there is **no binding constraint**; **total data separation between customers**; the **success metric is not important**.
-
-**Open / to confirm:**
-- ? Roles/permissions & auth: **Zed proposal — yes, Supabase Auth covers it.** Supabase Auth gives each person an account (email/password or magic link) and a session. Add a **role** to each user — **Admin** (can upload) and **User** (can process returns) — and use **Row Level Security** so each customer's data is totally separated (a user only ever sees their customer's rows). Confirm?
-- ? Out-of-scope for v1: **Zed proposal — not in v1:** (1) writing back to the source database (V2); (2) Google Sheets / Playwright input (V2); (3) barcode/QR scanning; (4) reporting beyond return-rate-by-category and resend volume; (5) a native mobile app (v1 is the web app, mobile-friendly for the camera); (6) a customer self-service login portal. Anything to add or remove?
+- **Roles & auth:** Supabase Auth, with two roles — **Admin** (can upload) and **User** (can process returns) — and **Row Level Security** so each customer's data is **totally separated** (a user only ever sees their customer's rows).
+- **Constraints:** none binding.
+- **Success metric:** not important.
+- **Out of scope for v1:** (1) writing back to the source database (V2); (2) Google Sheets / Playwright input (V2); (3) barcode/QR scanning; (4) reporting beyond return-rate-by-category and resend volume; (5) a native mobile app (v1 is the web app, mobile-friendly for the camera); (6) a customer self-service login portal.
 
 ## Business outcomes (why it matters)
 
