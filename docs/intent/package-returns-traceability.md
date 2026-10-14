@@ -33,14 +33,10 @@ Labels are printed from the campaign list, and packages are sent via Correos Esp
 
 ## Step 4 — Package returns (capture and categorise)
 
-Each returned package carries the **original sender ID**. The user records that value with the **return reason**, from a dropdown of five: **tienda cerrada, ausente, dirección incorrecta, estacionada, otro**.
-
-On **campaign setup**, a form field defines the **Name_Code** for each sender ID; the OCR uses that to read the photos. Returns are **photographed**, and the OCR reads the **Name_Code and the Sender ID**. The Sender ID is **auto-read into the database and validated**, and the app then **asks for the return reason**. Photos must use **minimal disk space**, and at the end of each campaign the files can be deleted. **Campaign form fields: start date, stop date.** Using a phone camera + OCR is **optional** (a trade-off of time/disk versus manual entry).
+Each returned package carries the **original sender ID**. The user **manually types the sender ID** (no OCR, no photos), the app **validates it against the campaign**, and then **asks for the return reason**, from a dropdown of five: **tienda cerrada, ausente, dirección incorrecta, estacionada, otro**. **Campaign form fields: start date, stop date.**
 
 - **Roles:** one **admin** role uploads files; returns are handled by a normal **user** role; **more than one** user is allowed.
-- **OCR:** **Google ML Kit Text Recognition** — on-device, free.
-- **Barcode/QR:** not possible.
-- **Bad/partial photo → manual entry.**
+- **OCR:** removed from v1 (manual entry). Optional OCR / barcode scanning is deferred to v2.
 
 ## Step 5 — Resending of packages
 
