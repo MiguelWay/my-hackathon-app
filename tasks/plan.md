@@ -76,7 +76,7 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 - [x] A real campaign list uploads and every row is stored with original columns unchanged
 
 ### Phase 3: Returns & resends
-- [ ] Task 7: Return capture (schema 004 + API + UI)
+- [x] Task 7: Return capture (schema 005 + API + UI)
 - [ ] Task 8: Resend linking (schema 005 + API + UI)
 
 ### Checkpoint: Returns & resends

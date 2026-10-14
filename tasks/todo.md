@@ -167,21 +167,35 @@ customer's admin users. Bootstrapped with `npm run create:superadmin -- <email> 
 
 ---
 
-## Task 7: Return capture (schema 004 + API + UI)
+## Task 7: Return capture (schema 005 + API + UI)
 
 **Description:** A user types the sender ID; the API validates it against the campaign, returns the
 reason list, and records the return. Reasons data-driven, seeded with the five.
 
+**Progress:** **Done & verified.** `005_returns.sql` seeds `return_reasons` (with a `closed_store`
+flag on "tienda cerrada" for the export) and adds `returns` (`UNIQUE(package_id)` → one return per
+package). API under `/returns`: `GET /reasons`, `GET /` (recent), `GET /lookup?senderId=`, `POST /`.
+New page `/returns` (nav: **Process returns**) for admins and users; super-admins see a pointer instead.
+
+**Decision:** returns are searched across all of the customer's campaigns (operators don't know
+campaign IDs). `UNIQUE(campaign_id, sender_id)` means one sender ID *could* appear in two campaigns,
+so lookup returns a list and the client sends `packageId` back when recording.
+
 **Acceptance criteria:**
-- [ ] A valid sender ID finds the package; unknown ID → clear "not found".
-- [ ] Choosing a reason creates a `returns` row and marks the package returned.
-- [ ] Reasons seeded: tienda cerrada, ausente, dirección incorrecta, estacionada, otro.
+- [x] A valid sender ID finds the package; unknown ID → clear "not found".
+- [x] Choosing a reason creates a `returns` row and marks the package returned.
+- [x] Reasons seeded: tienda cerrada, ausente, dirección incorrecta, estacionada, otro.
 
 **Verification:**
-- [ ] Tests pass · manual capture · invalid-ID path checked.
+- [x] `npm test` — 4 unit tests for `normalizeSenderId`; 28 tests total.
+- [x] curl: lookup hit/miss, blank `senderId` 400, record 201, re-record 409, unknown reason 400,
+      unknown sender 404, anon 401.
+- [x] Isolation: another customer's admin gets `[]` and 404 (including with a foreign `packageId`).
+- [x] Browser: recorded returns as an `admin` and as a `user` (accented reason label round-trips).
 
 **Dependencies:** Task 6
-**Files:** `db/migrations/004_returns.sql`, `server/features/returns/*`, `src/features/returns/*`
+**Files:** `db/migrations/005_returns.sql`, `server/src/returns.ts`, `server/src/senderId.ts`,
+`src/pages/ReturnsPage.tsx`, `tests/senderId.test.ts`
 **Scope:** Medium
 
 ## Task 8: Resend linking (schema 005 + API + UI)

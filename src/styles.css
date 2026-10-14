@@ -107,6 +107,57 @@ button:disabled {
   cursor: default;
 }
 
+button.secondary {
+  background: #fff;
+  color: var(--accent);
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fde2e0;
+  color: #8a1f15;
+}
+
+.match-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.kv {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.kv .k {
+  display: inline-block;
+  min-width: 150px;
+  color: var(--muted);
+}
+
+.kv div {
+  font-size: 13px;
+}
+
+.card .btn-row {
+  margin-top: 8px;
+}
+
 table.grid {
   width: 100%;
   border-collapse: collapse;

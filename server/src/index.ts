@@ -7,6 +7,7 @@ import { pool } from "./db";
 import { authRouter } from "./auth";
 import { campaignsRouter, customersRouter } from "./campaigns";
 import { packagesRouter } from "./packages";
+import { returnsRouter } from "./returns";
 import { adminRouter } from "./admin";
 
 const app = express();
@@ -28,6 +29,7 @@ app.use("/auth", authRouter);
 app.use("/customers", customersRouter);
 app.use("/campaigns", campaignsRouter);
 app.use("/campaigns/:campaignId", packagesRouter);
+app.use("/returns", returnsRouter);
 app.use("/admin", adminRouter);
 
 // Central error handler (Express 4 needs 4 args).
