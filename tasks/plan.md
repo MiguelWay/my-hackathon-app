@@ -77,10 +77,10 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 
 ### Phase 3: Returns & resends
 - [x] Task 7: Return capture (schema 005 + API + UI)
-- [ ] Task 8: Resend linking (schema 005 + API + UI)
+- [x] Task 8: Resend linking (schema 006 + API + UI)
 
 ### Checkpoint: Returns & resends
-- [ ] A return records end-to-end; a resend links original ↔ new sender ID
+- [x] A return records end-to-end; a resend links original ↔ new sender ID
 
 ### Phase 4: Outputs
 - [ ] Task 9: Reporting (return rate by category + resend volume)

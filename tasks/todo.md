@@ -198,25 +198,35 @@ so lookup returns a list and the client sends `packageId` back when recording.
 `src/pages/ReturnsPage.tsx`, `tests/senderId.test.ts`
 **Scope:** Medium
 
-## Task 8: Resend linking (schema 005 + API + UI)
+## Task 8: Resend linking (schema 006 + API + UI)
 
 **Description:** Link a resend's new sender ID to the original under one `chain_id`; searchable from
 any sender ID; chains extend across multiple resends.
 
+**Progress:** **Done & verified.** `006_resends.sql` adds `packages.chain_id` (points at the FIRST
+package of the chain; NULL = chain root) and `created_via` (`upload` | `resend`); `upload_id` and
+`source_row` become nullable because a resend is typed in by hand rather than uploaded.
+`POST /returns/resend` (admin-only) creates the new package in a chosen campaign, and `/returns/lookup`
+now returns the whole `chain` for each match — so any sender ID in the chain shows every attempt.
+
 **Acceptance criteria:**
-- [ ] A resend shares one `chain_id` with the original.
-- [ ] Searching any sender ID in the chain shows the whole history.
-- [ ] Chains extend across multiple resends.
+- [x] A resend shares one `chain_id` with the original.
+- [x] Searching any sender ID in the chain shows the whole history.
+- [x] Chains extend across multiple resends (verified with a 4-attempt chain).
 
 **Verification:**
-- [ ] Tests pass · manual 3-link chain, search from each ID.
+- [x] `npm test` — 8 unit tests for the chain helpers + resend body parsing; 36 tests total.
+- [x] curl: resend 201 · not-returned 400 · duplicate sender ID in the target campaign 409 ·
+      unknown package 404 · foreign package 404 · foreign campaign 404 · non-admin 403 · anon 401.
+- [x] Browser: chain history renders · a resend created from the returns screen · found again by the new ID.
 
 **Dependencies:** Task 7
-**Files:** `db/migrations/005_resends.sql`, `server/features/resends/*`, `src/features/resends/*`
+**Files:** `db/migrations/006_resends.sql`, `server/src/resends.ts`, `server/src/returns.ts`,
+`src/pages/ReturnsPage.tsx`, `tests/resends.test.ts`
 **Scope:** Medium
 
 ## Checkpoint: Returns & resends
-- [ ] A return records end-to-end; a resend links original ↔ new sender ID
+- [x] A return records end-to-end; a resend links original ↔ new sender ID
 
 ---
 
