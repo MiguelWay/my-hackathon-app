@@ -1,7 +1,9 @@
 import express from "express";
 import cookieParser from "cookie-parser";
+import type { NextFunction, Request, Response } from "express";
 import { config } from "./config";
 import { pool } from "./db";
+import { authRouter } from "./auth";
 
 const app = express();
 
@@ -17,7 +19,13 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-// Auth routes (register / login / logout / me) are added in Task 3b.
+app.use("/auth", authRouter);
+
+// Central error handler (Express 4 needs 4 args).
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  console.error(err);
+  res.status(500).json({ error: "internal error" });
+});
 
 app.listen(config.port, () => {
   console.log(`API listening on http://localhost:${config.port}`);

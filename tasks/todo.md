@@ -52,17 +52,17 @@ Supabase removed.
 **Description:** Node + Express (TypeScript) API with email/password auth: register, login, logout,
 "me". Passwords hashed; sessions stored as hashed tokens; cookie httpOnly + Secure.
 
-**Progress:** **3a done & verified** — server skeleton (`server/`), config, MySQL pool, `/health`
-(returns `{"ok":true,"db":"up"}` against local MySQL), and the migration runner. **3b (auth) next.**
-Language: Node.js + Express (TypeScript).
+**Progress:** **3a + 3b done & verified.** Skeleton (`server/`), config, MySQL pool, `/health`, and
+the migration runner; plus auth: register / login / logout / me. Language: Node.js + Express (TS).
 
 **Acceptance criteria:**
-- [ ] `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` work.
-- [ ] Passwords are hashed; session token stored only as a hash.
-- [ ] Cookie is httpOnly (+ Secure in production); sessions expire.
+- [x] `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` work (verified).
+- [x] Passwords hashed with bcrypt (`$2a$12$`); session token stored only as a SHA-256 hash.
+- [x] Cookie httpOnly + SameSite=Lax (Secure in production); sessions expire (30 days).
 
 **Verification:**
-- [ ] API tests pass · manual login/logout · `me` returns the right user/role.
+- [x] Manual end-to-end via curl: register 201, me, logout → 401, login, wrong password → 401.
+- [ ] Automated API tests (follow-up).
 
 **Dependencies:** Task 2
 **Files:** `server/**`, `db/migrations/*` (if needed), `tests/api/*`
