@@ -6,7 +6,7 @@
 // (A literal ❓ anywhere is also turned into a red "?".)
 // Handles: #/##/### headings, "- " bullets (1 nesting level), "1. " lists, "---" rules,
 // blank-line paragraph breaks, **bold**, *italic* / _italic_.
-const fs = require("fs");
+import fs from "node:fs";
 
 const [, , inPath, outPath] = process.argv;
 if (!inPath || !outPath) {
