@@ -66,7 +66,9 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 - [ ] App builds; API runs; a user can register/sign in; schema applies cleanly
 
 ### Phase 2: Core data
-- [ ] Task 4: Customers & campaigns (schema 002 + API + UI)
+- [x] Task 4a: Customers & campaigns — schema + API
+- [x] Task 4c: Platform super-admin (create customers + their admins)
+- [ ] Task 4b: Customers & campaigns — UI
 - [ ] Task 5: Campaign-list upload — parse + column mapping confirm (UI)
 - [ ] Task 6: Persist packages (schema 003 + API)
 

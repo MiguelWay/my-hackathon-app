@@ -8,11 +8,11 @@ import { config } from "./config";
 
 const COOKIE = "session";
 
-export type Role = "admin" | "user";
+export type Role = "superadmin" | "admin" | "user";
 
 export interface AuthUser {
   id: number;
-  customerId: number;
+  customerId: number | null;
   email: string;
   role: Role;
 }
@@ -46,7 +46,7 @@ async function createSession(userId: number): Promise<{ token: string; expiresAt
 export async function getUserFromToken(token: string | undefined): Promise<AuthUser | null> {
   if (!token) return null;
   const [rows] = await pool.query<
-    (RowDataPacket & { id: number; customer_id: number; email: string; role: Role })[]
+    (RowDataPacket & { id: number; customer_id: number | null; email: string; role: Role })[]
   >(
     `SELECT u.id, u.customer_id, u.email, u.role
        FROM sessions s
@@ -167,6 +167,15 @@ export const requireAdmin: RequestHandler = (_req, res, next) => {
   const user = res.locals.user as AuthUser | undefined;
   if (!user || user.role !== "admin") {
     res.status(403).json({ error: "admin only" });
+    return;
+  }
+  next();
+};
+
+export const requireSuperAdmin: RequestHandler = (_req, res, next) => {
+  const user = res.locals.user as AuthUser | undefined;
+  if (!user || user.role !== "superadmin") {
+    res.status(403).json({ error: "super-admin only" });
     return;
   }
   next();

@@ -11,7 +11,8 @@
     "typecheck:api": "tsc -p server/tsconfig.json",
     "api:dev": "tsx watch server/src/index.ts",
     "api:start": "tsx server/src/index.ts",
-    "db:migrate": "tsx server/src/migrate.ts"
+    "db:migrate": "tsx server/src/migrate.ts",
+    "create:superadmin": "tsx server/src/scripts/createSuperadmin.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

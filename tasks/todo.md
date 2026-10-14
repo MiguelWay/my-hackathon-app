@@ -132,6 +132,25 @@ other columns verbatim** in `extra_columns` (JSON). `sender_id` unique **per cam
 
 ---
 
+## Task 4c: Platform super-admin (create customers + their admins)
+
+**Description:** A `superadmin` role (not tied to a customer) that manages customers and each
+customer's admin users. Bootstrapped with `npm run create:superadmin -- <email> <password>`.
+
+**Acceptance criteria:**
+- [x] `users.role` includes `superadmin`; `users.customer_id` nullable (migration 003).
+- [x] `GET /admin/customers`, `POST /admin/customers`, `POST /admin/customers/:id/admins` (super-admin only).
+- [x] Bootstrap script creates the first super-admin.
+
+**Verification:**
+- [x] Verified: super-admin created a customer + its admin; that admin logged in and created a campaign; a customer admin gets **403** on `/admin`.
+
+**Dependencies:** Task 2, Task 4a
+**Files:** `db/migrations/003_superadmin.sql`, `server/src/admin.ts`, `server/src/scripts/createSuperadmin.ts`
+**Scope:** Medium
+
+---
+
 ## Task 7: Return capture (schema 004 + API + UI)
 
 **Description:** A user types the sender ID; the API validates it against the campaign, returns the
