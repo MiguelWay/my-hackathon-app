@@ -150,3 +150,24 @@ authRouter.get(
     res.json(user);
   })
 );
+
+// ---- Middleware ----
+
+export const requireAuth: RequestHandler = ah(async (req, res, next) => {
+  const user = await getUserFromToken(req.cookies?.[COOKIE]);
+  if (!user) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  res.locals.user = user;
+  next();
+});
+
+export const requireAdmin: RequestHandler = (_req, res, next) => {
+  const user = res.locals.user as AuthUser | undefined;
+  if (!user || user.role !== "admin") {
+    res.status(403).json({ error: "admin only" });
+    return;
+  }
+  next();
+};
