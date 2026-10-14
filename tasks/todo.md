@@ -253,16 +253,34 @@ chart. Admins see all; customer users see their own.
 `Return Status`, `Return Reason`, `Resend Of`; **returned rows filled light red**; scope per campaign
 and per customer.
 
+**Progress:** **Done & verified.** `GET /campaigns/:campaignId/export` rebuilds the campaign's sheet:
+the original header row verbatim and in order, the three reporting columns appended, and every returned
+row shaded `FFFFC7CE`. `Resend Of` holds the sender ID the resend replaced.
+Uses **ExcelJS** because the community SheetJS build cannot write cell styles (fills are silently
+dropped); ExcelJS is server-side only, so the SPA bundle is unaffected.
+
+**Notes:** A campaign can hold several uploads, so their columns are merged in first-seen order. The
+sender header is recovered as the one column the upload kept out of `extra_columns`. Hand-typed rows
+(resends) borrow the uploaded sender header; a campaign of only resends falls back to `Sender ID`.
+`Content-Disposition` is exposed via CORS so the SPA can name the download.
+
 **Acceptance criteria:**
-- [ ] Export downloads a valid `.xlsx`.
-- [ ] Original columns/names unchanged; the three new columns appended.
-- [ ] Returned rows visibly flagged (status + light-red fill).
+- [x] Export downloads a valid `.xlsx`.
+- [x] Original columns/names unchanged; the three new columns appended.
+- [x] Returned rows visibly flagged (status + light-red fill).
 
 **Verification:**
-- [ ] Tests pass · manual: open the file, check columns + colours · realistic row count.
+- [x] `npm test` — 15 unit tests for the export layout + resend map; 51 tests total.
+- [x] Realistic row count: a 500-row upload + 41 returns exported in **32 ms** (22 KB); the sheet held
+      504 rows, all 42 returned rows shaded, and no blank sender IDs.
+- [x] `Resend Of` verified across campaigns (a resend in "March drop" points back to a sender ID that
+      lives in "April drop").
+- [x] Browser: the button downloads `campaign-3-april-drop.xlsx`; the saved file opens with the
+      expected columns and fills.
 
 **Dependencies:** Task 7, Task 8
-**Files:** `server/features/export/*`, `src/features/export/*`
+**Files:** `server/src/export.ts`, `server/src/exportLayout.ts`, `server/src/index.ts`,
+`src/pages/CampaignDetailPage.tsx`, `tests/exportLayout.test.ts`
 **Scope:** Medium
 
 ## Checkpoint: Outputs

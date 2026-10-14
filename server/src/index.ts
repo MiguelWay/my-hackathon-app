@@ -8,13 +8,21 @@ import { authRouter } from "./auth";
 import { campaignsRouter, customersRouter } from "./campaigns";
 import { packagesRouter } from "./packages";
 import { returnsRouter } from "./returns";
+import { exportRouter } from "./export";
 import { adminRouter } from "./admin";
 
 const app = express();
 
 app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
+// `exposedHeaders` lets the SPA read the export's filename from Content-Disposition.
+app.use(
+  cors({
+    origin: config.corsOrigin,
+    credentials: true,
+    exposedHeaders: ["Content-Disposition"],
+  })
+);
 
 app.get("/health", async (_req, res) => {
   try {
@@ -29,6 +37,7 @@ app.use("/auth", authRouter);
 app.use("/customers", customersRouter);
 app.use("/campaigns", campaignsRouter);
 app.use("/campaigns/:campaignId", packagesRouter);
+app.use("/campaigns/:campaignId/export", exportRouter);
 app.use("/returns", returnsRouter);
 app.use("/admin", adminRouter);
 

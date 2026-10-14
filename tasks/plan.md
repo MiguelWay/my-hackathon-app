@@ -84,7 +84,7 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 
 ### Phase 4: Outputs
 - [ ] Task 9: Reporting (return rate by category + resend volume)
-- [ ] Task 10: Export .xlsx (API route)
+- [x] Task 10: Export .xlsx (API route)
 
 ### Checkpoint: Outputs
 - [ ] Both charts render; the .xlsx exports with returned rows flagged
