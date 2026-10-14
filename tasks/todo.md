@@ -52,6 +52,10 @@ Supabase removed.
 **Description:** Node + Express (TypeScript) API with email/password auth: register, login, logout,
 "me". Passwords hashed; sessions stored as hashed tokens; cookie httpOnly + Secure.
 
+**Progress:** **3a done** — server skeleton (`server/`), config, MySQL pool, `/health`, and the
+migration runner (`npm run db:migrate`); type-check passes. **3b (auth) next.** Language **decided:
+Node.js + Express (TypeScript)**.
+
 **Acceptance criteria:**
 - [ ] `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` work.
 - [ ] Passwords are hashed; session token stored only as a hash.

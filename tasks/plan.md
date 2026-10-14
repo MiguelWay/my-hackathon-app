@@ -14,8 +14,8 @@ Spec: `SPECIFICATION.md`. Intent: `docs/intent/package-returns-traceability.md`.
   No Row Level Security (MySQL has none) — isolation is enforced in the API.
 - **Isolation:** every API query is scoped by the caller's `customer_id`. This is the single most
   important rule; it gets its own verification task.
-- **Backend: Node.js + Express (TypeScript)** — auth, data and export. *(Language pending final
-  confirmation; PHP is the alternative.)*
+- **Backend: Node.js + Express (TypeScript)** — auth, data and export. API code lives in `server/`
+  and runs via `tsx` (no build step); type-checked with `npm run typecheck:api`.
 - **Auth:** our own. Email + password (hashed with bcrypt/argon2); server sessions stored in a
   `sessions` table, with the raw token only in an httpOnly cookie.
 - **Roles:** `users.role ∈ {admin, user}`. Admin uploads; users process returns.
@@ -110,7 +110,7 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 - **Needs coordination:** Reporting + Export share the return/resend data model — freeze it (Tasks 6–8) first.
 
 ## Open Questions
-- **Backend language:** Node.js + Express (recommended) **or PHP**? *(Blocks Tasks 3, 12.)*
+- **Backend language:** **decided — Node.js + Express (TypeScript)** (Plesk Node 24.21.0 / 26.11.0).
 - **Migration runner:** how `db/migrations/*.sql` are applied (a small Node/PHP runner, or a library) — decide with the language.
 - **MySQL vs Postgres:** resolved — MySQL / MariaDB (already on Plesk).
 - Anything else from `SPECIFICATION.md` §11 (currently none open).

@@ -61,8 +61,8 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 
 ## 6. Tech stack
 - **Frontend:** web app — React + Vite + TypeScript, mobile-friendly (manual entry; no camera).
-- **Backend API:** Node.js + Express (TypeScript) — auth, data and export. *(Language pending final
-  confirmation; PHP is the alternative.)*
+- **Backend API:** **Node.js + Express (TypeScript)** — auth, data and export. (Plesk Node: 24.21.0 /
+  26.11.0.)
 - **Database:** **MySQL / MariaDB** on the existing Plesk server — the source of truth.
 - **Auth:** our own — email + password (hashed) with server sessions in an httpOnly cookie.
 - **Isolation:** enforced in the API — every query scoped by the caller's `customer_id` (MySQL has no
