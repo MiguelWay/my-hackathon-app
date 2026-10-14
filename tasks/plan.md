@@ -22,6 +22,8 @@ Spec: `SPECIFICATION.md`. Intent: `docs/intent/package-returns-traceability.md`.
 - **Export:** a Supabase **Edge Function** (Deno + SheetJS) generates the .xlsx with appended columns
   and light-red fills.
 - **Charts:** Recharts; exactly two — return rate by category (bar, per campaign) and resend volume.
+- **Hosting:** the frontend is a static SPA deployed to the existing **Plesk** server (build → `dist/`,
+  with an SPA fallback rewrite and HTTPS); all backend (auth, DB, edge functions) stays on Supabase.
 
 ## Dependency Graph
 ```
@@ -78,11 +80,12 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 ### Checkpoint: Outputs
 - [ ] Both charts render; the .xlsx exports with returned rows flagged
 
-### Phase 5: Harden
+### Phase 5: Harden & Deploy
 - [ ] Task 10: RLS / data-isolation verification + polish
+- [ ] Task 11: Deploy the frontend to Plesk
 
 ### Checkpoint: Complete
-- [ ] All success criteria in `SPECIFICATION.md` met; ready for review
+- [ ] All success criteria in `SPECIFICATION.md` met; app live on Plesk; ready for review
 
 ## Risks and Mitigations
 | Risk | Impact | Mitigation |
@@ -100,6 +103,6 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
   (Tasks 5–7) before starting them.
 
 ## Open Questions
-- **Hosting** for the web app (Vercel / Netlify / Cloudflare Pages / other?).
 - **Excel parsing location** — client-side (planned) vs an Edge Function; client is simpler, confirm OK.
 - Anything else from `SPECIFICATION.md` §11 (currently none open).
+- *Resolved:* hosting = a **static SPA on the existing Plesk server** (Supabase hosts the backend).

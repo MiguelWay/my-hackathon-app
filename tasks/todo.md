@@ -199,5 +199,24 @@ delete-at-campaign-end behaviour.
 **Files likely touched:** `supabase/migrations/*`, `tests/rls/*`, `src/**`
 **Estimated scope:** Medium
 
+---
+
+## Task 11: Deploy the frontend to Plesk
+
+**Description:** Build the SPA and deploy `dist/` to the Plesk server, with SPA fallback routing and
+HTTPS. Backend stays on Supabase.
+
+**Acceptance criteria:**
+- [ ] The app is reachable on the Plesk domain over HTTPS.
+- [ ] Deep links work (unknown paths serve `index.html` via an SPA fallback rewrite).
+- [ ] Production Supabase env vars are set for the build.
+
+**Verification:**
+- [ ] Manual: load the app, sign in, open a deep link directly in the browser.
+
+**Dependencies:** Task 10
+**Files likely touched:** `vite.config.ts`, `.env.production`, `README.md`, Plesk/`.htaccess` or nginx config
+**Estimated scope:** Small
+
 ## Checkpoint: Complete
-- [ ] All success criteria in `SPECIFICATION.md` met · ready for review
+- [ ] All success criteria in `SPECIFICATION.md` met · app live on Plesk · ready for review
