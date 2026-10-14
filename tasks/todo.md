@@ -115,26 +115,36 @@ sender-ID column with a one-click confirm**. Never rename columns.
 **Files:** `src/pages/CampaignDetailPage.tsx`, `src/lib/senderColumn.ts`, `tests/senderColumn.test.ts`
 **Scope:** Medium
 
-## Task 6: Persist packages (schema 003 + API)
+## Task 6: Persist packages (schema 004 + API)
 
 **Description:** On confirm, POST rows to the API, which inserts into `packages`: known fields + **all
 other columns verbatim** in `extra_columns` (JSON). `sender_id` unique **per campaign**.
 
+**Progress:** **Done & verified.** Migration `004_packages.sql` adds `campaign_uploads` (filename,
+original column order, row count) and `packages` (`sender_id`, `extra_columns`, `source_row`). Routes are
+mounted under `/campaigns/:campaignId` and scoped by `customer_id`. Note: `row_number` is reserved in
+MySQL 8.4, so the column is `source_row`.
+
 **Acceptance criteria:**
-- [ ] Upload creates one `packages` row per store with `sender_id` set.
-- [ ] All other columns preserved exactly in `extra_columns`.
-- [ ] Duplicate `sender_id` in a campaign is rejected with a clear error.
-- [ ] Multiple uploads can be added to one campaign.
+- [x] Upload creates one `packages` row per store with `sender_id` set.
+- [x] All other columns preserved exactly in `extra_columns` (keyed by original header, accents intact).
+- [x] Duplicate `sender_id` in a campaign is rejected with a clear error (409; 400 if duplicated inside one file).
+- [x] Multiple uploads can be added to one campaign (`campaign_uploads`).
 
 **Verification:**
-- [ ] API/unit tests pass · manual upload · verify row count + sample `extra_columns`.
+- [x] `npm test` — 13 unit tests for `parseImportBody`; 24 tests total across the suite.
+- [x] curl end-to-end: import 201 · in-file duplicate 400 · cross-upload duplicate 409 · ragged row 400 ·
+      blank sender 400 · bad `senderColumn` 400 · duplicate column names 400 · anon 401.
+- [x] Isolation/roles: another customer's admin gets 404 (read and write); a `user` gets 403 on write.
+- [x] Manual upload in a browser: two uploads onto one campaign, accents + column order preserved.
 
 **Dependencies:** Task 5
-**Files:** `db/migrations/003_packages.sql`, `server/features/packages/*`
+**Files:** `db/migrations/004_packages.sql`, `server/src/packages.ts`, `server/src/importValidation.ts`,
+`src/pages/CampaignDetailPage.tsx`, `tests/importValidation.test.ts`
 **Scope:** Medium
 
 ## Checkpoint: Core data
-- [ ] A real campaign list uploads and every row is stored with original columns unchanged
+- [x] A real campaign list uploads and every row is stored with original columns unchanged
 
 ---
 

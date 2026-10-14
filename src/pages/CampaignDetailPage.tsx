@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
@@ -12,36 +12,86 @@ interface Campaign {
   finish_date: string | null;
 }
 
+interface Upload {
+  id: number;
+  filename: string | null;
+  columns: string[];
+  row_count: number;
+  created_at: string;
+}
+
+interface PackageRow {
+  id: number;
+  upload_id: number;
+  source_row: number;
+  sender_id: string;
+  extra_columns: Record<string, string> | string;
+  created_at: string;
+}
+
+interface ImportResult {
+  uploadId: number;
+  imported: number;
+  columns: string[];
+  senderColumn: { index: number; name: string };
+}
+
+function parseExtra(value: PackageRow["extra_columns"]): Record<string, string> {
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }
+  return value ?? {};
+}
 
 export function CampaignDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [packages, setPackages] = useState<PackageRow[]>([]);
+
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [senderIdx, setSenderIdx] = useState(-1);
-  const [confirmed, setConfirmed] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    api
-      .get<Campaign>(`/campaigns/${id}`)
-      .then(setCampaign)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load campaign"));
+  const load = useCallback(async () => {
+    const [c, u, p] = await Promise.all([
+      api.get<Campaign>(`/campaigns/${id}`),
+      api.get<Upload[]>(`/campaigns/${id}/uploads`),
+      api.get<PackageRow[]>(`/campaigns/${id}/packages`),
+    ]);
+    setCampaign(c);
+    setUploads(u);
+    setPackages(p);
   }, [id]);
+
+  useEffect(() => {
+    load().catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : "Failed to load campaign")
+    );
+  }, [load]);
 
   async function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
-    setConfirmed(null);
+    setNotice(null);
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const matrix = XLSX.utils.sheet_to_json<string[]>(sheet, {
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
         header: 1,
         raw: false,
         defval: "",
@@ -53,26 +103,59 @@ export function CampaignDetailPage() {
         .map((r) => hdrs.map((_, i) => String((r as unknown[])[i] ?? "")));
       setHeaders(hdrs);
       setRows(data);
+      setFileName(file.name);
       setSenderIdx(guessSenderColumn(hdrs));
     } catch (err) {
       setHeaders([]);
       setRows([]);
+      setFileName(null);
       setError(err instanceof Error ? err.message : "Could not read the file");
     }
   }
 
-  function confirm() {
+  async function confirm() {
     if (senderIdx < 0) {
       setError("Pick the sender-ID column.");
       return;
     }
     setError(null);
-    const unique = new Set(rows.map((r) => r[senderIdx]).filter(Boolean));
-    setConfirmed(
-      `Parsed ${rows.length} rows · sender-ID column: "${headers[senderIdx]}" · ` +
-        `${unique.size} unique IDs. (Import is wired up in Task 6.)`
-    );
+    setNotice(null);
+    setImporting(true);
+    try {
+      const result = await api.post<ImportResult>(`/campaigns/${id}/packages`, {
+        filename: fileName,
+        columns: headers,
+        senderColumn: senderIdx,
+        rows,
+      });
+      setNotice(
+        `Imported ${result.imported} packages · sender-ID column: "${result.senderColumn.name}" · ` +
+          `${result.columns.length} columns kept verbatim.`
+      );
+      setHeaders([]);
+      setRows([]);
+      setFileName(null);
+      if (inputRef.current) inputRef.current.value = "";
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
   }
+
+  // Every extra column we've stored for this campaign, in first-seen order.
+  const extraKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const p of packages) {
+      for (const k of Object.keys(parseExtra(p.extra_columns))) {
+        if (!keys.includes(k)) keys.push(k);
+      }
+    }
+    return keys;
+  }, [packages]);
+
+  const totalRows = uploads.reduce((sum, u) => sum + u.row_count, 0);
 
   return (
     <div>
@@ -92,10 +175,14 @@ export function CampaignDetailPage() {
         <div className="card">
           <h2>Upload campaign list (.xlsx)</h2>
           <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} />
+          <p className="muted">
+            One campaign can hold several uploads; sender IDs must be unique within the campaign.
+          </p>
         </div>
       )}
 
       {error && <p className="error">{error}</p>}
+      {notice && <p className="ok">{notice}</p>}
 
       {headers.length > 0 && (
         <>
@@ -112,10 +199,10 @@ export function CampaignDetailPage() {
               </select>
             </label>
             <span className="muted">{rows.length} rows</span>
-            <button onClick={confirm}>Confirm mapping</button>
+            <button onClick={confirm} disabled={importing}>
+              {importing ? "Importing…" : "Confirm mapping & import"}
+            </button>
           </div>
-
-          {confirmed && <p className="ok">{confirmed}</p>}
 
           <h2>Preview (first 10 rows)</h2>
           <div className="scroll">
@@ -143,6 +230,45 @@ export function CampaignDetailPage() {
             </table>
           </div>
         </>
+      )}
+
+      <h2>Stored packages ({packages.length})</h2>
+      <p className="muted">
+        {uploads.length} upload{uploads.length === 1 ? "" : "s"} · {totalRows} row
+        {totalRows === 1 ? "" : "s"} parsed
+        {uploads.length > 0 && ` · latest: ${uploads[0].filename ?? "unknown file"}`}
+      </p>
+
+      {packages.length === 0 ? (
+        <p className="muted">Nothing uploaded yet.</p>
+      ) : (
+        <div className="scroll">
+          <table className="grid">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Sender ID</th>
+                {extraKeys.map((k) => (
+                  <th key={k}>{k}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {packages.map((p) => {
+                const extra = parseExtra(p.extra_columns);
+                return (
+                  <tr key={p.id}>
+                    <td>{p.id}</td>
+                    <td>{p.sender_id}</td>
+                    {extraKeys.map((k) => (
+                      <td key={k}>{extra[k] ?? ""}</td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

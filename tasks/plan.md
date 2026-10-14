@@ -70,10 +70,10 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 - [x] Task 4c: Platform super-admin (create customers + their admins)
 - [x] Task 4b: Customers & campaigns — UI (verified in a browser)
 - [x] Task 5: Campaign-list upload — parse + column mapping confirm (UI)
-- [ ] Task 6: Persist packages (schema 003 + API)
+- [x] Task 6: Persist packages (schema 004 + API)
 
 ### Checkpoint: Core data
-- [ ] A real campaign list uploads and every row is stored with original columns unchanged
+- [x] A real campaign list uploads and every row is stored with original columns unchanged
 
 ### Phase 3: Returns & resends
 - [ ] Task 7: Return capture (schema 004 + API + UI)
