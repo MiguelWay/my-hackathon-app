@@ -75,14 +75,14 @@ the migration runner; plus auth: register / login / logout / me. Language: Node.
 **Description:** `002_campaigns.sql` + API + UI for `customers` and `campaigns` (name, start date,
 finish date). Admin-only writes; every query scoped by `customer_id`.
 
-**Progress:** **4a (schema + API) done & verified**; **4b (UI) pending.** Note: customer creation
-happens at sign-up (`/auth/register`) for v1.
+**Progress:** **4a (schema + API) and 4b (UI) done & verified.** Note: customer creation happens
+both at sign-up (`/auth/register`) and via the super-admin (`POST /admin/customers`).
 
 **Acceptance criteria:**
 - [x] Admin can create a campaign with start/finish dates (verified).
 - [x] A non-admin (`role=user`) cannot create campaigns → 403 (verified).
 - [x] A user only sees their own customer's campaigns (verified: cross-customer reads → `[]` / 404).
-- [ ] Frontend UI for customers & campaigns (4b).
+- [x] Frontend UI for customers & campaigns — verified in a real browser (login, create campaign, super-admin customers).
 
 **Verification:**
 - [x] Manual end-to-end across two customers (Acme vs Beta) · 401/403/404 paths checked.

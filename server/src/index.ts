@@ -1,5 +1,6 @@
 import express from "express";
 import cookieParser from "cookie-parser";
+import cors from "cors";
 import type { NextFunction, Request, Response } from "express";
 import { config } from "./config";
 import { pool } from "./db";
@@ -11,6 +12,7 @@ const app = express();
 
 app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
+app.use(cors({ origin: config.corsOrigin, credentials: true }));
 
 app.get("/health", async (_req, res) => {
   try {

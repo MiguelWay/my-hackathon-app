@@ -1,8 +1,49 @@
+import type { ReactNode } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { useAuth } from "./auth/AuthContext";
+import { Layout } from "./components/Layout";
+import { LoginPage } from "./pages/LoginPage";
+import { SignupPage } from "./pages/SignupPage";
+import { CampaignsPage } from "./pages/CampaignsPage";
+import { CustomersPage } from "./pages/CustomersPage";
+
+function Protected({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="loading">Loading…</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Layout>{children}</Layout>;
+}
+
+function SuperAdminOnly({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (user?.role !== "superadmin") return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: 24, lineHeight: 1.5 }}>
-      <h1>Package Returns &amp; Store Traceability</h1>
-      <p>Project scaffolded. Phase 1 (foundation) in progress.</p>
-    </main>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
+      <Route
+        path="/"
+        element={
+          <Protected>
+            <CampaignsPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/superadmin/customers"
+        element={
+          <Protected>
+            <SuperAdminOnly>
+              <CustomersPage />
+            </SuperAdminOnly>
+          </Protected>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
