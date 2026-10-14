@@ -5,6 +5,7 @@ import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupPage } from "./pages/SignupPage";
 import { CampaignsPage } from "./pages/CampaignsPage";
+import { CampaignDetailPage } from "./pages/CampaignDetailPage";
 import { CustomersPage } from "./pages/CustomersPage";
 
 function Protected({ children }: { children: ReactNode }) {
@@ -30,6 +31,14 @@ export default function App() {
         element={
           <Protected>
             <CampaignsPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/campaigns/:id"
+        element={
+          <Protected>
+            <CampaignDetailPage />
           </Protected>
         }
       />

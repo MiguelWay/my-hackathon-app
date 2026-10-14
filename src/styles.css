@@ -147,6 +147,28 @@ table.grid th {
   margin: 0;
 }
 
+select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text);
+  background: #fff;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.hl {
+  background: #fff7d6;
+}
+
+.ok {
+  color: #1b7f3b;
+  font-size: 13px;
+}
+
 .error {
   color: var(--danger);
   font-size: 13px;

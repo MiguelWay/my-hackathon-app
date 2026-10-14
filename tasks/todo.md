@@ -17,7 +17,7 @@ Supabase removed.
 
 **Verification:**
 - [x] `npm run build` passes.
-- [ ] `npm run dev` serves (not run here — long-running server).
+- [x] `npm run dev` serves (verified in a browser via Playwright).
 
 **Dependencies:** None
 **Files:** `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html`, `src/**`, `.env.example`, `.gitignore`, `db/migrations/`
@@ -43,7 +43,7 @@ Supabase removed.
 **Scope:** Small
 
 ## Checkpoint: Foundation
-- [ ] Schema applies cleanly · API runs · a user can register/sign in
+- [x] Schema applies cleanly · API runs · a user can register/sign in
 
 ---
 
@@ -97,16 +97,22 @@ both at sign-up (`/auth/register`) and via the super-admin (`POST /admin/custome
 **Description:** Upload an Excel file, parse client-side (SheetJS), preview columns, **auto-detect the
 sender-ID column with a one-click confirm**. Never rename columns.
 
+**Progress:** **Done & verified.** SheetJS pulled from the official CDN (`https://cdn.sheetjs.com/xlsx-0.20.3/`)
+— the npm `xlsx` package is stale. Matching logic lives in `src/lib/senderColumn.ts`; the page is
+`src/pages/CampaignDetailPage.tsx` (route `/campaigns/:id`). Import into the DB is Task 6.
+
 **Acceptance criteria:**
-- [ ] `.xlsx` is parsed and columns/rows previewed.
-- [ ] The likely sending-ID column is pre-selected; user can confirm/change it.
-- [ ] Nothing persists yet — the confirm is the gate.
+- [x] `.xlsx` is parsed and columns/rows previewed (first 10 rows).
+- [x] The likely sending-ID column is pre-selected; user can confirm/change it.
+- [x] Nothing persists yet — the confirm is the gate.
 
 **Verification:**
-- [ ] Unit test on a sample file (with accents) · manual upload + confirm.
+- [x] `npm test` — 11 unit tests for `guessSenderColumn`/`normalize` (accents, case, specificity).
+- [x] Manual upload + confirm in a real browser (Playwright): detected `ID de envio` and `ID de envío`
+      (3rd column, accented) · 5 rows → 4 unique IDs · headers preserved verbatim · no-match guard fires.
 
 **Dependencies:** Task 4
-**Files:** `src/features/upload/*`, `tests/upload/*`
+**Files:** `src/pages/CampaignDetailPage.tsx`, `src/lib/senderColumn.ts`, `tests/senderColumn.test.ts`
 **Scope:** Medium
 
 ## Task 6: Persist packages (schema 003 + API)

@@ -59,17 +59,17 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 
 ### Phase 1: Foundation
 - [x] Task 1: Repo layout, frontend scaffold, migrations dir
-- [ ] Task 2: DB schema foundation (users / roles / customers / sessions)
-- [ ] Task 3: Backend API skeleton + auth (sessions)
+- [x] Task 2: DB schema foundation (users / roles / customers / sessions)
+- [x] Task 3: Backend API skeleton + auth (sessions)
 
 ### Checkpoint: Foundation
-- [ ] App builds; API runs; a user can register/sign in; schema applies cleanly
+- [x] App builds; API runs; a user can register/sign in; schema applies cleanly
 
 ### Phase 2: Core data
 - [x] Task 4a: Customers & campaigns — schema + API
 - [x] Task 4c: Platform super-admin (create customers + their admins)
 - [x] Task 4b: Customers & campaigns — UI (verified in a browser)
-- [ ] Task 5: Campaign-list upload — parse + column mapping confirm (UI)
+- [x] Task 5: Campaign-list upload — parse + column mapping confirm (UI)
 - [ ] Task 6: Persist packages (schema 003 + API)
 
 ### Checkpoint: Core data

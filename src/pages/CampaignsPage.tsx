@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../auth/AuthContext";
 
@@ -82,7 +83,9 @@ export function CampaignsPage() {
           {items.map((c) => (
             <tr key={c.id}>
               <td>{c.id}</td>
-              <td>{c.name}</td>
+              <td>
+                <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
+              </td>
               <td>{c.start_date ?? "—"}</td>
               <td>{c.finish_date ?? "—"}</td>
             </tr>
