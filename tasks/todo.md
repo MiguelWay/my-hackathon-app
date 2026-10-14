@@ -32,11 +32,11 @@ Supabase removed.
 
 **Acceptance criteria:**
 - [x] `db/migrations/001_users.sql` defines `customers`, `users`, `sessions` (utf8mb4, InnoDB, FKs).
-- [ ] Migrations apply cleanly to a fresh MySQL/MariaDB database (deferred — needs connection).
-- [ ] The charset/collation round-trips Spanish accents.
+- [x] Migrations apply cleanly to a fresh **local MySQL 8.4.3** (verified).
+- [x] The charset/collation round-trips Spanish accents (verified: `Panadería Ñoño`).
 
 **Verification:**
-- [ ] Apply `001` to a fresh DB · insert a user with an accented name · read it back.
+- [x] Applied `001` to a fresh DB · inserted + read back an accented name.
 
 **Dependencies:** Task 1
 **Files:** `db/migrations/001_users.sql`
@@ -52,9 +52,9 @@ Supabase removed.
 **Description:** Node + Express (TypeScript) API with email/password auth: register, login, logout,
 "me". Passwords hashed; sessions stored as hashed tokens; cookie httpOnly + Secure.
 
-**Progress:** **3a done** — server skeleton (`server/`), config, MySQL pool, `/health`, and the
-migration runner (`npm run db:migrate`); type-check passes. **3b (auth) next.** Language **decided:
-Node.js + Express (TypeScript)**.
+**Progress:** **3a done & verified** — server skeleton (`server/`), config, MySQL pool, `/health`
+(returns `{"ok":true,"db":"up"}` against local MySQL), and the migration runner. **3b (auth) next.**
+Language: Node.js + Express (TypeScript).
 
 **Acceptance criteria:**
 - [ ] `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` work.
