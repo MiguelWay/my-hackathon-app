@@ -10,12 +10,16 @@ Task list target for this project. Index and rationale: `tasks/plan.md`. Spec: `
 link a Supabase project (local dev + migrations).
 
 **Acceptance criteria:**
-- [ ] App runs locally and `npm run build` succeeds.
-- [ ] Supabase client configured via env vars (`.env.example` committed, real `.env` git-ignored).
-- [ ] `supabase/` initialised; `npx supabase db push` applies an empty baseline.
+- [x] App runs locally and `npm run build` succeeds. *(build verified — 30 modules, `dist/` produced)*
+- [x] Supabase client configured via env vars (`.env.example` committed, real `.env` git-ignored).
+- [ ] `supabase/` initialised — **done** (config.toml + baseline migration). `npx supabase db push`
+  **pending**: needs the hosted project ref + credentials (deferred; migrations can also be applied
+  via the Supabase MCP once its token is valid).
 
 **Verification:**
-- [ ] `npm run build` passes · `npm run dev` serves · `npx supabase db push` runs clean.
+- [x] `npm run build` passes.
+- [ ] `npm run dev` serves (not run here — long-running server).
+- [ ] `npx supabase db push` runs clean (pending link).
 
 **Dependencies:** None
 **Files likely touched:** `package.json`, `vite.config.ts`, `src/main.tsx`, `src/lib/supabase.ts`, `.env.example`, `.gitignore`, `supabase/config.toml`
