@@ -25,7 +25,7 @@ An **admin** user uploads the campaign list. **A campaign can have multiple uplo
 
 ## Step 2 — The app stores the rows
 
-**One row = one store = one Sender ID = one package.** The **sender ID is unique only within a campaign**. The app stores every row with all of its columns. **Storage: Supabase** is the system of record; Excel/Sheets are used for import/export only.
+**One row = one store = one Sender ID = one package.** The **sender ID is unique only within a campaign**. The app stores every row with all of its columns. **Storage: a MySQL/MariaDB database (on Plesk)** is the system of record; Excel/Sheets are used for import/export only.
 
 ## Step 3 — Labels are printed and packages ship (outside the app)
 
@@ -67,7 +67,7 @@ The operator removes closed stores from the source database, so the member count
 
 ## Cross-cutting
 
-- **Roles & auth:** Supabase Auth, with two roles — **Admin** (can upload) and **User** (can process returns) — and **Row Level Security** so each customer's data is **totally separated** (a user only ever sees their customer's rows).
+- **Roles & auth:** our own email/password auth with two roles — **Admin** (can upload) and **User** (can process returns). Per-customer isolation is enforced in the **API** (every query scoped by `customer_id`); the database itself has no row-level security.
 - **Constraints:** none binding.
 - **Success metric:** not important.
 - **Out of scope for v1:** (1) writing back to the source database (V2); (2) Google Sheets / Playwright input (V2); (3) barcode/QR scanning; (4) reporting beyond return-rate-by-category and resend volume; (5) a native mobile app (v1 is the web app, mobile-friendly for the camera); (6) a customer self-service login portal.
@@ -85,4 +85,4 @@ Customer (1 master DB each) → Campaigns (many per customer) → campaign lists
 ## Known tech context (from setup, not part of the intent)
 
 - Env: macOS, Zed editor, Node at `~/.local/node/bin`.
-- Connected MCP servers in Zed: Supabase (DB/migrations) and Playwright (browser, optional).
+- Stack: React + Vite web app, Node/Express API, MySQL/MariaDB on Plesk (no Supabase).

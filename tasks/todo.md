@@ -1,155 +1,171 @@
 # Task List: Package Returns & Store Traceability App
 
 Task list target for this project. Index and rationale: `tasks/plan.md`. Spec: `SPECIFICATION.md`.
+Stack: React + Vite (SPA on Plesk) · Node + Express API *(pending language)* · MySQL/MariaDB · no Supabase.
 
 ---
 
-## Task 1: Project setup & Supabase link
+## Task 1: Repo layout, frontend scaffold, migrations dir
 
-**Description:** Scaffold the web app (Vite + React + TypeScript), add Supabase client config, and
-link a Supabase project (local dev + migrations).
+**Description:** Frontend scaffolded (Vite + React + TS), build passes, `db/migrations/` created, and
+Supabase removed.
 
 **Acceptance criteria:**
-- [x] App runs locally and `npm run build` succeeds. *(build verified — 30 modules, `dist/` produced)*
-- [x] Supabase client configured via env vars (`.env.example` committed, real `.env` git-ignored).
-- [ ] `supabase/` initialised — **done** (config.toml + baseline migration). `npx supabase db push`
-  **pending**: needs the hosted project ref + credentials (deferred; migrations can also be applied
-  via the Supabase MCP once its token is valid).
+- [x] App builds (`npm run build` → `dist/`).
+- [x] API client stub (`src/lib/api.ts`) reading `VITE_API_BASE_URL`; `.env.example` committed.
+- [x] `db/migrations/` exists for MySQL; no Supabase artifacts remain.
 
 **Verification:**
 - [x] `npm run build` passes.
 - [ ] `npm run dev` serves (not run here — long-running server).
-- [ ] `npx supabase db push` runs clean (pending link).
 
 **Dependencies:** None
-**Files likely touched:** `package.json`, `vite.config.ts`, `src/main.tsx`, `src/lib/supabase.ts`, `.env.example`, `.gitignore`, `supabase/config.toml`
-**Estimated scope:** Medium
+**Files:** `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html`, `src/**`, `.env.example`, `.gitignore`, `db/migrations/`
+**Scope:** Medium
 
 ---
 
-## Task 2: Auth + profiles/roles + RLS foundation
+## Task 2: DB schema foundation (users / roles / customers / sessions)
 
-**Description:** Supabase Auth (email/password or magic link), a `profiles` table with `role`
-(`admin` | `user`) and `customer_id`, and baseline RLS policies.
+**Description:** MySQL migrations for the foundational tables: `customers`, `users` (with `role`),
+`sessions`. No DB connection needed yet — files are applied when the database is connected.
 
 **Acceptance criteria:**
-- [ ] A user can sign in/out; a `profiles` row is created for them.
-- [ ] `role` and `customer_id` are stored and readable by the app.
-- [ ] RLS is enabled on `profiles`; a user can only read their own row / customer.
+- [x] `db/migrations/001_users.sql` defines `customers`, `users`, `sessions` (utf8mb4, InnoDB, FKs).
+- [ ] Migrations apply cleanly to a fresh MySQL/MariaDB database (deferred — needs connection).
+- [ ] The charset/collation round-trips Spanish accents.
 
 **Verification:**
-- [ ] Tests pass · manual sign-in · SQL check that RLS blocks a cross-customer read.
+- [ ] Apply `001` to a fresh DB · insert a user with an accented name · read it back.
 
 **Dependencies:** Task 1
-**Files likely touched:** `supabase/migrations/*_profiles.sql`, `src/auth/*`, `src/lib/supabase.ts`, `tests/rls/*`
-**Estimated scope:** Medium
+**Files:** `db/migrations/001_users.sql`
+**Scope:** Small
 
 ## Checkpoint: Foundation
-- [ ] Build clean · sign-in works · RLS in place · review with human before Phase 2
+- [ ] Schema applies cleanly · API runs · a user can register/sign in
 
 ---
 
-## Task 3: Customers & campaigns
+## Task 3: Backend API skeleton + auth (sessions)
 
-**Description:** CRUD for `customers` and `campaigns` (name, start date, finish date). Admin-only
-writes; RLS scopes both by `customer_id`.
+**Description:** Node + Express (TypeScript) API with email/password auth: register, login, logout,
+"me". Passwords hashed; sessions stored as hashed tokens; cookie httpOnly + Secure.
 
 **Acceptance criteria:**
-- [ ] Admin can create a customer and, within it, a campaign with start/finish dates.
+- [ ] `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` work.
+- [ ] Passwords are hashed; session token stored only as a hash.
+- [ ] Cookie is httpOnly (+ Secure in production); sessions expire.
+
+**Verification:**
+- [ ] API tests pass · manual login/logout · `me` returns the right user/role.
+
+**Dependencies:** Task 2
+**Files:** `server/**`, `db/migrations/*` (if needed), `tests/api/*`
+**Scope:** Large *(split into 3a skeleton, 3b register/login, 3c sessions/me if needed)*
+
+---
+
+## Task 4: Customers & campaigns (schema + API + UI)
+
+**Description:** `002_campaigns.sql` + API + UI for `customers` and `campaigns` (name, start date,
+finish date). Admin-only writes; every query scoped by `customer_id`.
+
+**Acceptance criteria:**
+- [ ] Admin can create a customer and, within it, a campaign with dates.
 - [ ] A non-admin cannot create customers/campaigns.
 - [ ] A user only sees their customer's campaigns.
 
 **Verification:**
-- [ ] Tests pass · manual create · RLS check across two customers.
-
-**Dependencies:** Task 2
-**Files likely touched:** `supabase/migrations/*_customers_campaigns.sql`, `src/features/campaigns/*`
-**Estimated scope:** Medium
-
-## Task 4: Campaign-list upload — parse + column mapping confirm
-
-**Description:** Upload an Excel file, parse it client-side (SheetJS), preview the columns, and
-**auto-detect the sender-ID column with a one-click confirm**. Do not rename any columns.
-
-**Acceptance criteria:**
-- [ ] An `.xlsx` file is parsed and its columns/rows previewed.
-- [ ] The likely sender-ID column is pre-selected; the user can confirm or change it.
-- [ ] Nothing is written to the DB yet; the confirm step is the gate.
-
-**Verification:**
-- [ ] Tests on a sample file (incl. accented Spanish text) · manual upload + confirm.
+- [ ] API tests pass · manual create · isolation check across two customers.
 
 **Dependencies:** Task 3
-**Files likely touched:** `src/features/upload/*`, `tests/upload/*`
-**Estimated scope:** Medium
+**Files:** `db/migrations/002_campaigns.sql`, `server/features/campaigns/*`, `src/features/campaigns/*`
+**Scope:** Medium
 
-## Task 5: Persist packages (uniqueness + verbatim columns)
+## Task 5: Campaign-list upload — parse + column mapping confirm (UI)
 
-**Description:** On confirm, insert rows into `packages` for the campaign: known fields plus **all
-other columns verbatim** in `extra_columns jsonb`. Enforce `sender_id` unique **per campaign**.
+**Description:** Upload an Excel file, parse client-side (SheetJS), preview columns, **auto-detect the
+sender-ID column with a one-click confirm**. Never rename columns.
 
 **Acceptance criteria:**
-- [ ] Uploading a list creates one `packages` row per store, with `sender_id` set.
-- [ ] All other columns are preserved exactly (names and values) in `extra_columns`.
-- [ ] A duplicate `sender_id` in the same campaign is rejected with a clear error.
-- [ ] Multiple uploads can be added to the same campaign.
+- [ ] `.xlsx` is parsed and columns/rows previewed.
+- [ ] The likely sending-ID column is pre-selected; user can confirm/change it.
+- [ ] Nothing persists yet — the confirm is the gate.
 
 **Verification:**
-- [ ] Tests pass · manual upload of a real list · verify row count + sample `extra_columns`.
+- [ ] Unit test on a sample file (with accents) · manual upload + confirm.
 
 **Dependencies:** Task 4
-**Files likely touched:** `supabase/migrations/*_packages.sql`, `src/features/upload/*`
-**Estimated scope:** Medium
+**Files:** `src/features/upload/*`, `tests/upload/*`
+**Scope:** Medium
+
+## Task 6: Persist packages (schema 003 + API)
+
+**Description:** On confirm, POST rows to the API, which inserts into `packages`: known fields + **all
+other columns verbatim** in `extra_columns` (JSON). `sender_id` unique **per campaign**.
+
+**Acceptance criteria:**
+- [ ] Upload creates one `packages` row per store with `sender_id` set.
+- [ ] All other columns preserved exactly in `extra_columns`.
+- [ ] Duplicate `sender_id` in a campaign is rejected with a clear error.
+- [ ] Multiple uploads can be added to one campaign.
+
+**Verification:**
+- [ ] API/unit tests pass · manual upload · verify row count + sample `extra_columns`.
+
+**Dependencies:** Task 5
+**Files:** `db/migrations/003_packages.sql`, `server/features/packages/*`
+**Scope:** Medium
 
 ## Checkpoint: Core data
 - [ ] A real campaign list uploads and every row is stored with original columns unchanged
 
 ---
 
-## Task 6: Return capture (manual sender-ID entry + reason)
+## Task 7: Return capture (schema 004 + API + UI)
 
-**Description:** A user types the sender ID; the app validates it against the campaign, then shows a
-dropdown of the five reasons (tienda cerrada, ausente, dirección incorrecta, estacionada, otro) and
-records the return.
+**Description:** A user types the sender ID; the API validates it against the campaign, returns the
+reason list, and records the return. Reasons data-driven, seeded with the five.
 
 **Acceptance criteria:**
-- [ ] Entering a valid sender ID finds the package; an unknown ID shows a clear "not found".
+- [ ] A valid sender ID finds the package; unknown ID → clear "not found".
 - [ ] Choosing a reason creates a `returns` row and marks the package returned.
-- [ ] Reasons are data-driven (seeded with the five), editable later per customer/campaign.
+- [ ] Reasons seeded: tienda cerrada, ausente, dirección incorrecta, estacionada, otro.
 
 **Verification:**
-- [ ] Tests pass · manual capture of a return · invalid-ID path checked.
-
-**Dependencies:** Task 5
-**Files likely touched:** `supabase/migrations/*_returns_reasons.sql`, `src/features/returns/*`
-**Estimated scope:** Medium
-
-## Task 7: Resend linking (Package Chain ID)
-
-**Description:** When a returned package is resent with a new sender ID, link the original and new
-records under one `chain_id`, so the chain is searchable from any sender ID.
-
-**Acceptance criteria:**
-- [ ] A resend ties the new sender ID to the original and shares one `chain_id`.
-- [ ] Searching any sender ID in the chain shows the whole history.
-- [ ] Chains can extend across multiple resends.
-
-**Verification:**
-- [ ] Tests pass · manual: build a 3-link chain and search from each ID.
+- [ ] Tests pass · manual capture · invalid-ID path checked.
 
 **Dependencies:** Task 6
-**Files likely touched:** `supabase/migrations/*_resends.sql`, `src/features/resends/*`
-**Estimated scope:** Medium
+**Files:** `db/migrations/004_returns.sql`, `server/features/returns/*`, `src/features/returns/*`
+**Scope:** Medium
+
+## Task 8: Resend linking (schema 005 + API + UI)
+
+**Description:** Link a resend's new sender ID to the original under one `chain_id`; searchable from
+any sender ID; chains extend across multiple resends.
+
+**Acceptance criteria:**
+- [ ] A resend shares one `chain_id` with the original.
+- [ ] Searching any sender ID in the chain shows the whole history.
+- [ ] Chains extend across multiple resends.
+
+**Verification:**
+- [ ] Tests pass · manual 3-link chain, search from each ID.
+
+**Dependencies:** Task 7
+**Files:** `db/migrations/005_resends.sql`, `server/features/resends/*`, `src/features/resends/*`
+**Scope:** Medium
 
 ## Checkpoint: Returns & resends
 - [ ] A return records end-to-end; a resend links original ↔ new sender ID
 
 ---
 
-## Task 8: Reporting (return rate by category + resend volume)
+## Task 9: Reporting (return rate by category + resend volume)
 
-**Description:** Two charts with Recharts: return rate by category (bar, per campaign) and resend
-volume. Admins see all; customer users see their own.
+**Description:** Recharts bar chart of return rate by category per campaign, and a resend-volume
+chart. Admins see all; customer users see their own.
 
 **Acceptance criteria:**
 - [ ] Return-rate-by-category bar chart renders per campaign.
@@ -157,70 +173,68 @@ volume. Admins see all; customer users see their own.
 - [ ] Visibility respects roles/customer scope.
 
 **Verification:**
-- [ ] Tests pass · manual: charts match known data · role check.
+- [ ] Tests pass · charts match known data · role check.
 
-**Dependencies:** Task 6, Task 7
-**Files likely touched:** `src/features/reports/*`, `tests/reports/*`
-**Estimated scope:** Medium
+**Dependencies:** Task 7, Task 8
+**Files:** `server/features/reports/*`, `src/features/reports/*`
+**Scope:** Medium
 
-## Task 9: Export .xlsx (Edge Function)
+## Task 10: Export .xlsx (API route)
 
-**Description:** A Supabase Edge Function generates the .xlsx: **all original columns unchanged**,
-plus `Return Status`, `Return Reason`, `Resend Of`; **returned rows filled light red**; scope per
-campaign and per customer.
+**Description:** An API route generates the .xlsx: **all original columns unchanged**, plus
+`Return Status`, `Return Reason`, `Resend Of`; **returned rows filled light red**; scope per campaign
+and per customer.
 
 **Acceptance criteria:**
 - [ ] Export downloads a valid `.xlsx`.
-- [ ] Original columns/names are unchanged; the three new columns are appended.
-- [ ] Returned rows are visibly flagged (status + light-red fill).
+- [ ] Original columns/names unchanged; the three new columns appended.
+- [ ] Returned rows visibly flagged (status + light-red fill).
 
 **Verification:**
-- [ ] Tests pass · manual: open the file, confirm columns + colours · realistic row count.
+- [ ] Tests pass · manual: open the file, check columns + colours · realistic row count.
 
-**Dependencies:** Task 6, Task 7
-**Files likely touched:** `supabase/functions/export-xlsx/*`, `src/features/export/*`
-**Estimated scope:** Medium
+**Dependencies:** Task 7, Task 8
+**Files:** `server/features/export/*`, `src/features/export/*`
+**Scope:** Medium
 
 ## Checkpoint: Outputs
 - [ ] Both charts render; the .xlsx exports with returned rows flagged
 
 ---
 
-## Task 10: RLS / data-isolation verification + polish
+## Task 11: Isolation verification + polish
 
-**Description:** Prove customer isolation across all tables, then polish copy, empty states and
-delete-at-campaign-end behaviour.
-
-**Acceptance criteria:**
-- [ ] Automated tests show a user of customer A can never read/write customer B's rows.
-- [ ] Every table carrying customer data has RLS enabled with correct policies.
-- [ ] Empty states and error messages are clear.
-
-**Verification:**
-- [ ] Isolation test suite passes · manual review of each table's policies.
-
-**Dependencies:** Tasks 2–9
-**Files likely touched:** `supabase/migrations/*`, `tests/rls/*`, `src/**`
-**Estimated scope:** Medium
-
----
-
-## Task 11: Deploy the frontend to Plesk
-
-**Description:** Build the SPA and deploy `dist/` to the Plesk server, with SPA fallback routing and
-HTTPS. Backend stays on Supabase.
+**Description:** Prove per-customer isolation across every endpoint, then polish copy, empty states
+and error messages.
 
 **Acceptance criteria:**
-- [ ] The app is reachable on the Plesk domain over HTTPS.
-- [ ] Deep links work (unknown paths serve `index.html` via an SPA fallback rewrite).
-- [ ] Production Supabase env vars are set for the build.
+- [ ] Tests show a user of customer A can never read/write customer B's data.
+- [ ] Every data endpoint scopes by `customer_id`.
+- [ ] Empty states and errors are clear.
 
 **Verification:**
-- [ ] Manual: load the app, sign in, open a deep link directly in the browser.
+- [ ] Isolation test suite passes.
 
-**Dependencies:** Task 10
-**Files likely touched:** `vite.config.ts`, `.env.production`, `README.md`, Plesk/`.htaccess` or nginx config
-**Estimated scope:** Small
+**Dependencies:** Tasks 3–10
+**Files:** `server/**`, `tests/api/*`, `src/**`
+**Scope:** Medium
+
+## Task 12: Deploy to Plesk (static SPA + Node API + MySQL)
+
+**Description:** Create the MySQL database in Plesk, run migrations, deploy the Node API, build the
+SPA to `dist/` and serve it, with SPA fallback and HTTPS.
+
+**Acceptance criteria:**
+- [ ] MySQL DB created; migrations applied.
+- [ ] API reachable over HTTPS; env vars set (DB creds, session secret).
+- [ ] SPA served with deep-link fallback; sign-in works in production.
+
+**Verification:**
+- [ ] Manual: load the app, sign in, open a deep link, run one upload.
+
+**Dependencies:** Tasks 1–11
+**Files:** `server/**`, `.env.production`, Plesk config, `README.md`
+**Scope:** Medium
 
 ## Checkpoint: Complete
 - [ ] All success criteria in `SPECIFICATION.md` met · app live on Plesk · ready for review

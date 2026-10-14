@@ -1,6 +1,6 @@
 # Specification (PRD): Package Returns & Store Traceability App
 
-**Status:** Draft — awaiting approval. Source of truth: `docs/intent/package-returns-traceability.md`.
+**Status:** Draft (revised: no Supabase) — awaiting approval. Source of truth: `docs/intent/package-returns-traceability.md`.
 **Scope note:** No blockchain / Solana. This is a logistics tool for physical packages sent via Correos España.
 
 ## 1. Objective
@@ -59,31 +59,38 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 - `resends(id, chain_id, original_sender_id, new_sender_id, created_at, created_by)`
 - Reasons: tienda cerrada, ausente, dirección incorrecta, estacionada, otro.
 
-## 6. Tech stack (suggested)
-- **Frontend:** **web app** — React + Vite + TypeScript, mobile-friendly (manual entry; no camera).
-- **Data / Auth:** Supabase (Postgres + Auth + Row Level Security; Edge Functions for export).
-- **Export:** server-side .xlsx generation (SheetJS) in a Supabase Edge Function.
+## 6. Tech stack
+- **Frontend:** web app — React + Vite + TypeScript, mobile-friendly (manual entry; no camera).
+- **Backend API:** Node.js + Express (TypeScript) — auth, data and export. *(Language pending final
+  confirmation; PHP is the alternative.)*
+- **Database:** **MySQL / MariaDB** on the existing Plesk server — the source of truth.
+- **Auth:** our own — email + password (hashed) with server sessions in an httpOnly cookie.
+- **Isolation:** enforced in the API — every query scoped by the caller's `customer_id` (MySQL has no
+  Row Level Security).
+- **Export:** an API route generating the .xlsx (SheetJS).
+- **Hosting:** Plesk serves the static SPA and runs the Node API.
 
 ## 7. External integrations
 - Correos España — outbound shipping (labels printed outside the app; no API assumed).
-- (No OCR, no Solana / blockchain.)
+- (No Supabase, no OCR, no Solana / blockchain.)
 
 ## 8. Security & privacy boundaries
-- **Always:** enforce RLS so a user sees only their customer's rows; validate the entered sender ID
-  against the campaign.
+- **Always:** scope every API query by the caller's `customer_id` (isolation is enforced in the API,
+  not the database); validate the entered sender ID against the campaign; hash passwords and store
+  only hashed session tokens.
 - **Ask first:** changing the DB schema; adding dependencies; changing auth/roles.
 - **Never:** log or transmit secrets/credentials; expose one customer's data to another; write back
   to the source database in v1.
-- *(Crypto items from the original request — seed phrases, Mobile Wallet Adapter — are **N/A**: there
-  are no wallets or blockchain in this project.)*
+- *(Supabase is no longer used; crypto items from the original request — seed phrases, Mobile Wallet
+  Adapter — are N/A.)*
 
 ## 9. Commands / Structure / Testing
-- **Commands:** `npm run dev` (dev server), `npm run build`, `npm test`,
-  `npx supabase db push` (apply migrations), `npx supabase functions serve` (edge functions locally).
-- **Structure:** `src/` (web frontend), `supabase/migrations/` (schema), `supabase/functions/`
-  (edge functions), `docs/`, `scripts/`.
-- **Testing:** unit tests for upload parsing, OCR validation and export; integration tests against a
-  Supabase dev project.
+- **Commands (frontend):** `npm run dev`, `npm run build`, `npm test`.
+- **Commands (backend / DB):** migration runner TBD with the language (e.g. `npm run db:migrate`);
+  API dev server TBD.
+- **Structure:** `src/` (web frontend), `server/` (Node API — pending language),
+  `db/migrations/` (MySQL schema), `docs/`, `scripts/`.
+- **Testing:** unit tests for upload parsing and export; API tests including per-customer isolation.
 
 ## 10. Success criteria (business outcomes)
 1. An admin can upload a real campaign list and every row is stored with its original columns
