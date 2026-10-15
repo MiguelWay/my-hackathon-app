@@ -980,3 +980,24 @@ chose."; one closed after 400 ms gave "Save cancelled." with nothing downloaded;
 **Files:** `src/lib/campaignExport.ts`,
 `src/pages/{CampaignDetailPage,RecentReturnsPage,CustomersPage}.tsx`
 **Scope:** Small
+
+## The campaign page loses its two lists
+
+**Description:** "remove both sections from campaign. They are redundant."
+
+**Progress:** **Done.** The campaign page is now the campaign — its name and window — plus the *Add a
+list to this campaign* bar. The *Lists uploaded* section (with `Download .xlsx` / `Save as…`) and the
+*Campaign results* package table are gone, together with the requests that fed them: the page makes one
+call (`GET /campaigns/:id`) instead of three, and `uploads`, `packages`, `extraKeys`, `totalRows` and the
+export handlers went with them. The uploaded files are still listed on the campaigns screen, and the
+export is still one click away on *Return packages* (campaign chosen from the dropdown) and on
+*Customers* → *Campaigns*.
+
+**Verification:** `npm test` — **166 tests** · `npm run build` clean · browser-verified: the campaign page
+renders `← Campaigns · vuelta al cole · Start 2026-10-01 · Finish — · Add a list to this campaign` with
+0 tables and 0 download controls; the home page still lists `EtqVueltaC.xlsx · 150 lines · uploaded …`
+for that campaign; and *Return packages* still exports it (`Downloaded vuelta al cole as
+campaign-6-vuelta-al-cole.xlsx, in your browser's download folder.`).
+
+**Files:** `src/pages/CampaignDetailPage.tsx`
+**Scope:** Small
