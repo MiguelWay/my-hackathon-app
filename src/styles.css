@@ -331,6 +331,17 @@ details.card[open] > summary {
   margin-bottom: 12px;
 }
 
+/* A titled section inside a card that opens on click, where a heading used to be. */
+details.section > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+details.section[open] > summary {
+  margin-bottom: 12px;
+}
+
 /* One block per campaign, with every list uploaded to it listed underneath. */
 .campaign-block {
   background: var(--panel);

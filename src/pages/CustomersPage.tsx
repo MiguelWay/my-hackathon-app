@@ -321,46 +321,48 @@ export function CustomersPage() {
 
       {panel?.kind === "users" && (
         <div className="card">
-          <h2>{openCustomer?.name}: new users</h2>
+          <details className="section">
+            <summary>{openCustomer?.name}: new users</summary>
 
-          <form className="customer-row" onSubmit={addUser}>
-            <label>
-              Email
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="them@example.com"
-                required
-              />
-            </label>
-            <label>
-              Password
-              <PasswordInput
-                value={form.password}
-                onChange={(password) => setForm({ ...form, password })}
-                minLength={8}
-                autoComplete="new-password"
-              />
-            </label>
-            <label>
-              Role
-              <select
-                value={form.role}
-                onChange={(e) =>
-                  setForm({ ...form, role: e.target.value as "superadmin" | "user" })
-                }
-              >
-                <option value="superadmin">super-admin — runs campaigns &amp; accounts</option>
-                <option value="user">user — processes returns only</option>
-              </select>
-            </label>
-            <button disabled={busy}>{busy ? "…" : "Add user"}</button>
-          </form>
-          <p className="muted">
-            Passwords must be 8–100 characters. Emails are unique across the whole platform, and a new
-            account can log in straight away.
-          </p>
+            <form className="customer-row" onSubmit={addUser}>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="them@example.com"
+                  required
+                />
+              </label>
+              <label>
+                Password
+                <PasswordInput
+                  value={form.password}
+                  onChange={(password) => setForm({ ...form, password })}
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </label>
+              <label>
+                Role
+                <select
+                  value={form.role}
+                  onChange={(e) =>
+                    setForm({ ...form, role: e.target.value as "superadmin" | "user" })
+                  }
+                >
+                  <option value="superadmin">super-admin — runs campaigns &amp; accounts</option>
+                  <option value="user">user — processes returns only</option>
+                </select>
+              </label>
+              <button disabled={busy}>{busy ? "…" : "Add user"}</button>
+            </form>
+            <p className="muted">
+              Passwords must be 8–100 characters. Emails are unique across the whole platform, and a
+              new account can log in straight away.
+            </p>
+          </details>
 
           {users.length === 0 ? (
             <p className="muted">No users yet.</p>

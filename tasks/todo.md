@@ -680,7 +680,8 @@ sure that scroll is active because I can't scroll between the two sections."
 
 **Progress:** **Done.** The panel is titled `<customer>: new users`; the add-user form (Email,
 Password, Role, `Add user`) sits directly under the heading with its hint, the users table follows, and
-the active/disabled summary closes the card. `Added` now shows the date only, and the delete
+the active/disabled summary closes the card. The heading is now a collapsed accordion bar — a native
+`<details>`/`<summary>` — so opening a customer shows its users at once and the form is one click away. `Added` now shows the date only, and the delete
 confirmation is a compact `Confirm delete` / `Cancel` pair (the row already says who), so nothing wraps
 awkwardly. The table is no longer wrapped in `.scroll` inside the panel, and `.scroll` itself became
 `overflow-x: auto; overflow-y: hidden` — `overflow-x: auto` alone silently computes `overflow-y` to
