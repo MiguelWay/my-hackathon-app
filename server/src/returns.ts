@@ -18,6 +18,13 @@ const currentUser = (res: Response) => res.locals.user as AuthUser;
 
 const RECENT_LIMIT = 100;
 
+/** An optional positive integer from a query string: `undefined` when absent, `null` when invalid. */
+function optionalId(value: unknown): number | undefined | null {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 /** Every package in the same chain as one of `roots`, grouped by chain root. */
 async function chainsFor(customerId: number | null, roots: number[]) {
   const grouped = new Map<number, RowDataPacket[]>();
@@ -113,6 +120,26 @@ returnsRouter.get(
     const senderId = normalizeSenderId(req.query.senderId);
     if (!senderId) return res.status(400).json({ error: "senderId is required" });
 
+    // A lookup can be narrowed to one campaign: with the same package ID used in more than one of
+    // the company's campaigns, the caller has to say which one they are holding.
+    const campaignId = optionalId(req.query.campaignId);
+    if (campaignId === null) {
+      return res.status(400).json({ error: "campaignId must be a positive number" });
+    }
+    if (campaignId !== undefined) {
+      const [own] = await pool.query<RowDataPacket[]>(
+        "SELECT id FROM campaigns WHERE id = ? AND customer_id = ?",
+        [campaignId, user.customerId]
+      );
+      // A foreign campaign must stay indistinguishable from a missing one.
+      if (!own[0]) return res.status(404).json({ error: "campaign not found" });
+    }
+    const campaignFilter = campaignId === undefined ? "" : " AND p.campaign_id = ?";
+    const params: (number | string | null)[] =
+      campaignId === undefined
+        ? [user.customerId, senderId]
+        : [user.customerId, senderId, campaignId];
+
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT p.id, p.sender_id, p.chain_id, p.created_via, p.extra_columns, p.source_row,
               c.id AS campaign_id, c.name AS campaign_name,
@@ -122,9 +149,9 @@ returnsRouter.get(
          JOIN campaigns c ON c.id = p.campaign_id
          LEFT JOIN returns r ON r.package_id = p.id
          LEFT JOIN return_reasons rr ON rr.id = r.reason_id
-        WHERE p.customer_id = ? AND p.sender_id = ?
+        WHERE p.customer_id = ? AND p.sender_id = ?${campaignFilter}
         ORDER BY p.id`,
-      [user.customerId, senderId]
+      params
     );
 
     const chains = await chainsFor(

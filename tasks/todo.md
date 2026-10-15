@@ -538,3 +538,27 @@ all ("Nothing recorded yet."), the dropdown still offers `Delta Q1`, proving the
 
 **Files:** `src/lib/campaignExport.ts`, `src/pages/{RecentReturnsPage,CampaignDetailPage}.tsx`
 **Scope:** Small
+
+## A campaign selector on Packages returns
+
+**Description:** In the super-admin role the returns screen has to let the operator say which campaign
+they are processing — "package returns must have a campaign selector" — because a package ID is only
+unique within a campaign.
+
+**Progress:** **Done.** `GET /returns/lookup` now takes an optional `campaignId`: 400 if it is not a
+positive number, 404 if the campaign is not the caller's own (a foreign id deliberately stays
+indistinguishable from a missing one). The returns screen shows super-admins a `Campaign` dropdown
+defaulting to **All campaigns**, so a `user` — and a super-admin who ignores it — behaves exactly as
+before; changing it clears the results on screen, the results keep being re-looked-up under the
+chosen campaign after a return is recorded, and an empty lookup names the campaign it searched.
+
+**Verification:** `npm test` — **145 tests**, including four new ones in `tests/api/isolation.test.ts`
+that put the same package ID in a second campaign of the same company (both found with no filter,
+one each with a filter, 404 for Beta's campaign, 400 for `campaignId=abc`). `npm run typecheck:api`
+and `npm run build` clean. Browser-verified: as `admin@acme.test` the dropdown lists All campaigns /
+April drop / March drop; looking up a March drop package while filtered to April drop gives
+"No package with that ID in April drop." and no card, and switching back to All campaigns finds it;
+`user@acme.test` sees no dropdown.
+
+**Files:** `server/src/returns.ts`, `src/pages/ReturnsPage.tsx`, `tests/api/isolation.test.ts`
+**Scope:** Medium

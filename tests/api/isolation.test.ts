@@ -33,6 +33,7 @@ interface PackageRow {
 interface LookupRow {
   id: number;
   sender_id: string;
+  campaign_id: number;
   return_id: number | null;
   chain: unknown[];
 }
@@ -444,5 +445,57 @@ describe("roles", () => {
     expect((await temp.get("/campaigns")).status).toBe(200);
     await temp.post("/auth/logout");
     expect((await temp.get("/campaigns")).status).toBe(401);
+  });
+});
+
+// A package ID is only unique within a campaign, so the returns screen can narrow a lookup to the
+// campaign the operator is holding.
+describe("narrowing a lookup to one campaign", () => {
+  let repriseCampaign = 0;
+
+  beforeAll(async () => {
+    const campaign = await newCampaign(alpha, "Alpha Reprise");
+    repriseCampaign = campaign.body.id;
+    await alpha.post(`/campaigns/${repriseCampaign}/packages`, {
+      filename: "reprise.xlsx",
+      columns: COLUMNS,
+      senderColumn: 2,
+      rows: [row(SENDER_A, "Cádiz")],
+    });
+  });
+
+  it("finds both uses of the same package ID when no campaign is given", async () => {
+    const all = await alpha.get<LookupRow[]>(`/returns/lookup?senderId=${SENDER_A}`);
+    expect(all.body.map((p) => p.campaign_id)).toEqual([alphaCampaign, repriseCampaign]);
+  });
+
+  it("finds only the chosen campaign's package", async () => {
+    const reprise = await alpha.get<LookupRow[]>(
+      `/returns/lookup?senderId=${SENDER_A}&campaignId=${repriseCampaign}`
+    );
+    expect(reprise.body).toHaveLength(1);
+    expect(reprise.body[0].campaign_id).toBe(repriseCampaign);
+
+    const original = await alpha.get<LookupRow[]>(
+      `/returns/lookup?senderId=${SENDER_A}&campaignId=${alphaCampaign}`
+    );
+    expect(original.body).toHaveLength(1);
+    expect(original.body[0].campaign_id).toBe(alphaCampaign);
+  });
+
+  it("cannot be pointed at another customer's campaign", async () => {
+    const foreign = await alpha.get<
+      { error: string }
+    >(`/returns/lookup?senderId=${SENDER_A}&campaignId=${betaCampaign}`);
+    expect(foreign.status).toBe(404);
+    expect(foreign.body).toEqual({ error: "campaign not found" });
+  });
+
+  it("rejects a campaign id that is not a positive number", async () => {
+    const bad = await alpha.get<
+      { error: string }
+    >(`/returns/lookup?senderId=${SENDER_A}&campaignId=abc`);
+    expect(bad.status).toBe(400);
+    expect(bad.body).toEqual({ error: "campaignId must be a positive number" });
   });
 });

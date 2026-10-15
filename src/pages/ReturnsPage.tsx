@@ -45,6 +45,12 @@ interface ResendForm {
   senderId: string;
 }
 
+/** One of the company's campaigns, for narrowing a lookup to the one being processed. */
+interface CampaignOption {
+  id: number;
+  name: string;
+}
+
 function parseExtra(value: Match["extra_columns"]): Record<string, string> {
   if (typeof value === "string") {
     try {
@@ -71,7 +77,11 @@ export function ReturnsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // A super-admin can narrow the lookup to one campaign; "" means all of them.
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
+  const [selectedCampaign, setSelectedCampaign] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const selectedName = campaigns.find((c) => String(c.id) === selectedCampaign)?.name;
 
   /** Clears the current lookup and puts the cursor back in the search box, ready for the next box. */
   function recordAnother() {
@@ -95,9 +105,22 @@ export function ReturnsPage() {
     );
   }, [hasCompany, loadReference]);
 
-  const lookup = useCallback(async (senderId: string) => {
-    return api.get<Match[]>(`/returns/lookup?senderId=${encodeURIComponent(senderId)}`);
+  const lookup = useCallback(async (senderId: string, campaignId: string) => {
+    const only = campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : "";
+    return api.get<Match[]>(
+      `/returns/lookup?senderId=${encodeURIComponent(senderId)}${only}`
+    );
   }, []);
+
+  useEffect(() => {
+    if (!hasCompany || !isSuperAdmin) return;
+    api
+      .get<CampaignOption[]>("/campaigns")
+      .then(setCampaigns)
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "Failed to load the campaign list")
+      );
+  }, [hasCompany, isSuperAdmin]);
 
   async function search(e: FormEvent) {
     e.preventDefault();
@@ -111,7 +134,7 @@ export function ReturnsPage() {
     setBusy(true);
     setNotes({});
     try {
-      setMatches(await lookup(senderId));
+      setMatches(await lookup(senderId, selectedCampaign));
     } catch (err) {
       setMatches(null);
       setError(err instanceof Error ? err.message : "Search failed");
@@ -132,7 +155,7 @@ export function ReturnsPage() {
         note: notes[match.id] ?? "",
       });
       setNotice(`Recorded "${res.reasonLabel}" for ${match.sender_id}.`);
-      setMatches(await lookup(match.sender_id));
+      setMatches(await lookup(match.sender_id, selectedCampaign));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not record the return");
     } finally {
@@ -194,6 +217,29 @@ export function ReturnsPage() {
       </p>
 
       <form className="card inline" onSubmit={search}>
+        {isSuperAdmin && campaigns.length > 0 && (
+          <label>
+            Campaign
+            <select
+              value={selectedCampaign}
+              onChange={(e) => {
+                setSelectedCampaign(e.target.value);
+                // The results on screen belong to the campaign we are leaving.
+                setMatches(null);
+                setError(null);
+                setNotice(null);
+                searchRef.current?.focus();
+              }}
+            >
+              <option value="">All campaigns</option>
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           Package ID
           <input
@@ -213,7 +259,9 @@ export function ReturnsPage() {
       {notice && <p className="ok">{notice}</p>}
 
       {matches !== null && matches.length === 0 && (
-        <p className="muted">No package with that ID in your account.</p>
+        <p className="muted">
+          No package with that ID{selectedName ? ` in ${selectedName}` : " in your account"}.
+        </p>
       )}
 
       {matches?.map((m) => {
