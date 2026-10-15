@@ -69,13 +69,13 @@ adminRouter.get(
   ah(async (req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT c.id, c.name, c.start_date, c.finish_date,
-              COUNT(p.id) AS package_count,
-              COUNT(r.id) AS return_count
+              (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS package_count,
+              (SELECT COUNT(*) FROM packages p JOIN returns r ON r.package_id = p.id
+                WHERE p.campaign_id = c.id) AS return_count,
+              (SELECT CAST(COALESCE(SUM(u.row_count), 0) AS UNSIGNED) FROM campaign_uploads u
+                WHERE u.campaign_id = c.id) AS total_rows
          FROM campaigns c
-         LEFT JOIN packages p ON p.campaign_id = c.id
-         LEFT JOIN returns r ON r.package_id = p.id
         WHERE c.customer_id = ?
-        GROUP BY c.id, c.name, c.start_date, c.finish_date
         ORDER BY c.id DESC`,
       [req.params.id]
     );

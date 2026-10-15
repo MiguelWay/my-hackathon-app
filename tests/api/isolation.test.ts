@@ -508,9 +508,9 @@ describe("narrowing a lookup to one campaign", () => {
 
 // The Customers screen: a platform super-admin can list and export every customer's campaigns.
 describe("a platform super-admin works across customers", () => {
-  it("lists a customer's campaigns, with package and return counts", async () => {
+  it("lists a customer's campaigns, with lines, packages and returns", async () => {
     const list = await superadmin.get<
-      { name: string; package_count: number; return_count: number }[]
+      { name: string; total_rows: number; package_count: number; return_count: number }[]
     >(`/admin/customers/${alphaCustomerId}/campaigns`);
     expect(list.status).toBe(200);
     expect(list.body.map((c) => c.name)).toEqual(
@@ -518,9 +518,18 @@ describe("a platform super-admin works across customers", () => {
     );
 
     const of = (name: string) => list.body.find((c) => c.name === name)!;
-    expect(of("Alpha March")).toMatchObject({ package_count: 5, return_count: 3 });
+    // Three uploaded lines, two resends added later, three of the five packages came back.
+    expect(of("Alpha March")).toMatchObject({
+      total_rows: 3,
+      package_count: 5,
+      return_count: 3,
+    });
     // A campaign with nothing in it still appears, with zeroes.
-    expect(of("Alpha Other")).toMatchObject({ package_count: 0, return_count: 0 });
+    expect(of("Alpha Other")).toMatchObject({
+      total_rows: 0,
+      package_count: 0,
+      return_count: 0,
+    });
   });
 
   it("exports a campaign of a customer it is not attached to", async () => {

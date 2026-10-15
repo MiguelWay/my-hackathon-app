@@ -695,3 +695,32 @@ works (a throwaway account was added, appeared in the list, then deleted).
 
 **Files:** `src/pages/CustomersPage.tsx`, `src/styles.css`
 **Scope:** Small
+
+## The campaign list under a customer: named, highlighted, scrolled to
+
+**Description:** A report that clicking *Campaigns* on Customers did not show the list "directly below
+the customer".
+
+**Progress:** **Done.** The list was already rendered as the next row of the customers table (measured
+live: the expand row is the customer row's next sibling, 106/148/70 px tall, with the campaign buttons
+visible), so the work was making it impossible to miss: the expanded cell now opens with
+`<customer> — N campaigns. Click one to download…`; the customer row it belongs to is highlighted with
+the same tint and a blue left edge as the panel; and the panel scrolls itself into view
+(`scrollIntoView({ block: "nearest" })`), which matters when the customer sits at the bottom of a short
+window. Two labels were sharpened at the same time: the row reads `150 lines · 151 packages · 1 return`
+(the 151st package is a resend, which has no uploaded line) and `return` is singular for one.
+`GET /admin/customers/:id/campaigns` gained `total_rows`, computed with correlated subqueries — a
+`LEFT JOIN` on two one-to-many tables multiplies the counts once a campaign has more than one upload —
+and wrapped in `CAST(... AS UNSIGNED)` so it arrives as a number, not a MySQL DECIMAL string.
+
+**Verification:** `npm test` — **162 tests** (the campaign-list case now asserts `total_rows`,
+`package_count` and `return_count` together) · `npm run typecheck:api` and `npm run build` clean ·
+browser-verified at 1440×900 and at 1200×520: the expand row is the next sibling of the customer row,
+that row is highlighted, the heading names the customer, the panel is fully in the viewport (at 520 px
+tall the page scrolled itself from 0 to 183 px when the list opened), and the counts read
+`150 lines · 151 packages · 1 return` for *vuelta al cole*, and `5 lines · 5 packages · 4 returns` and
+`500 lines · 503 packages · 42 returns` for Acme.
+
+**Files:** `src/pages/CustomersPage.tsx`, `src/styles.css`, `server/src/admin.ts`,
+`tests/api/isolation.test.ts`
+**Scope:** Small

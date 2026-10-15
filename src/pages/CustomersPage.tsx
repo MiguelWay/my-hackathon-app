@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { downloadCampaignExportForAdmin } from "../lib/campaignExport";
 import { PasswordInput } from "../components/PasswordInput";
@@ -24,6 +24,8 @@ interface CustomerCampaign {
   name: string;
   start_date: string | null;
   finish_date: string | null;
+  /** Lines in the uploaded lists; a resend adds a package without a line. */
+  total_rows: number;
   package_count: number;
   return_count: number;
 }
@@ -56,6 +58,8 @@ export function CustomersPage() {
   // The campaign clicked in the expanded list, so the operator can see which one they took.
   const [chosenCampaign, setChosenCampaign] = useState<number | null>(null);
   const [exporting, setExporting] = useState<number | null>(null);
+  // The expanded campaign list, which can open below the fold.
+  const expandRef = useRef<HTMLTableRowElement | null>(null);
 
   const load = useCallback(async () => {
     setItems(await api.get<Customer[]>("/admin/customers"));
@@ -186,6 +190,13 @@ export function CustomersPage() {
   const openCustomer = items.find((c) => c.id === panel?.customerId);
   const activeUsers = users.filter((u) => u.is_active === 1).length;
 
+  // A list opened near the bottom of the window must not stay out of sight.
+  useEffect(() => {
+    if (panel?.kind === "campaigns") {
+      expandRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [panel]);
+
   return (
     <div>
       <h1>Customers</h1>
@@ -220,7 +231,7 @@ export function CustomersPage() {
           <tbody>
             {items.map((c) => (
               <Fragment key={c.id}>
-                <tr>
+                <tr className={panel?.customerId === c.id ? "open" : undefined}>
                   <td>{c.id}</td>
                   <td>{c.name}</td>
                   <td>
@@ -252,17 +263,21 @@ export function CustomersPage() {
                 </tr>
 
                 {panel?.customerId === c.id && panel.kind === "campaigns" && (
-                  <tr className="expand">
+                  <tr className="expand" ref={expandRef}>
                     <td colSpan={4}>
                       {campaigns === null ? (
                         <p className="muted">Loading…</p>
                       ) : campaigns.length === 0 ? (
-                        <p className="muted">This customer has no campaigns yet.</p>
+                        <p className="muted">
+                          <strong>{c.name}</strong> has no campaigns yet.
+                        </p>
                       ) : (
                         <>
                           <p className="muted">
-                            Click a campaign to download its flagged .xlsx: the uploaded columns plus
-                            the return status, the reason and the resend of each package.
+                            <strong>{c.name}</strong> — {campaigns.length} campaign
+                            {campaigns.length === 1 ? "" : "s"}. Click one to download its flagged
+                            .xlsx: the uploaded columns plus the return status, the reason and the
+                            resend of each package.
                           </p>
                           <ul className="campaign-list">
                             {campaigns.map((camp) => (
@@ -283,7 +298,8 @@ export function CustomersPage() {
                                     {camp.start_date ?? "—"} → {camp.finish_date ?? "—"}
                                   </span>
                                   <span className="muted">
-                                    {camp.package_count} packages · {camp.return_count} returns
+                                    {camp.total_rows} lines · {camp.package_count} packages ·{" "}
+                                    {camp.return_count} return{camp.return_count === 1 ? "" : "s"}
                                   </span>
                                   <span className="download">
                                     {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
