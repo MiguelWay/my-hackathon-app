@@ -16,7 +16,7 @@ const ah =
 
 const currentUser = (res: Response) => res.locals.user as AuthUser;
 
-const RECENT_LIMIT = 25;
+const RECENT_LIMIT = 100;
 
 /** Every package in the same chain as one of `roots`, grouped by chain root. */
 async function chainsFor(customerId: number | null, roots: number[]) {

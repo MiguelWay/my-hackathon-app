@@ -7,6 +7,7 @@ import { SignupPage } from "./pages/SignupPage";
 import { CampaignsPage } from "./pages/CampaignsPage";
 import { CampaignDetailPage } from "./pages/CampaignDetailPage";
 import { ReturnsPage } from "./pages/ReturnsPage";
+import { RecentReturnsPage } from "./pages/RecentReturnsPage";
 import { CustomersPage } from "./pages/CustomersPage";
 
 function Protected({ children }: { children: ReactNode }) {
@@ -48,6 +49,14 @@ export default function App() {
         element={
           <Protected>
             <ReturnsPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/returns/recent"
+        element={
+          <Protected>
+            <RecentReturnsPage />
           </Protected>
         }
       />

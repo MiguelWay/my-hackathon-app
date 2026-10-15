@@ -41,17 +41,6 @@ interface Match {
   chain: ChainNode[];
 }
 
-interface RecentReturn {
-  id: number;
-  returned_at: string;
-  note: string | null;
-  sender_id: string;
-  campaign_name: string;
-  reason_code: string;
-  reason_label: string;
-  closed_store: number;
-}
-
 interface ResendForm {
   senderId: string;
 }
@@ -74,7 +63,6 @@ export function ReturnsPage() {
   const hasCompany = user?.customerId != null;
 
   const [reasons, setReasons] = useState<Reason[]>([]);
-  const [recent, setRecent] = useState<RecentReturn[]>([]);
   const [term, setTerm] = useState("");
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [notes, setNotes] = useState<Record<number, string>>({});
@@ -97,12 +85,7 @@ export function ReturnsPage() {
   }
 
   const loadReference = useCallback(async () => {
-    const [r, recentRows] = await Promise.all([
-      api.get<Reason[]>("/returns/reasons"),
-      api.get<RecentReturn[]>("/returns"),
-    ]);
-    setReasons(r);
-    setRecent(recentRows);
+    setReasons(await api.get<Reason[]>("/returns/reasons"));
   }, []);
 
   useEffect(() => {
@@ -347,37 +330,9 @@ export function ReturnsPage() {
         </div>
       )}
 
-      <h2>Recently recorded</h2>
-      {recent.length === 0 ? (
-        <p className="muted">Nothing recorded yet.</p>
-      ) : (
-        <div className="scroll">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Package ID</th>
-                <th>Campaign</th>
-                <th>Reason</th>
-                <th>When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.sender_id}</td>
-                  <td>{r.campaign_name}</td>
-                  <td>
-                    {r.reason_label}
-                    {r.closed_store === 1 && <span className="chip">closed store</span>}
-                    {r.note ? <span className="muted"> · {r.note}</span> : null}
-                  </td>
-                  <td>{r.returned_at}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <p className="muted">
+        Recorded returns are listed on <Link to="/returns/recent">Recently recorded</Link>.
+      </p>
     </div>
   );
 }
