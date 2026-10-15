@@ -65,7 +65,7 @@ function parseExtra(value: Match["extra_columns"]): Record<string, string> {
 export function ReturnsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  // A super-admin runs the campaigns and links resends; a `user` only records returns.
+  // A super-admin also runs the campaigns; anyone who processes returns records a resend.
   const isSuperAdmin = user?.role === "superadmin";
   const hasCompany = user?.customerId != null;
 
@@ -335,7 +335,7 @@ export function ReturnsPage() {
               </>
             )}
 
-            {returned && isSuperAdmin && (
+            {returned && (
               <div className="resend">
                 <p className="muted">
                   Sent it again? Record the new package ID — it stays in this campaign.
@@ -356,10 +356,6 @@ export function ReturnsPage() {
                   </button>
                 </div>
               </div>
-            )}
-
-            {returned && !isSuperAdmin && (
-              <p className="muted">Only a super-admin can record a resend.</p>
             )}
           </div>
         );

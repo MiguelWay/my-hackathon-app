@@ -1068,3 +1068,33 @@ applying; the build is now warning-free.
 
 **Files:** `server/src/export.ts`, `tests/api/isolation.test.ts`, `src/styles.css`
 **Scope:** Small
+
+## The operator records the resend, and Packages returns is back in the menu
+
+**Description:** "you removed without asking the funcionality to input a returned package and resend
+package. Restore functionality" — then, asked which: "do 1 and 2", i.e. let the `user` role record
+resends, and put `Packages returns` back in the top menu.
+
+**Progress:** **Done, both.** Measured first: as a company super-admin nothing was missing (campaign
+selector, lookup, return input, resend form, save 201), so the only gap was the `user` role. That gate
+(`requireSuperAdmin` on `POST /returns/resend`, and the form swapped for a notice in the UI) had been
+there since the resend feature shipped in `8c91278`, so no `user` account had ever had it — it is now
+open on both sides. `requireCompany` stays, and every query in the handler is scoped by
+`user.customerId`, so a `user` can only resent a **returned** package of **their own** company, in the
+campaign it was sent in; a foreign package id is still a 404. `Packages returns` is back in the nav in
+its original place (after `Returned Packages`), and the link inside Returned Packages stays. The role
+is described the same way everywhere now: `SPECIFICATION.md`, `tasks/plan.md`, the `auth.ts` comment,
+and the role picker on the Customers screen.
+
+**Verification:** `npm test` — **172 tests**, two new (a `user` links a resend in the original's
+campaign; a `user` cannot resend another company's package) and the old "may not link resends"
+expectation dropped. `npm run typecheck:api` and `npm run build` clean · live: as `user@acme.test`
+`POST /returns/resend` on their own returned package → **201**, on customer 8's package → **404**
+`package not found`, and campaign create/upload still **403**; both test packages were deleted
+afterwards and the counters read `508 sent / 46 returns / 3 resends` again. Browser: the nav reads
+`Customers · Campaigns · Returned Packages · Packages returns`, and as `user@acme.test` the resend
+form (*"Sent it again? Record the new package ID"* + `Save resend`) now renders where the notice was.
+
+**Files:** `server/src/returns.ts`, `src/pages/{ReturnsPage,CustomersPage}.tsx`, `src/components/Layout.tsx`,
+`tests/api/isolation.test.ts`, `SPECIFICATION.md`, `tasks/plan.md`, `server/src/auth.ts`
+**Scope:** Small

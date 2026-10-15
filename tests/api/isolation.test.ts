@@ -314,7 +314,7 @@ describe("roles", () => {
     expect(res.body).toEqual({ error: "super-admin only" });
   });
 
-  it("a `user` may not create campaigns, upload, or link resends", async () => {
+  it("a `user` may not create campaigns or upload lists", async () => {
     expect((await newCampaign(alphaUser, "Nope")).status).toBe(403);
     expect(
       (
@@ -323,15 +323,6 @@ describe("roles", () => {
           columns: COLUMNS,
           senderColumn: 2,
           rows: [row("PQNOPE001ES", "Nowhere")],
-        })
-      ).status
-    ).toBe(403);
-    expect(
-      (
-        await alphaUser.post("/returns/resend", {
-          packageId: alphaReturnedPackageId,
-          newSenderId: "PQNOPE002ES",
-          campaignId: alphaCampaign,
         })
       ).status
     ).toBe(403);
@@ -759,5 +750,43 @@ describe("managing accounts", () => {
   it("lets nobody with a `user` role near accounts", async () => {
     expect((await alphaUser.patch(`/admin/users/${rootUserId}`, { active: false })).status).toBe(403);
     expect((await alphaUser.delete(`/admin/users/${rootUserId}`)).status).toBe(403);
+  });
+});
+
+// A resend is the same operator's job as the return it follows: whoever picked the box off the shelf
+// knows it went out again. A `user` may link it, but only inside their own company.
+// Kept last in the file: it adds a package, and the counter tests above count them.
+describe("a `user` links the resend that follows a return", () => {
+  interface ChainLookup {
+    sender_id: string;
+    campaign_id: number;
+    chain: { sender_id: string }[];
+  }
+
+  it("links a resend of a returned package, in the original's campaign", async () => {
+    const res = await alphaUser.post<{ senderId: string; campaignId: number }>("/returns/resend", {
+      packageId: alphaReturnedPackageId,
+      newSenderId: "PQUSERRESEND01ES",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.senderId).toBe("PQUSERRESEND01ES");
+    expect(res.body.campaignId).toBe(alphaCampaign);
+
+    const found = await alphaUser.get<ChainLookup[]>("/returns/lookup?senderId=PQUSERRESEND01ES");
+    expect(found.body).toHaveLength(1);
+    expect(found.body[0].chain.map((n) => n.sender_id)).toEqual(
+      expect.arrayContaining([SENDER_A_RETURNED, "PQUSERRESEND01ES"])
+    );
+  });
+
+  it("may not resend another company's package", async () => {
+    expect(
+      (
+        await alphaUser.post("/returns/resend", {
+          packageId: betaPackageId,
+          newSenderId: "PQUSERFOREIGN01ES",
+        })
+      ).status
+    ).toBe(404);
   });
 });

@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
-import { requireAuth, requireCompany, requireSuperAdmin, type AuthUser } from "./auth";
+import { requireAuth, requireCompany, type AuthUser } from "./auth";
 import { normalizeSenderId } from "./senderId";
 import { chainRootId, parseResendBody } from "./resends";
 import { optionalPositiveInt } from "./validate";
@@ -190,9 +190,10 @@ returnsRouter.get(
 );
 
 // ---- send the same goods again under a new sender ID ----
+// Whoever processes the returns records this too: it is the same operator's job, and every query below
+// is scoped to their own company, so a `user` can only ever touch their own packages.
 returnsRouter.post(
   "/resend",
-  requireSuperAdmin,
   requireCompany,
   ah(async (req, res) => {
     const user = currentUser(res);

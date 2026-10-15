@@ -19,7 +19,8 @@ const COOKIE = "session";
 // the account exists (no user enumeration through response timing).
 const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 12);
 
-// Two roles: `superadmin` has full access (and may be attached to a customer); `user` processes returns.
+// Two roles: `superadmin` has full access (and may be attached to a customer); `user` processes
+// returns and records their resends.
 export type Role = "superadmin" | "user";
 
 export interface AuthUser {

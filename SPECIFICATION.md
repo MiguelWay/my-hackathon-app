@@ -11,7 +11,7 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 
 ## 2. Target users
 - **Admin** — uploads campaign send files; sees all reports.
-- **User** — processes returns (types the sender ID, picks the reason); several users work at once.
+- **User** — processes returns (types the sender ID, picks the reason) and records the resend when the goods go out again; several users work at once.
 - Multiple **customers** (tenants); each has exactly one master store database and many campaigns.
   Data is **totally separated** per customer.
 - Non-user: the operator who prunes the source database (outside the app).

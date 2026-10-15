@@ -19,8 +19,8 @@ Spec: `SPECIFICATION.md`. Intent: `docs/intent/package-returns-traceability.md`.
 - **Auth:** our own. Email + password (hashed with bcrypt/argon2); server sessions stored in a
   `sessions` table, with the raw token only in an httpOnly cookie.
 - **Roles:** `users.role ∈ {superadmin, user}`. Two roles only: a **super-admin** has full
-  access (runs campaigns, uploads lists, exports, links resends, and manages customers); a **user**
-  processes returns. A super-admin may optionally be attached to a customer (`users.customer_id`),
+  access (runs campaigns, uploads lists, exports, and manages customers); a **user** processes
+  returns and records their resends. A super-admin may optionally be attached to a customer (`users.customer_id`),
   which is what scopes its campaign/package/return access; with no customer it is a pure platform
   owner that only manages customers.
 - **Excel ingestion** is client-side (SheetJS): preview → auto-detect the sender-ID column →

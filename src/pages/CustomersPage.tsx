@@ -406,7 +406,7 @@ export function CustomersPage() {
                   }
                 >
                   <option value="superadmin">super-admin — runs campaigns &amp; accounts</option>
-                  <option value="user">user — processes returns only</option>
+                  <option value="user">user — processes returns</option>
                 </select>
               </label>
               <button disabled={busy}>{busy ? "…" : "Add user"}</button>
