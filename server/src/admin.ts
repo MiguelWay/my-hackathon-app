@@ -11,7 +11,7 @@ const ah =
   (req, res, next) =>
     Promise.resolve(fn(req, res, next)).catch(next);
 
-// ---- Platform super-admin: manage customers and their admins ----
+// ---- Platform super-admin: manage customers and their users ----
 // These queries are intentionally NOT scoped by customer_id: this router is the one place that
 // operates across every tenant, and it is gated by requireSuperAdmin above.
 export const adminRouter = Router();
@@ -49,10 +49,10 @@ adminRouter.post(
 );
 
 adminRouter.get(
-  "/customers/:id/admins",
+  "/customers/:id/users",
   ah(async (req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT id, email, created_at FROM users WHERE customer_id = ? AND role = 'admin' ORDER BY id",
+      "SELECT id, email, role, created_at FROM users WHERE customer_id = ? ORDER BY role, id",
       [req.params.id]
     );
     res.json(rows);
@@ -60,29 +60,34 @@ adminRouter.get(
 );
 
 adminRouter.post(
-  "/customers/:id/admins",
+  "/customers/:id/users",
   ah(async (req, res) => {
     const customerId = Number(req.params.id);
-    const { email, password } = req.body ?? {};
+    const { email, password, role } = req.body ?? {};
     if (!isValidEmail(email)) return res.status(400).json({ error: "a valid email is required" });
     const pwProblem = passwordProblem(password);
     if (pwProblem) return res.status(400).json({ error: pwProblem });
-    const adminEmail = String(email).trim();
+    if (role !== "superadmin" && role !== "user") {
+      return res.status(400).json({ error: "role must be superadmin or user" });
+    }
+    const newEmail = String(email).trim();
     const [cust] = await pool.query<RowDataPacket[]>("SELECT id FROM customers WHERE id = ?", [
       customerId,
     ]);
     if (!cust[0]) return res.status(404).json({ error: "customer not found" });
 
     const [existing] = await pool.query<RowDataPacket[]>("SELECT id FROM users WHERE email = ?", [
-      adminEmail,
+      newEmail,
     ]);
     if (existing[0]) return res.status(409).json({ error: "email already registered" });
 
     const hash = await bcrypt.hash(String(password), 12);
     const [result] = await pool.query<ResultSetHeader>(
-      "INSERT INTO users (customer_id, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
-      [customerId, adminEmail, hash]
+      "INSERT INTO users (customer_id, email, password_hash, role) VALUES (?, ?, ?, ?)",
+      [customerId, newEmail, hash, role]
     );
-    res.status(201).json({ id: result.insertId, email: adminEmail, role: "admin", customerId });
+    res
+      .status(201)
+      .json({ id: result.insertId, email: newEmail, role, customerId });
   })
 );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../auth/AuthContext";
 
@@ -74,7 +75,9 @@ function parseExtra(value: Match["extra_columns"]): Record<string, string> {
 
 export function ReturnsPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  // A super-admin runs the campaigns and links resends; a `user` only records returns.
+  const isSuperAdmin = user?.role === "superadmin";
+  const hasCompany = user?.customerId != null;
 
   const [reasons, setReasons] = useState<Reason[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -87,25 +90,26 @@ export function ReturnsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const isSuperadmin = user?.role === "superadmin";
-
   const loadReference = useCallback(async () => {
     const [r, recentRows, camps] = await Promise.all([
       api.get<Reason[]>("/returns/reasons"),
       api.get<RecentReturn[]>("/returns"),
-      isAdmin ? api.get<Campaign[]>("/campaigns") : Promise.resolve([] as Campaign[]),
+      isSuperAdmin && hasCompany
+        ? api.get<Campaign[]>("/campaigns")
+        : Promise.resolve([] as Campaign[]),
     ]);
     setReasons(r);
     setRecent(recentRows);
     setCampaigns(camps);
-  }, [isAdmin]);
+  }, [isSuperAdmin, hasCompany]);
 
   useEffect(() => {
-    if (isSuperadmin) return;
+    // A platform super-admin with no company attached has no returns to show.
+    if (!hasCompany) return;
     loadReference().catch((e: unknown) =>
       setError(e instanceof Error ? e.message : "Failed to load return reasons")
     );
-  }, [isSuperadmin, loadReference]);
+  }, [hasCompany, loadReference]);
 
   const lookup = useCallback(async (senderId: string) => {
     return api.get<Match[]>(`/returns/lookup?senderId=${encodeURIComponent(senderId)}`);
@@ -182,13 +186,14 @@ export function ReturnsPage() {
     }
   }
 
-  if (isSuperadmin) {
+  if (!hasCompany) {
     return (
       <div>
         <h1>Process returns</h1>
         <p className="muted">
-          Super-admins manage customers. Sign in as one of a customer&rsquo;s admins or users to
-          process returns.
+          This account is not attached to a company, so it has no returns to process. Create
+          companies and their accounts on the <Link to="/superadmin/customers">Customers</Link>{" "}
+          screen.
         </p>
       </div>
     );
@@ -294,7 +299,7 @@ export function ReturnsPage() {
               </>
             )}
 
-            {returned && isAdmin && (
+            {returned && isSuperAdmin && (
               <div className="resend">
                 <p className="muted">Sent it again? Record the new sender ID.</p>
                 <div className="btn-row">
@@ -334,8 +339,8 @@ export function ReturnsPage() {
               </div>
             )}
 
-            {returned && !isAdmin && (
-              <p className="muted">Only an admin can record a resend.</p>
+            {returned && !isSuperAdmin && (
+              <p className="muted">Only a super-admin can record a resend.</p>
             )}
           </div>
         );

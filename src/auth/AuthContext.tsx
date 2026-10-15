@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
 
-export type Role = "superadmin" | "admin" | "user";
+export type Role = "superadmin" | "user";
 
 export interface User {
   id: number;

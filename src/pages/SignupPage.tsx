@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { PasswordInput } from "../components/PasswordInput";
 
 export function SignupPage() {
   const { register } = useAuth();
@@ -40,12 +41,11 @@ export function SignupPage() {
         </label>
         <label>
           Password
-          <input
-            type="password"
+          <PasswordInput
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
             minLength={8}
-            required
+            autoComplete="new-password"
           />
         </label>
         {error && <p className="error">{error}</p>}

@@ -360,6 +360,40 @@ are no credentials in the repo). The app is now production-shaped:
 
 ---
 
+## Role model change (post-Task 12): two roles instead of three
+
+**Requested:** "admin and super admin roles can be merged. Super admin can create campaigns."
+→ **2 roles: `superadmin` and `user`.**
+
+**Progress:** **Done.**
+
+- `007_role_merge.sql`: existing `admin` rows become `superadmin` (keeping their `customer_id`), then
+  the column becomes `ENUM('superadmin','user')`.
+- A super-admin is a full-access account. Attached to a customer it runs that customer's campaigns,
+  uploads, returns and exports (what `admin` did) **and** manages customers. With no customer it is a
+  pure platform owner — `requireCompany` refuses company-scoped writes with a clear message rather
+  than a confusing 404.
+- `user` is unchanged: processes returns, read-only elsewhere.
+- `POST/GET /admin/customers/:id/users` (was `/admins`) now takes a `role`, so **both** account types
+  can be created from the UI — this also closes the earlier gap where no `user` account could be created.
+- `npm run create:superadmin -- <email> <password> [customer]` — the optional customer (id or name,
+  created if missing) is what makes a login able to create campaigns.
+- **Customers page rewritten:** the `window.prompt` flow is gone. Each customer row opens a panel
+  listing its accounts plus an inline form (email, password **with Show/Hide**, role). This fixes the
+  prompt/checkbox friction and the double-add confusion.
+
+**Verification:** `npm test` — **123 tests** (was 121). Live check of all three shapes:
+company super-admin creates a campaign (201) and lists customers (200); company super-admin with no
+company gets 403 "this account is not attached to a company"; `user` can read and record returns but
+gets 403 on campaign creation and on `/admin`; bad `role` value → 400.
+
+**Files:** `db/migrations/007_role_merge.sql`, `server/src/{auth,campaigns,packages,returns,admin}.ts`,
+`server/src/scripts/createSuperadmin.ts`, `src/{auth/AuthContext.tsx,components/Layout.tsx,pages/*}`,
+`src/styles.css`, `tests/api/*`, docs
+**Scope:** Medium
+
+---
+
 ## Security hardening (post-Task 12)
 
 **Description:** Threat-model and audit the app, then fix what is actually exploitable.

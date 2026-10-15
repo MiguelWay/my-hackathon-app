@@ -50,7 +50,7 @@ function parseExtra(value: PackageRow["extra_columns"]): Record<string, string> 
 export function CampaignDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isSuperAdmin = user?.role === "superadmin";
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -204,9 +204,9 @@ export function CampaignDetailPage() {
         </p>
       )}
 
-      {!isAdmin && <p className="muted">Only an admin can upload lists.</p>}
+      {!isSuperAdmin && <p className="muted">Only a super-admin can upload lists.</p>}
 
-      {isAdmin && (
+      {isSuperAdmin && (
         <div className="card">
           <h2>Upload campaign list (.xlsx)</h2>
           <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} />

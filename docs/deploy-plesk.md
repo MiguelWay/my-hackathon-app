@@ -64,8 +64,12 @@ Notes:
 npm ci                 # devDependencies are required by the SPA build step
 npm run build          # writes dist/  (reads .env.production: VITE_API_BASE_URL=/api)
 npm run db:migrate     # applies db/migrations/*.sql, tracked in schema_migrations
-npm run create:superadmin -- you@example.com 'a-strong-password'
+npm run create:superadmin -- you@example.com 'a-strong-password' 'Your Company Name'
 ```
+
+The third argument is optional but useful: it attaches the account to a company (created if it does
+not exist), which is what lets that login **create campaigns and upload lists**. Without it the account
+is a pure platform owner that can only manage companies. Pass an existing company id or name.
 
 `npm run db:migrate` and `npm run create:superadmin` must be run **from the application root** (they
 resolve `db/migrations` relative to the working directory).

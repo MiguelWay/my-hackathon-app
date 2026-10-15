@@ -152,7 +152,7 @@ export async function seedUser(
   customerId: number | null,
   email: string,
   password: string,
-  role: "admin" | "user" | "superadmin"
+  role: "superadmin" | "user"
 ): Promise<number> {
   const conn = await mysql.createConnection(await testDb());
   // Low cost factor: these tests only care about the auth flow, not bcrypt strength.

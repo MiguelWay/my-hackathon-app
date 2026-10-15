@@ -12,7 +12,8 @@ interface Campaign {
 
 export function CampaignsPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  // A super-admin runs the campaigns; a `user` only processes returns.
+  const isSuperAdmin = user?.role === "superadmin";
   const [items, setItems] = useState<Campaign[]>([]);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -49,7 +50,7 @@ export function CampaignsPage() {
     <div>
       <h1>Campaigns</h1>
 
-      {isAdmin && (
+      {isSuperAdmin && (
         <form className="card inline" onSubmit={create}>
           <h2>New campaign</h2>
           <label>
@@ -68,8 +69,8 @@ export function CampaignsPage() {
         </form>
       )}
 
-      {!isAdmin && (
-        <p className="muted">Only an admin can create campaigns and upload lists.</p>
+      {!isSuperAdmin && (
+        <p className="muted">Only a super-admin can create campaigns and upload lists.</p>
       )}
 
       {error && <p className="error">{error}</p>}

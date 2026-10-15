@@ -33,7 +33,7 @@ beforeAll(async () => {
 
   // Signup is disabled in this suite, so seed the tenant directly.
   const customerId = await seedCustomer("Sec Co");
-  await seedUser(customerId, ADMIN_EMAIL, ADMIN_PASSWORD, "admin");
+  await seedUser(customerId, ADMIN_EMAIL, ADMIN_PASSWORD, "superadmin");
   await admin.login(ADMIN_EMAIL, ADMIN_PASSWORD);
 });
 

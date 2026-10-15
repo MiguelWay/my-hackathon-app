@@ -50,7 +50,7 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 
 ## 5. Data model
 - `customers(id, name)`
-- `profiles(id → auth.users, customer_id, role ∈ {admin, user})`
+- `profiles(id → auth.users, customer_id, role ∈ {superadmin, user})`
 - `campaigns(id, customer_id, name, start_date, finish_date)`
 - `uploads(id, campaign_id, uploaded_by, uploaded_at, source_filename)`
 - `packages(id, campaign_id, upload_id, chain_id, sender_id, store_name, address, ship_date,

@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
-import { requireAuth, requireAdmin, type AuthUser } from "./auth";
+import { requireAuth, requireCompany, requireSuperAdmin, type AuthUser } from "./auth";
 import { MAX_NAME_LENGTH, boundedString } from "./validate";
 
 const ah =
@@ -48,7 +48,8 @@ campaignsRouter.get(
 
 campaignsRouter.post(
   "/",
-  requireAdmin,
+  requireSuperAdmin,
+  requireCompany,
   ah(async (req, res) => {
     const user = currentUser(res);
     const { name, startDate, finishDate } = req.body ?? {};
@@ -83,7 +84,8 @@ campaignsRouter.get(
 
 campaignsRouter.patch(
   "/:id",
-  requireAdmin,
+  requireSuperAdmin,
+  requireCompany,
   ah(async (req, res) => {
     const user = currentUser(res);
     const { name, startDate, finishDate } = req.body ?? {};

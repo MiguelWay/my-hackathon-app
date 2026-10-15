@@ -18,7 +18,11 @@ Spec: `SPECIFICATION.md`. Intent: `docs/intent/package-returns-traceability.md`.
   and runs via `tsx` (no build step); type-checked with `npm run typecheck:api`.
 - **Auth:** our own. Email + password (hashed with bcrypt/argon2); server sessions stored in a
   `sessions` table, with the raw token only in an httpOnly cookie.
-- **Roles:** `users.role ∈ {admin, user}`. Admin uploads; users process returns.
+- **Roles:** `users.role ∈ {superadmin, user}`. Two roles only: a **super-admin** has full
+  access (runs campaigns, uploads lists, exports, links resends, and manages customers); a **user**
+  processes returns. A super-admin may optionally be attached to a customer (`users.customer_id`),
+  which is what scopes its campaign/package/return access; with no customer it is a pure platform
+  owner that only manages customers.
 - **Excel ingestion** is client-side (SheetJS): preview → auto-detect the sender-ID column →
   one-click confirm. **Column names are never changed**; unknown columns are stored verbatim in
   `extra_columns` (JSON).

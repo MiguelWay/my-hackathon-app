@@ -19,7 +19,8 @@ const COOKIE = "session";
 // the account exists (no user enumeration through response timing).
 const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 12);
 
-export type Role = "superadmin" | "admin" | "user";
+// Two roles: `superadmin` has full access (and may be attached to a customer); `user` processes returns.
+export type Role = "superadmin" | "user";
 
 export interface AuthUser {
   id: number;
@@ -107,7 +108,7 @@ authRouter.post(
       );
       const passwordHash = await bcrypt.hash(String(password), 12);
       const [user] = await conn.query<ResultSetHeader>(
-        "INSERT INTO users (customer_id, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
+        "INSERT INTO users (customer_id, email, password_hash, role) VALUES (?, ?, ?, 'superadmin')",
         [cust.insertId, String(email).trim(), passwordHash]
       );
       await conn.commit();
@@ -116,7 +117,7 @@ authRouter.post(
       res.status(201).json({
         id: user.insertId,
         email: String(email).trim(),
-        role: "admin",
+        role: "superadmin",
         customerId: cust.insertId,
       });
     } catch (err) {
@@ -196,19 +197,23 @@ export const requireAuth: RequestHandler = ah(async (req, res, next) => {
   next();
 });
 
-export const requireAdmin: RequestHandler = (_req, res, next) => {
+export const requireSuperAdmin: RequestHandler = (_req, res, next) => {
   const user = res.locals.user as AuthUser | undefined;
-  if (!user || user.role !== "admin") {
-    res.status(403).json({ error: "admin only" });
+  if (!user || user.role !== "superadmin") {
+    res.status(403).json({ error: "super-admin only" });
     return;
   }
   next();
 };
 
-export const requireSuperAdmin: RequestHandler = (_req, res, next) => {
+/**
+ * For routes that operate on a customer's own data. A super-admin with no customer attached
+ * (a pure platform owner) has nowhere to put a campaign, so those routes are refused.
+ */
+export const requireCompany: RequestHandler = (_req, res, next) => {
   const user = res.locals.user as AuthUser | undefined;
-  if (!user || user.role !== "superadmin") {
-    res.status(403).json({ error: "super-admin only" });
+  if (!user || user.customerId === null) {
+    res.status(403).json({ error: "this account is not attached to a company" });
     return;
   }
   next();

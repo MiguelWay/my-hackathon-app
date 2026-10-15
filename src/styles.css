@@ -239,6 +239,22 @@ select {
   background: #fff;
 }
 
+/* password field + its show/hide button */
+.pw-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.pw-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pw-row button {
+  white-space: nowrap;
+}
+
 .scroll {
   overflow-x: auto;
 }
@@ -276,6 +292,28 @@ select {
   background: #e7defb;
 }
 
-.role-admin {
-  background: #dbeafe;
+.role-user {
+  background: #eef1f5;
+}
+
+.customer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.customer-row label {
+  min-width: 150px;
+}
+
+ul.user-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+ul.user-list li {
+  padding: 4px 0;
+  font-size: 13px;
 }

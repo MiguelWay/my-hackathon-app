@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
-import { requireAuth, requireAdmin, type AuthUser } from "./auth";
+import { requireAuth, requireCompany, requireSuperAdmin, type AuthUser } from "./auth";
 import { normalizeSenderId } from "./senderId";
 import { chainRootId, parseResendBody } from "./resends";
 
@@ -120,10 +120,10 @@ returnsRouter.get(
 // ---- send the same goods again under a new sender ID ----
 returnsRouter.post(
   "/resend",
-  requireAdmin,
+  requireSuperAdmin,
+  requireCompany,
   ah(async (req, res) => {
     const user = currentUser(res);
-    if (user.customerId === null) return res.status(403).json({ error: "admin only" });
 
     const parsed = parseResendBody(req.body);
     if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });

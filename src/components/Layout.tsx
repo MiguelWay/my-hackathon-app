@@ -11,7 +11,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <header className="topbar">
         <div className="brand">Package Returns</div>
         <nav>
-          {user && user.role !== "superadmin" && <Link to="/returns">Process returns</Link>}
+          {user && <Link to="/returns">Process returns</Link>}
           {user && <Link to="/">Campaigns</Link>}
           {user?.role === "superadmin" && <Link to="/superadmin/customers">Customers</Link>}
         </nav>

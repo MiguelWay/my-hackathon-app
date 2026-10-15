@@ -44,6 +44,7 @@ let alphaUser: Client;
 let superadmin: Client;
 
 let alphaCampaign = 0;
+let alphaCustomerId = 0;
 let alphaReturnedPackageId = 0;
 let betaCampaign = 0;
 let betaPackageId = 0;
@@ -60,6 +61,7 @@ beforeAll(async () => {
 
   const a = await alpha.register("Alpha Co", "alpha-admin@test.local", "password123");
   const b = await beta.register("Beta Co", "beta-admin@test.local", "password123");
+  alphaCustomerId = a.customerId;
   await seedUser(a.customerId, "alpha-user@test.local", "password123", "user");
   await seedUser(null, "root@test.local", "password123", "superadmin");
   await alphaUser.login("alpha-user@test.local", "password123");
@@ -311,10 +313,53 @@ describe("roles", () => {
     ).toBe(403);
   });
 
-  it("a customer admin may not use the platform admin API", async () => {
-    const res = await alpha.get("/admin/customers");
+  it("a company super-admin CAN both run its company and manage customers", async () => {
+    // Two roles only: `superadmin` (full access) and `user` (returns). A company super-admin is
+    // the account that used to be `admin`, so it can now reach the platform screens as well.
+    const list = await alpha.get<{ name: string }[]>("/admin/customers");
+    expect(list.status).toBe(200);
+    expect(list.body.map((c) => c.name)).toEqual(expect.arrayContaining(["Alpha Co"]));
+
+    const users = await alpha.get<{ email: string; role: string }[]>(
+      `/admin/customers/${alphaCustomerId}/users`
+    );
+    expect(users.status).toBe(200);
+    expect(users.body.some((u) => u.role === "user")).toBe(true);
+  });
+
+  it("a `user` may not use the platform admin API", async () => {
+    const res = await alphaUser.get("/admin/customers");
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: "super-admin only" });
+  });
+
+  it("a super-admin can create both account types for a customer", async () => {
+    const asUser = await alpha.post<{ role: string }>(
+      `/admin/customers/${alphaCustomerId}/users`,
+      { email: "made-user@test.local", password: "password123", role: "user" }
+    );
+    expect(asUser.status).toBe(201);
+    expect(asUser.body.role).toBe("user");
+
+    const asSuper = await alpha.post<{ role: string }>(
+      `/admin/customers/${alphaCustomerId}/users`,
+      { email: "made-super@test.local", password: "password123", role: "superadmin" }
+    );
+    expect(asSuper.status).toBe(201);
+    expect(asSuper.body.role).toBe("superadmin");
+
+    const bogus = await alpha.post(`/admin/customers/${alphaCustomerId}/users`, {
+      email: "made-bogus@test.local",
+      password: "password123",
+      role: "admin",
+    });
+    expect(bogus.status).toBe(400);
+
+    // The new `user` really is restricted.
+    const newUser = newClient(server.baseUrl);
+    await newUser.login("made-user@test.local", "password123");
+    expect((await newUser.get("/campaigns")).status).toBe(200);
+    expect((await newUser.post("/campaigns", { name: "nope" })).status).toBe(403);
   });
 
   it("a super-admin has no customer data of its own", async () => {

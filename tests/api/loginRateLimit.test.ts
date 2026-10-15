@@ -29,7 +29,7 @@ beforeAll(async () => {
   server = await startServer();
   anon = newClient(server.baseUrl);
   const customerId = await seedCustomer("Rate Limit Co");
-  await seedUser(customerId, EMAIL, PASSWORD, "admin");
+  await seedUser(customerId, EMAIL, PASSWORD, "superadmin");
 });
 
 afterAll(async () => {

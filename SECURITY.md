@@ -5,7 +5,7 @@ Reviewed: 2026-10-15 · Scope: the whole app (`server/src`, `src`, migrations, t
 ## Threat model
 
 **Assets:** tenant data (store lists, sender IDs, return reasons, notes), user credentials, session
-tokens, and the ability to act as a customer's admin.
+tokens, and the ability to act as a full-access account for a customer.
 
 **Trust boundaries** — everything below is attacker-controlled input:
 
@@ -49,6 +49,7 @@ from the exported file; learn whether an account exists.
 
 | # | Finding | Why it is accepted | Re-check when |
 |---|---|---|---|
+| 16a | **Every super-admin can manage customers** (create tenants, and create accounts for *any* customer). Merging the `admin` role into `superadmin` widened this: previously only a platform super-admin could reach `/admin`. | Deliberate, on request — the app is intended for a single operator, where the distinction was overhead. Tenant *data* is still isolated: a super-admin can only read and write campaigns/packages/returns for its **own** `customer_id`, and `tests/api/isolation.test.ts` proves cross-tenant reads and writes still fail. | Before handing a login to someone who should only run their own company, or before a second company shares this deployment. Narrow it by giving that account customer-scoped access only. |
 | 16 | `npm audit`: 1 high + 2 critical (vite, vitest, tinypool, esbuild, `@vitest/mocker`, vite-node) | **All are dev/test-only.** They affect the Vite dev server and the test runner, neither of which is exposed in production (production serves a pre-built `dist/` through Express). `npm audit fix` changes nothing without `--force`; the fixes are breaking major upgrades | Before the next dependency refresh, or if a dev server is ever exposed beyond localhost |
 | 17 | `react-router` moderate: open redirect via a backslash in `<Link>`/`useNavigate` | The advisory covers all 6.x, so the fix is a v7 major upgrade. We never pass user-controlled values to `Link`/`navigate` — every destination is a literal or an app-generated id — so there is no reachable path. Deferred rather than taking a risky major upgrade at deploy time | When upgrading react-router, or if a redirect target ever becomes user-supplied |
 | 18 | `exceljs` → `uuid` moderate (buffer bounds in `v3/v5/v6` with a `buf` argument) | exceljs calls **only `uuid.v4`**, and only to build conditional-formatting rules we never generate. Unreachable. There is no upstream fix — exceljs has not been released since 4.4.0 | If exceljs ships a release, or if we start using uuid directly |

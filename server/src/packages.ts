@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
-import { requireAuth, requireAdmin, type AuthUser } from "./auth";
+import { requireAuth, requireCompany, requireSuperAdmin, type AuthUser } from "./auth";
 import { parseImportBody } from "./importValidation";
 
 // Mounted at /campaigns/:campaignId — packages and uploads belong to one campaign,
@@ -21,8 +21,9 @@ const LOOKUP_CHUNK = 1_000;
 export const packagesRouter = Router({ mergeParams: true });
 packagesRouter.use(requireAuth);
 
-/** Returns the campaign id if it belongs to this customer, else null. */
-async function ownCampaign(campaignId: string, customerId: number): Promise<number | null> {
+/** Returns the campaign id if it belongs to this customer, else null. A null customer owns nothing. */
+async function ownCampaign(campaignId: string, customerId: number | null): Promise<number | null> {
+  if (customerId === null) return null;
   const [rows] = await pool.query<(RowDataPacket & { id: number })[]>(
     "SELECT id FROM campaigns WHERE id = ? AND customer_id = ?",
     [campaignId, customerId]
@@ -66,10 +67,10 @@ packagesRouter.get(
 
 packagesRouter.post(
   "/packages",
-  requireAdmin,
+  requireSuperAdmin,
+  requireCompany,
   ah(async (req, res) => {
     const user = currentUser(res);
-    if (user.customerId === null) return res.status(403).json({ error: "admin only" });
 
     const campaignId = await ownCampaign(String(req.params.campaignId), user.customerId);
     if (campaignId === null) return res.status(404).json({ error: "campaign not found" });
