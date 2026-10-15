@@ -16,6 +16,7 @@ const SENDER_A = "PQA000001ES";
 const SENDER_A_RETURNED = "PQA000002ES";
 const SENDER_A_THIRD = "PQA000003ES";
 const SENDER_A_RESEND = "PQA000004ES";
+const SENDER_A_SECOND_RESEND = "PQSAMECAMP001ES";
 const SENDER_B = "PQB000001ES";
 
 const COLUMNS = ["Fecha de envío", "Dirección", "ID de envío"];
@@ -380,16 +381,36 @@ describe("roles", () => {
     // The UI no longer asks which campaign: a resend always stays where the original was sent.
     const created = await alpha.post<{ campaignId: number; campaignName: string }>(
       "/returns/resend",
-      { packageId: alphaReturnedPackageId, newSenderId: "PQSAMECAMP001ES" }
+      { packageId: alphaReturnedPackageId, newSenderId: SENDER_A_SECOND_RESEND }
     );
     expect(created.status).toBe(201);
     expect(created.body.campaignId).toBe(alphaCampaign);
     expect(created.body.campaignName).toBe("Alpha March");
 
     const chain = await alpha.get<LookupRow[]>(
-      "/returns/lookup?senderId=PQSAMECAMP001ES"
+      `/returns/lookup?senderId=${SENDER_A_SECOND_RESEND}`
     );
     expect(chain.body[0].chain).toHaveLength(3);
+  });
+
+  it("the recent list names the package a resend was sent as", async () => {
+    // A resend can come back too, and then it shows up in the list in its own right.
+    const resentAgain = await alpha.post("/returns", {
+      senderId: SENDER_A_RESEND,
+      reasonCode: "ausente",
+    });
+    expect(resentAgain.status).toBe(201);
+
+    const recent = await alpha.get<{ sender_id: string; resent_as: string | null }[]>("/returns");
+
+    // Each returned package names the next package in its chain.
+    const original = recent.body.find((r) => r.sender_id === SENDER_A_RETURNED);
+    expect(original?.resent_as).toBe(SENDER_A_RESEND);
+    const resend = recent.body.find((r) => r.sender_id === SENDER_A_RESEND);
+    expect(resend?.resent_as).toBe(SENDER_A_SECOND_RESEND);
+
+    // A returned package that was never sent again names nothing.
+    expect(recent.body.find((r) => r.sender_id === SENDER_A_THIRD)?.resent_as).toBeNull();
   });
 
   it("refuses a resend aimed at a different campaign", async () => {

@@ -482,3 +482,34 @@ production build, and the `.xlsx` export still downloads.
 `tests/{validate,rateLimit}.test.ts`, `tests/api/*`, `vitest.config.ts`, `.env.example`, `README.md`,
 `docs/deploy-plesk.md`
 **Scope:** Medium
+
+## Recent returns: where a resend went, and going there
+
+**Description:** Feedback from using the tool for real: "Process returns" should read "Packages
+returns", "Recently recorded" belongs in the top menu next to Campaigns, the resend form should not
+ask which campaign a resend goes into, saving a resend should land on "Recently recorded", and that
+page must show when a package was sent again and as which package ID.
+
+**Progress:** **Done.**
+
+- Nav is `Packages returns | Recently recorded | Campaigns | Customers`.
+- "Recently recorded" is its own page (`/returns/recent`), not a block on the returns screen.
+- The resend form has no campaign picker: the server derives the campaign from the original package
+  and rejects a mismatching one (400), so a resend always stays where the original was sent.
+- `GET /returns` returns `resent_as` — the next package in the same chain — and the page shows it as
+  a **Resent as** column (`—` when the package was never sent again). The list now covers the newest
+  100 returns.
+- Saving a resend navigates to `/returns/recent` with a short confirmation ("Linked X as a resend of
+  Y in “Campaign””) instead of clearing the lookup screen.
+
+**Verification:** `npm test` — **141 tests**, with a case in `tests/api/isolation.test.ts` that walks
+`PQA000002ES → PQA000004ES → PQSAMECAMP001ES` and checks each row names the next one. `npm run
+typecheck:api` and `npm run build` clean. Browser-verified on the production build: `/returns` has
+no `<select>` and no "Campaign sent in" text; saving a resend of an Acme fixture redirected to
+`/returns/recent`, showed the confirmation, and that row then read `Resent as = PQAUTO_REDIRECT_1`
+(scratch row removed afterwards). The seeded chain `PQ555000002ES → PQ777000123ES → PQ888000999ES`
+renders each link in turn.
+
+**Files:** `src/pages/{ReturnsPage,RecentReturnsPage}.tsx`, `src/components/Layout.tsx`,
+`server/src/returns.ts`, `tests/api/isolation.test.ts`
+**Scope:** Small

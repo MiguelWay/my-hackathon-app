@@ -66,7 +66,7 @@ returnsRouter.get(
     const user = currentUser(res);
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT r.id, r.returned_at, r.note,
-              p.sender_id, p.extra_columns,
+              p.id AS package_id, p.sender_id, p.chain_id, p.extra_columns,
               c.id AS campaign_id, c.name AS campaign_name,
               rr.code AS reason_code, rr.label AS reason_label, rr.closed_store
          FROM returns r
@@ -78,7 +78,30 @@ returnsRouter.get(
         LIMIT ${RECENT_LIMIT}`,
       [user.customerId]
     );
-    res.json(rows);
+
+    // Did the package get sent again? The next package in its chain is the resend.
+    const roots = [
+      ...new Set(
+        rows.map((row) => chainRootId({ id: Number(row.package_id), chain_id: row.chain_id }))
+      ),
+    ];
+    const chains = await chainsFor(user.customerId, roots);
+    const resentAs = new Map<number, string>();
+    for (const row of rows) {
+      const root = chainRootId({ id: Number(row.package_id), chain_id: row.chain_id });
+      // chainsFor returns members in id order, so the first one after this package is its resend.
+      const next = (chains.get(root) ?? []).find(
+        (member) => Number(member.id) > Number(row.package_id)
+      );
+      if (next) resentAs.set(Number(row.package_id), String(next.sender_id));
+    }
+
+    res.json(
+      rows.map((row) => ({
+        ...row,
+        resent_as: resentAs.get(Number(row.package_id)) ?? null,
+      }))
+    );
   })
 );
 

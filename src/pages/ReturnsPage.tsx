@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../auth/AuthContext";
 
@@ -58,6 +58,7 @@ function parseExtra(value: Match["extra_columns"]): Record<string, string> {
 
 export function ReturnsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   // A super-admin runs the campaigns and links resends; a `user` only records returns.
   const isSuperAdmin = user?.role === "superadmin";
   const hasCompany = user?.customerId != null;
@@ -70,8 +71,6 @@ export function ReturnsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // Set after a resend is saved, so the confirmation can link to the campaign it landed in.
-  const [noticeCampaign, setNoticeCampaign] = useState<{ id: number; name: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   /** Clears the current lookup and puts the cursor back in the search box, ready for the next box. */
@@ -109,7 +108,6 @@ export function ReturnsPage() {
     }
     setError(null);
     setNotice(null);
-    setNoticeCampaign(null);
     setBusy(true);
     setNotes({});
     try {
@@ -125,7 +123,6 @@ export function ReturnsPage() {
   async function record(match: Match, reason: Reason) {
     setError(null);
     setNotice(null);
-    setNoticeCampaign(null);
     setBusy(true);
     try {
       const res = await api.post<{ reasonLabel: string }>("/returns", {
@@ -158,12 +155,17 @@ export function ReturnsPage() {
         "/returns/resend",
         { packageId: match.id, newSenderId: form.senderId.trim() }
       );
-      setNotice(`Linked ${res.senderId} as a resend in "${res.campaignName}".`);
-      setNoticeCampaign({ id: res.campaignId, name: res.campaignName });
       setResends({});
-      await loadReference();
-      // Move straight on to the next returned package.
-      recordAnother();
+      // Straight to the record of what was just done: the original now names its replacement.
+      navigate("/returns/recent", {
+        state: {
+          resent: {
+            original: match.sender_id,
+            replacement: res.senderId,
+            campaignName: res.campaignName,
+          },
+        },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the resend");
     } finally {
@@ -208,14 +210,7 @@ export function ReturnsPage() {
       </form>
 
       {error && <p className="error">{error}</p>}
-      {notice && (
-        <p className="ok">
-          {notice}{" "}
-          {noticeCampaign && (
-            <Link to={`/campaigns/${noticeCampaign.id}`}>View {noticeCampaign.name} →</Link>
-          )}
-        </p>
-      )}
+      {notice && <p className="ok">{notice}</p>}
 
       {matches !== null && matches.length === 0 && (
         <p className="muted">No package with that ID in your account.</p>
