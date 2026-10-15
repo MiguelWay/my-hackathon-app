@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import { downloadCampaignExport } from "../lib/campaignExport";
@@ -16,6 +16,11 @@ interface RecentReturnRow {
   closed_store: number;
   /** The package ID this one was sent again as, or null when it has not been resent. */
   resent_as: string | null;
+}
+
+interface CampaignOption {
+  id: number;
+  name: string;
 }
 
 /** Handed over by /returns after a resend is saved, so the operator sees it confirmed here. */
@@ -36,8 +41,10 @@ export function RecentReturnsPage() {
   const [items, setItems] = useState<RecentReturnRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // The campaign id being prepared, so only one export runs at a time.
-  const [exporting, setExporting] = useState<number | null>(null);
+  // Every campaign of the company can be exported, not just the ones with returns below.
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
+  const [selectedCampaign, setSelectedCampaign] = useState("");
+  const [exporting, setExporting] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -51,24 +58,35 @@ export function RecentReturnsPage() {
       .finally(() => setLoading(false));
   }, [hasCompany, load]);
 
-  // The campaigns these returns belong to, in the order they appear, each exportable on its own.
-  const campaigns = useMemo(() => {
-    const byId = new Map<number, string>();
-    for (const r of items) byId.set(r.campaign_id, r.campaign_name);
-    return [...byId].map(([id, name]) => ({ id, name }));
-  }, [items]);
+  useEffect(() => {
+    if (!hasCompany || !isSuperAdmin) return;
+    api
+      .get<CampaignOption[]>("/campaigns")
+      .then((list) => {
+        setCampaigns(list);
+        setSelectedCampaign(list.length ? String(list[0].id) : "");
+      })
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "Failed to load the campaign list")
+      );
+  }, [hasCompany, isSuperAdmin]);
 
-  async function runExport(campaignId: number, campaignName: string) {
+  async function runExport() {
+    const campaign = campaigns.find((c) => String(c.id) === selectedCampaign);
+    if (!campaign) {
+      setError("Pick a campaign to download.");
+      return;
+    }
     setError(null);
     setExportNotice(null);
-    setExporting(campaignId);
+    setExporting(true);
     try {
-      const filename = await downloadCampaignExport(campaignId);
-      setExportNotice(`Downloaded ${campaignName} as ${filename}.`);
+      const filename = await downloadCampaignExport(campaign.id);
+      setExportNotice(`Downloaded ${campaign.name} as ${filename}.`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Export failed");
     } finally {
-      setExporting(null);
+      setExporting(false);
     }
   }
 
@@ -105,20 +123,25 @@ export function RecentReturnsPage() {
           <h2>Download a campaign</h2>
           <p className="muted">
             The flagged .xlsx: every uploaded column, plus the return status, the reason and the
-            resend of each package.
+            resend of each package. Any of your company&rsquo;s campaigns can be downloaded.
           </p>
           <div className="btn-row">
-            {campaigns.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className="secondary"
-                disabled={exporting !== null}
-                onClick={() => runExport(c.id, c.name)}
+            <label>
+              Campaign
+              <select
+                value={selectedCampaign}
+                onChange={(e) => setSelectedCampaign(e.target.value)}
               >
-                {exporting === c.id ? "Preparing…" : `Download ${c.name}`}
-              </button>
-            ))}
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="secondary" disabled={exporting} onClick={runExport}>
+              {exporting ? "Preparing…" : "Download .xlsx"}
+            </button>
           </div>
         </div>
       )}

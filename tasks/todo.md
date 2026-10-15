@@ -522,16 +522,19 @@ renders each link in turn.
 campaign first — the request was a download button on "Recently recorded", or export functionality
 in the top menu.
 
-**Progress:** **Done**, as the download button. The page lists the distinct campaigns of the returns
-it is showing, each with a `Download <campaign>` button, and the success notice names the file. The
-button is shown to super-admins only (they are the ones who run campaigns); the API would allow a
-`user` to export too. The download itself moved to `src/lib/campaignExport.ts` and is shared with the
-campaign screen, so there is one implementation of it.
+**Progress:** **Done:** the page has a **Download a campaign** card with a `Campaign` dropdown of
+**every** campaign of the company (from `GET /campaigns`, so a campaign with no returns is included)
+and a `Download .xlsx` button; the success notice names the file. Shown to super-admins only (they
+are the ones who run campaigns); the API would allow a `user` to export too. The download itself
+moved to `src/lib/campaignExport.ts` and is shared with the campaign screen, so there is one
+implementation of it.
 
 **Verification:** `npm test` — **141 tests** · `npm run typecheck:api` and `npm run build` clean ·
-browser-verified on the production build as `admin@acme.test`: the card offers "Download March drop"
-and "Download April drop", and clicking the first downloaded `campaign-1-march-drop.xlsx` (`file`:
-Microsoft Excel 2007+, 22 KB) and showed the notice.
+browser-verified on the production build: as `admin@delta.test`, whose campaign has no returns at
+all ("Nothing recorded yet."), the dropdown still offers `Delta Q1`, proving the list comes from
+`GET /campaigns` and not from the returns shown; as `admin@acme.test` the dropdown matched
+`/api/campaigns` exactly and downloading gave `campaign-3-april-drop.xlsx` (and
+`campaign-1-march-drop.xlsx`, 22 KB, `file`: Microsoft Excel 2007+) with the notice shown.
 
 **Files:** `src/lib/campaignExport.ts`, `src/pages/{RecentReturnsPage,CampaignDetailPage}.tsx`
 **Scope:** Small
