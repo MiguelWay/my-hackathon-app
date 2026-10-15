@@ -492,9 +492,10 @@ page must show when a package was sent again and as which package ID.
 
 **Progress:** **Done.**
 
-- Nav is `Customers | Campaigns | Recently recorded | Packages returns` (Customers only for a
+- Nav is `Customers | Campaigns | Return packages | Packages returns` (Customers only for a
   super-admin).
-- "Recently recorded" is its own page (`/returns/recent`), not a block on the returns screen.
+- "Return packages" (originally "Recently recorded") is its own page (`/returns/recent`), not a block
+  on the returns screen.
 - The resend form has no campaign picker: the server derives the campaign from the original package
   and rejects a mismatching one (400), so a resend always stays where the original was sent.
 - `GET /returns` returns `resent_as` — the next package in the same chain — and the page shows it as

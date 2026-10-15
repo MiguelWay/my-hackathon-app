@@ -326,7 +326,7 @@ export function ReturnsPage() {
       )}
 
       <p className="muted">
-        Recorded returns are listed on <Link to="/returns/recent">Recently recorded</Link>.
+        Recorded returns are listed on <Link to="/returns/recent">Return packages</Link>.
       </p>
     </div>
   );
