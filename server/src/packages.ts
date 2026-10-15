@@ -83,8 +83,8 @@ packagesRouter.post(
     const ids = records.map((r) => r.sender);
     for (let i = 0; i < ids.length; i += LOOKUP_CHUNK) {
       const [found] = await pool.query<(RowDataPacket & { sender_id: string })[]>(
-        "SELECT sender_id FROM packages WHERE campaign_id = ? AND sender_id IN (?)",
-        [campaignId, ids.slice(i, i + LOOKUP_CHUNK)]
+        "SELECT sender_id FROM packages WHERE customer_id = ? AND campaign_id = ? AND sender_id IN (?)",
+        [user.customerId, campaignId, ids.slice(i, i + LOOKUP_CHUNK)]
       );
       existing.push(...found.map((f) => f.sender_id));
     }

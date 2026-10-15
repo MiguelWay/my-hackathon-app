@@ -27,7 +27,7 @@ Docs: `SPECIFICATION.md` (spec) · `tasks/plan.md` + `tasks/todo.md` (plan) · `
 | `npm run api:start` | Run the API |
 | `npm run db:migrate` | Apply `db/migrations/*.sql` in order |
 | `npm run typecheck:api` | Type-check the server |
-| `npm test` | Tests (vitest) |
+| `npm test` | Tests (vitest): unit tests + the API isolation suite |
 
 ## Local dev database (standalone MySQL, no Homebrew)
 This machine runs a self-contained MySQL at `~/.local/mysql`:
@@ -46,3 +46,12 @@ This machine runs a self-contained MySQL at `~/.local/mysql`:
 **Stop:** `~/.local/mysql/mysql-8.4.3-macos14-arm64/bin/mysqladmin --socket=$HOME/.local/mysql/mysql.sock -u root shutdown`
 
 Dev database: `package_returns`, user `appuser` (credentials in `.env`, which is git-ignored).
+
+Tests run against a **separate** database (`package_returns_test`) so dev data is never touched.
+Create it once (as an admin user):
+
+```sql
+CREATE DATABASE package_returns_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+The suite drops and recreates every table in that database on each run, and applies all migrations.

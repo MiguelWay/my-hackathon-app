@@ -59,8 +59,8 @@ campaignsRouter.post(
       [user.customerId, String(name).trim(), startDate ?? null, finishDate ?? null]
     );
     const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT id, name, start_date, finish_date FROM campaigns WHERE id = ?",
-      [result.insertId]
+      "SELECT id, name, start_date, finish_date FROM campaigns WHERE id = ? AND customer_id = ?",
+      [result.insertId, user.customerId]
     );
     res.status(201).json(rows[0]);
   })
@@ -95,8 +95,8 @@ campaignsRouter.patch(
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: "campaign not found" });
     const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT id, name, start_date, finish_date FROM campaigns WHERE id = ?",
-      [req.params.id]
+      "SELECT id, name, start_date, finish_date FROM campaigns WHERE id = ? AND customer_id = ?",
+      [req.params.id, user.customerId]
     );
     res.json(rows[0]);
   })

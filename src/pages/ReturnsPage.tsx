@@ -333,6 +333,10 @@ export function ReturnsPage() {
                 </div>
               </div>
             )}
+
+            {returned && !isAdmin && (
+              <p className="muted">Only an admin can record a resend.</p>
+            )}
           </div>
         );
       })}

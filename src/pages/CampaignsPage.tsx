@@ -68,6 +68,10 @@ export function CampaignsPage() {
         </form>
       )}
 
+      {!isAdmin && (
+        <p className="muted">Only an admin can create campaigns and upload lists.</p>
+      )}
+
       {error && <p className="error">{error}</p>}
 
       <table className="grid">

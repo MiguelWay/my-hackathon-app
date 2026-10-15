@@ -293,16 +293,28 @@ sender header is recovered as the one column the upload kept out of `extra_colum
 **Description:** Prove per-customer isolation across every endpoint, then polish copy, empty states
 and error messages.
 
+**Progress:** **Done & verified.** `server/src/app.ts` exports the Express app without listening (so
+tests can mount it on an ephemeral port) and `server/src/migrations.ts` exposes `runMigrations()`.
+A new API suite (`tests/api/`) drives the real HTTP surface with cookie-aware clients against a
+throwaway database (`package_returns_test`), so dev data is never touched.
+
 **Acceptance criteria:**
-- [ ] Tests show a user of customer A can never read/write customer B's data.
-- [ ] Every data endpoint scopes by `customer_id`.
-- [ ] Empty states and errors are clear.
+- [x] Tests show a user of customer A can never read/write customer B's data.
+- [x] Every data endpoint scopes by `customer_id`.
+- [x] Empty states and errors are clear.
 
 **Verification:**
-- [ ] Isolation test suite passes.
+- [x] `npm test` — 90 tests, of which 39 are API isolation/auth/role tests.
+- [x] **The suite has teeth:** deliberately removing two `customer_id` guards made 4 tests fail,
+      including a cross-tenant *write* that returned 201 instead of 404. Guards restored; green again.
+- [x] Audited every SQL statement: tenant tables are all scoped; `/admin/*` (super-admin) and
+      `return_reasons` are platform-wide by design and now say so in comments.
+- [x] Hardened the three queries that had been relying on an earlier ownership check.
+- [x] Polish: non-admin hints on Campaigns/Returns, and a Customers empty state.
 
 **Dependencies:** Tasks 3–10
-**Files:** `server/**`, `tests/api/*`, `src/**`
+**Files:** `server/src/app.ts`, `server/src/migrations.ts`, `server/src/{index,migrate}.ts`,
+`tests/api/*`, `src/pages/*`, `README.md`
 **Scope:** Medium
 
 ## Task 12: Deploy to Plesk (static SPA + Node API + MySQL)

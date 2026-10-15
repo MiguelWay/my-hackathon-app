@@ -47,7 +47,8 @@ async function chainsFor(customerId: number | null, roots: number[]) {
 export const returnsRouter = Router();
 returnsRouter.use(requireAuth);
 
-// ---- the five seeded reasons --------------------------------
+// ---- the five seeded reasons ----
+// Shared configuration, identical for every customer, so there is nothing to scope.
 returnsRouter.get(
   "/reasons",
   ah(async (_req, res) => {
@@ -147,8 +148,8 @@ returnsRouter.post(
     if (!camp[0]) return res.status(404).json({ error: "campaign not found" });
 
     const [dupe] = await pool.query<RowDataPacket[]>(
-      "SELECT id FROM packages WHERE campaign_id = ? AND sender_id = ?",
-      [campaignId, newSenderId]
+      "SELECT id FROM packages WHERE customer_id = ? AND campaign_id = ? AND sender_id = ?",
+      [user.customerId, campaignId, newSenderId]
     );
     if (dupe[0]) {
       return res.status(409).json({ error: "that sender ID is already used in that campaign" });

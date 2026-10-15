@@ -90,7 +90,7 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 - [ ] Both charts render; the .xlsx exports with returned rows flagged
 
 ### Phase 5: Harden & Deploy
-- [ ] Task 11: Isolation verification + polish
+- [x] Task 11: Isolation verification + polish
 - [ ] Task 12: Deploy to Plesk (static SPA + Node API + MySQL)
 
 ### Checkpoint: Complete

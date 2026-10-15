@@ -11,6 +11,8 @@ const ah =
     Promise.resolve(fn(req, res, next)).catch(next);
 
 // ---- Platform super-admin: manage customers and their admins ----
+// These queries are intentionally NOT scoped by customer_id: this router is the one place that
+// operates across every tenant, and it is gated by requireSuperAdmin above.
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireSuperAdmin);
 

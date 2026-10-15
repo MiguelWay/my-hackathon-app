@@ -62,30 +62,34 @@ export function CustomersPage() {
 
       {error && <p className="error">{error}</p>}
 
-      <table className="grid">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Users</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((c) => (
-            <tr key={c.id}>
-              <td>{c.id}</td>
-              <td>{c.name}</td>
-              <td>{c.user_count}</td>
-              <td>
-                <button type="button" onClick={() => addAdmin(c.id)}>
-                  Add admin
-                </button>
-              </td>
+      {items.length === 0 ? (
+        <p className="muted">No customers yet. Create the first one above.</p>
+      ) : (
+        <table className="grid">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Users</th>
+              <th></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {items.map((c) => (
+              <tr key={c.id}>
+                <td>{c.id}</td>
+                <td>{c.name}</td>
+                <td>{c.user_count}</td>
+                <td>
+                  <button type="button" onClick={() => addAdmin(c.id)}>
+                    Add admin
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
