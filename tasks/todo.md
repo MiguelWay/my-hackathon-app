@@ -360,6 +360,95 @@ are no credentials in the repo). The app is now production-shaped:
 
 ---
 
+# Feature tasks: User profile — customer → campaign → returns
+
+Spec: `docs/specs/user-profile-drilldown.md`. Plan: `tasks/plan.md`, *Feature Plan* section.
+Three tasks, in order: the server read the screen needs, the screen itself, then the way in.
+
+## Task 13: The campaign's own read, and the reports behind a super-admin
+
+**Description:** Give the returns router the one read the new screen needs — a campaign's identity and
+its own counters in a single call — extend the campaign list an operator picks from with a return
+count, and move the four company-wide report endpoints behind `requireSuperAdmin`.
+
+**Acceptance criteria:**
+- [ ] `GET /returns/campaigns/:id` returns `id, name, start_date, finish_date, customer_id,
+      customer_name, sent, returns, resends` for a campaign of a customer the caller is **not**
+      attached to, from the same session.
+- [ ] Its numbers are the campaign's own: a second campaign of the same customer does not leak in.
+- [ ] An unknown campaign id is a `404`.
+- [ ] `GET /returns/customers/:id/campaigns` also returns `return_count`, per campaign.
+- [ ] A `user` gets `403 super-admin only` from `GET /returns`, `/returns/summary`, `/returns/chains`
+      and `/returns/chains/export`; a super-admin still gets `200` from each.
+- [ ] All five endpoints are in the anonymous-`401` table.
+
+**Verification:**
+- [ ] `npm test` — the six new API tests pass, and the existing 192 still do
+- [ ] `npm run typecheck:api` clean
+- [ ] Manual: `curl` each gated endpoint as `user@acme.test` and as `owner@mycompany.test`
+
+**Dependencies:** None
+**Files:** `server/src/returns.ts`, `tests/api/isolation.test.ts`
+**Scope:** Medium
+
+## Task 14: The campaign's returns screen at `/campaigns/:id/returns`
+
+**Description:** Move the processing screen onto the campaign's own route. It loads the campaign's
+head and counters from Task 13's endpoint, keeps the lookup, the match with its chain, the reasons and
+the resend form exactly as they behave today, adds a way back to the customer's campaigns, and loses
+the rail, both pickers, "All campaigns" and their state.
+
+**Acceptance criteria:**
+- [ ] The route renders the campaign's name, dates, customer and the three counters.
+- [ ] The ID box, the match with its chain, the reason buttons and the resend form all still work, and
+      recording a return and saving a resend both succeed from this screen.
+- [ ] The counters move after a recorded return and after a saved resend.
+- [ ] No customer picker, no campaign picker, no rail, no "All campaigns".
+- [ ] An unknown campaign id reports an error rather than rendering an empty screen.
+- [ ] The rail's styles (`.workspace`, `.rail`, `ul.picker`, `button.picker-item`) are gone.
+
+**Verification:**
+- [ ] `npm run build` and `npx tsc --noEmit` clean
+- [ ] Manual: as `user@acme.test`, `/campaigns/6/returns` — look up `PortaP_39`, read the counters,
+      record a return on an unreturned package, then save its resend (and undo both)
+
+**Dependencies:** Task 13
+**Files:** `src/pages/ReturnsPage.tsx`, `src/App.tsx`, `src/styles.css`
+**Scope:** Medium
+
+## Task 15: Customers is the way in — role-aware page, nav, redirects
+
+**Description:** Make `/customers` the entry point for both roles: the list and the campaign rows for
+everyone, the admin controls and export controls for a super-admin only, a campaign row carrying
+`name · dates · N packages · M returns` and linking to the campaign's returns screen. Add the nav per
+role, take `Packages returns` off the menu, and wire the redirects the spec lists.
+
+**Acceptance criteria:**
+- [ ] A `user` signing in lands on `/customers`; their nav shows only *Customers*.
+- [ ] A super-admin keeps *Customers · Campaigns · Returned Packages*, and *Packages returns* is gone
+      from the menu for everyone.
+- [ ] Clicking a customer expands its campaigns inline; each row reads `name · dates · N packages ·
+      M returns`; clicking a campaign opens `/campaigns/:id/returns`.
+- [ ] A `user` sees no *New customer*, no *Users* panel, no account management and no download control.
+- [ ] `/superadmin/customers`, `/returns` and `/returns?customer=&campaign=` redirect as the spec's
+      route table says, and a `user` is sent away from `/returns/recent`.
+
+**Verification:**
+- [ ] `npm run build` and `npx tsc --noEmit` clean
+- [ ] Manual: walk every URL in the spec's route table as both roles
+
+**Dependencies:** Task 14
+**Files:** `src/pages/CustomersPage.tsx`, `src/App.tsx`, `src/components/Layout.tsx`
+**Scope:** Medium
+
+## Checkpoint: Feature complete
+- [ ] All eight success criteria in `docs/specs/user-profile-drilldown.md` hold
+- [ ] `npm test`, `npm run typecheck:api` and `npm run build` clean
+- [ ] `SPECIFICATION.md`, `SECURITY.md` and `README.md` match the shipped behaviour
+- [ ] Review with the human before closing the feature out
+
+---
+
 ## UI wording: "package ID" instead of "sender ID"
 
 **Requested:** change the *Sender-ID column* label to *Choose package ID column*.

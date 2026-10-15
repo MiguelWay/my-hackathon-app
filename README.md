@@ -5,8 +5,9 @@ resends, and export a clearly-flagged list so closed stores are not sent to agai
 
 **Stack:** React + Vite (SPA) · Node.js + Express (API) · MySQL / MariaDB. No Supabase.
 
-Docs: `SPECIFICATION.md` (spec) · `tasks/plan.md` + `tasks/todo.md` (plan) · `docs/intent/` (intent) ·
-`docs/deploy-plesk.md` (deployment) · `SECURITY.md` (security review).
+Docs: `SPECIFICATION.md` (spec) · `docs/specs/` (feature specs) · `tasks/plan.md` + `tasks/todo.md`
+(plan) · `docs/intent/` (intent) · `docs/deploy-plesk.md` (deployment) · `SECURITY.md` (security
+review).
 
 ## Prerequisites
 - Node.js 20+ (tested with 24.21.0)

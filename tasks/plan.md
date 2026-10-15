@@ -121,3 +121,73 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 - **Migration runner:** how `db/migrations/*.sql` are applied (a small Node/PHP runner, or a library) — decide with the language.
 - **MySQL vs Postgres:** resolved — MySQL / MariaDB (already on Plesk).
 - Anything else from `SPECIFICATION.md` §11 (currently none open).
+
+---
+
+# Feature Plan: User profile — customer → campaign → returns
+
+Spec: `docs/specs/user-profile-drilldown.md` (approved 2026-10-15). Detailed tasks: `tasks/todo.md`,
+*Feature tasks* (Task 13 onward). The app-level plan above is untouched.
+
+## Overview
+Replace the operator's returns screen — a single page with the customer list in a left rail — with the
+drill-down the owner asked for: a `user` lands on **Customers**, campaigns expand under a row, and
+clicking one opens that campaign's **own** returns screen, carrying that campaign's counters. The full
+reports become super-admin only. One returns screen serves both roles.
+
+## Architecture decisions
+
+- **The screen moves, the work does not.** The lookup, the match with its chain, the reasons and the
+  resend form are already right; what changes is where they live — `/campaigns/:id/returns`, with the
+  campaign named by the route instead of chosen in a picker. The rail, both pickers, "All campaigns"
+  and their state are deleted rather than hidden.
+- **One endpoint for the screen's head.** `GET /returns/campaigns/:id` returns the campaign's identity
+  *and* its counters in one call. It lives on the returns router, not the campaigns router, because the
+  counters are a returns concern and the router already carries the per-request customer model.
+- **The boundary does not move again.** Every query stays scoped to the one customer the request names
+  (`SECURITY.md` finding 21). Gating four endpoints to `requireSuperAdmin` narrows what a `user` may
+  *read*, which is the point of this change, and touches nothing about how a request is scoped.
+- **One customers page, two roles.** `/customers` renders the same list for everyone; the admin
+  controls (*New customer*, the *Users* panel, account management) and the export controls render only
+  for a super-admin. `/superadmin/customers` redirects, so old links keep working.
+
+## Dependency graph
+```
+Task 13  GET /returns/campaigns/:id  +  return_count  +  the four report gates
+   │
+   └── Task 14  /campaigns/:id/returns  (header + counters + lookup/record/resend)
+           │
+           └── Task 15  /customers for both roles  +  nav  +  redirects
+```
+
+## Task List
+
+- [ ] Task 13: The campaign's own read, and the reports behind a super-admin
+- [ ] Task 14: The campaign's returns screen at `/campaigns/:id/returns`
+- [ ] Task 15: Customers is the way in — role-aware page, nav, redirects
+
+### Checkpoint: After Task 13
+- [ ] `npm test` (six new API tests), `npm run typecheck:api` and `npm run build` clean
+
+### Checkpoint: Feature complete
+- [ ] All eight success criteria in the spec hold
+- [ ] Browser walkthrough as `user@acme.test` and `owner@mycompany.test`
+- [ ] `SPECIFICATION.md`, `SECURITY.md` and `README.md` match the shipped behaviour
+- [ ] Review with the human before the change log is closed
+
+## Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| A super-admin who went straight to `/returns` loses their way | Med | `/returns` redirects to `/customers`, and Customers → campaign is the same number of clicks as the old rail |
+| Sharing one customers page hides a control a super-admin needs | Med | Walk both roles in the browser at the checkpoint, not just the `user` |
+| Gating four endpoints breaks a screen that quietly called one | Med | The reports page is their only caller and is itself super-admin only; the API tests assert both roles |
+| Role-dependent routes in `App.tsx` get confusing | Low | Keep every redirect explicit and listed in the spec's route table; check each URL by hand |
+| Removing `Packages returns` from the menu annoys the owner | Low | Agreed in the spec (§12, decision 1); recorded rather than quietly done |
+
+## Parallelisation
+Task 13 → 14 → 15 is sequential: each screen consumes what the previous one added. No safe parallel
+split, and the whole feature is roughly one session.
+
+## Open Questions
+None. All three questions left open in the spec draft were decided by the owner on 2026-10-15.
