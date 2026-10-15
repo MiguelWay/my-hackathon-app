@@ -127,11 +127,20 @@ returnsRouter.post(
 
     const parsed = parseResendBody(req.body);
     if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
-    const { packageId, newSenderId, campaignId } = parsed.value;
+    const { packageId, newSenderId, campaignId: requestedCampaign } = parsed.value;
 
-    const [orig] = await pool.query<(RowDataPacket & { id: number; chain_id: number | null; return_id: number | null })[]>(
-      `SELECT p.id, p.chain_id, r.id AS return_id
+    const [orig] = await pool.query<
+      (RowDataPacket & {
+        id: number;
+        chain_id: number | null;
+        campaign_id: number;
+        campaign_name: string;
+        return_id: number | null;
+      })[]
+    >(
+      `SELECT p.id, p.chain_id, p.campaign_id, c.name AS campaign_name, r.id AS return_id
          FROM packages p
+         JOIN campaigns c ON c.id = p.campaign_id
          LEFT JOIN returns r ON r.package_id = p.id
         WHERE p.id = ? AND p.customer_id = ?`,
       [packageId, user.customerId]
@@ -141,11 +150,19 @@ returnsRouter.post(
       return res.status(400).json({ error: "only a returned package can be resent" });
     }
 
-    const [camp] = await pool.query<(RowDataPacket & { id: number; name: string })[]>(
-      "SELECT id, name FROM campaigns WHERE id = ? AND customer_id = ?",
-      [campaignId, user.customerId]
-    );
-    if (!camp[0]) return res.status(404).json({ error: "campaign not found" });
+    // A resend always goes in the SAME campaign as the package it replaces.
+    const campaignId = orig[0].campaign_id;
+    if (requestedCampaign !== undefined && requestedCampaign !== campaignId) {
+      // Keep ownership errors as 404s: a foreign campaign id must not be distinguishable.
+      const [foreign] = await pool.query<RowDataPacket[]>(
+        "SELECT id FROM campaigns WHERE id = ? AND customer_id = ?",
+        [requestedCampaign, user.customerId]
+      );
+      if (!foreign[0]) return res.status(404).json({ error: "campaign not found" });
+      return res.status(400).json({
+        error: "a resend stays in the same campaign as the original package",
+      });
+    }
 
     const [dupe] = await pool.query<RowDataPacket[]>(
       "SELECT id FROM packages WHERE customer_id = ? AND campaign_id = ? AND sender_id = ?",
@@ -167,7 +184,7 @@ returnsRouter.post(
       senderId: newSenderId,
       chainId: root,
       campaignId,
-      campaignName: camp[0].name,
+      campaignName: orig[0].campaign_name,
     });
   })
 );

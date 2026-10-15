@@ -135,6 +135,17 @@ describe("input validation happens at the boundary", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects a malformed JSON body with 400, not a 500", async () => {
+    // A bad body is the caller's fault; a 500 would hide it and pollute the error log.
+    const res = await fetch(`${server.baseUrl}/api/campaigns`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not json",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "invalid JSON body" });
+  });
+
   it("accepts a sender ID exactly at the column limit", async () => {
     const campaign = await admin.post<{ id: number }>("/campaigns", {
       name: "Boundary",

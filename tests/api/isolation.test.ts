@@ -376,6 +376,35 @@ describe("roles", () => {
     expect((await superadmin.get<unknown[]>("/returns")).body).toEqual([]);
   });
 
+  it("a resend with no campaign lands in the original package's campaign", async () => {
+    // The UI no longer asks which campaign: a resend always stays where the original was sent.
+    const created = await alpha.post<{ campaignId: number; campaignName: string }>(
+      "/returns/resend",
+      { packageId: alphaReturnedPackageId, newSenderId: "PQSAMECAMP001ES" }
+    );
+    expect(created.status).toBe(201);
+    expect(created.body.campaignId).toBe(alphaCampaign);
+    expect(created.body.campaignName).toBe("Alpha March");
+
+    const chain = await alpha.get<LookupRow[]>(
+      "/returns/lookup?senderId=PQSAMECAMP001ES"
+    );
+    expect(chain.body[0].chain).toHaveLength(3);
+  });
+
+  it("refuses a resend aimed at a different campaign", async () => {
+    const other = await newCampaign(alpha, "Alpha Other");
+    const res = await alpha.post("/returns/resend", {
+      packageId: alphaReturnedPackageId,
+      newSenderId: "PQWRONGCAMP001ES",
+      campaignId: other.body.id,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: "a resend stays in the same campaign as the original package",
+    });
+  });
+
   it("a super-admin can manage customers", async () => {
     const list = await superadmin.get<{ name: string }[]>("/admin/customers");
     expect(list.status).toBe(200);

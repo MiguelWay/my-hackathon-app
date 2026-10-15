@@ -20,7 +20,11 @@ export function attemptNumber(chain: ChainNode[], packageId: number): number {
 export interface ParsedResend {
   packageId: number;
   newSenderId: string;
-  campaignId: number;
+  /**
+   * Optional, and normally omitted: a resend always stays in the ORIGINAL package's campaign, so the
+   * server derives it. If a client does send one, it must match (see the /resend handler).
+   */
+  campaignId?: number;
 }
 
 export type ResendParse =
@@ -48,8 +52,13 @@ export function parseResendBody(body: unknown): ResendParse {
     };
   }
 
+  // The campaign is optional; when present it still has to be a real id.
+  if (b.campaignId === undefined || b.campaignId === null || b.campaignId === "") {
+    return { ok: true, value: { packageId, newSenderId } };
+  }
   const campaignId = positiveInt(b.campaignId);
-  if (campaignId === null) return { ok: false, status: 400, error: "campaignId is required" };
-
+  if (campaignId === null) {
+    return { ok: false, status: 400, error: "campaignId must be a positive number" };
+  }
   return { ok: true, value: { packageId, newSenderId, campaignId } };
 }

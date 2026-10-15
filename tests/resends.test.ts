@@ -45,15 +45,33 @@ describe("parseResendBody", () => {
     expect(parseResendBody({ ...valid, packageId: 0 })).toMatchObject({ ok: false });
   });
 
+  it("allows the campaign to be omitted — a resend stays in the original's campaign", () => {
+    const res = parseResendBody({ packageId: 5, newSenderId: "PQ777000123ES" });
+    expect(res).toEqual({ ok: true, value: { packageId: 5, newSenderId: "PQ777000123ES" } });
+  });
+
+  it("treats an empty campaign the same as an omitted one", () => {
+    for (const empty of [undefined, null, ""]) {
+      const res = parseResendBody({ ...valid, campaignId: empty });
+      expect(res).toEqual({ ok: true, value: { packageId: 5, newSenderId: "PQ777000123ES" } });
+    }
+  });
+
+  it("rejects a campaign that is present but not a positive number", () => {
+    for (const bad of [0, -1, "abc", 1.5]) {
+      expect(parseResendBody({ ...valid, campaignId: bad })).toMatchObject({
+        ok: false,
+        status: 400,
+        error: "campaignId must be a positive number",
+      });
+    }
+  });
+
   it("requires a new package ID", () => {
     expect(parseResendBody({ ...valid, newSenderId: "   " })).toMatchObject({
       ok: false,
       status: 400,
       error: "new package ID is required",
     });
-  });
-
-  it("requires a campaignId", () => {
-    expect(parseResendBody({ ...valid, campaignId: null })).toMatchObject({ ok: false, status: 400 });
   });
 });

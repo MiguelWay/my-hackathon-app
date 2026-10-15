@@ -10,11 +10,6 @@ interface Reason {
   closed_store: number;
 }
 
-interface Campaign {
-  id: number;
-  name: string;
-}
-
 /** One package in a chain of resends. */
 interface ChainNode {
   id: number;
@@ -59,7 +54,6 @@ interface RecentReturn {
 
 interface ResendForm {
   senderId: string;
-  campaignId: string;
 }
 
 function parseExtra(value: Match["extra_columns"]): Record<string, string> {
@@ -80,7 +74,6 @@ export function ReturnsPage() {
   const hasCompany = user?.customerId != null;
 
   const [reasons, setReasons] = useState<Reason[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [recent, setRecent] = useState<RecentReturn[]>([]);
   const [term, setTerm] = useState("");
   const [matches, setMatches] = useState<Match[] | null>(null);
@@ -89,6 +82,8 @@ export function ReturnsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Set after a resend is saved, so the confirmation can link to the campaign it landed in.
+  const [noticeCampaign, setNoticeCampaign] = useState<{ id: number; name: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   /** Clears the current lookup and puts the cursor back in the search box, ready for the next box. */
@@ -102,17 +97,13 @@ export function ReturnsPage() {
   }
 
   const loadReference = useCallback(async () => {
-    const [r, recentRows, camps] = await Promise.all([
+    const [r, recentRows] = await Promise.all([
       api.get<Reason[]>("/returns/reasons"),
       api.get<RecentReturn[]>("/returns"),
-      isSuperAdmin && hasCompany
-        ? api.get<Campaign[]>("/campaigns")
-        : Promise.resolve([] as Campaign[]),
     ]);
     setReasons(r);
     setRecent(recentRows);
-    setCampaigns(camps);
-  }, [isSuperAdmin, hasCompany]);
+  }, []);
 
   useEffect(() => {
     // A platform super-admin with no company attached has no returns to show.
@@ -135,6 +126,7 @@ export function ReturnsPage() {
     }
     setError(null);
     setNotice(null);
+    setNoticeCampaign(null);
     setBusy(true);
     setNotes({});
     try {
@@ -150,6 +142,7 @@ export function ReturnsPage() {
   async function record(match: Match, reason: Reason) {
     setError(null);
     setNotice(null);
+    setNoticeCampaign(null);
     setBusy(true);
     try {
       const res = await api.post<{ reasonLabel: string }>("/returns", {
@@ -173,23 +166,21 @@ export function ReturnsPage() {
       setError("Type the new package ID.");
       return;
     }
-    if (!form.campaignId) {
-      setError("Pick the campaign it was sent in.");
-      return;
-    }
     setError(null);
     setNotice(null);
     setBusy(true);
     try {
-      const res = await api.post<{ senderId: string; campaignName: string }>("/returns/resend", {
-        packageId: match.id,
-        newSenderId: form.senderId.trim(),
-        campaignId: Number(form.campaignId),
-      });
+      // No campaign is sent: a resend stays in the original package's campaign.
+      const res = await api.post<{ senderId: string; campaignId: number; campaignName: string }>(
+        "/returns/resend",
+        { packageId: match.id, newSenderId: form.senderId.trim() }
+      );
       setNotice(`Linked ${res.senderId} as a resend in "${res.campaignName}".`);
-      setResends((r) => ({ ...r, [match.id]: { senderId: "", campaignId: "" } }));
-      setMatches(await lookup(match.sender_id));
+      setNoticeCampaign({ id: res.campaignId, name: res.campaignName });
+      setResends({});
       await loadReference();
+      // Move straight on to the next returned package.
+      recordAnother();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the resend");
     } finally {
@@ -234,7 +225,14 @@ export function ReturnsPage() {
       </form>
 
       {error && <p className="error">{error}</p>}
-      {notice && <p className="ok">{notice}</p>}
+      {notice && (
+        <p className="ok">
+          {notice}{" "}
+          {noticeCampaign && (
+            <Link to={`/campaigns/${noticeCampaign.id}`}>View {noticeCampaign.name} →</Link>
+          )}
+        </p>
+      )}
 
       {matches !== null && matches.length === 0 && (
         <p className="muted">No package with that ID in your account.</p>
@@ -313,7 +311,9 @@ export function ReturnsPage() {
 
             {returned && isSuperAdmin && (
               <div className="resend">
-                <p className="muted">Sent it again? Record the new package ID.</p>
+                <p className="muted">
+                  Sent it again? Record the new package ID — it stays in this campaign.
+                </p>
                 <div className="btn-row">
                   <label>
                     New package ID
@@ -324,25 +324,6 @@ export function ReturnsPage() {
                       }
                       placeholder="e.g. PortaP_151"
                     />
-                  </label>
-                  <label>
-                    Campaign sent in
-                    <select
-                      value={form.campaignId}
-                      onChange={(e) =>
-                        setResends((r) => ({
-                          ...r,
-                          [m.id]: { ...form, campaignId: e.target.value },
-                        }))
-                      }
-                    >
-                      <option value="">— pick a campaign —</option>
-                      {campaigns.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
                   </label>
                   <button type="button" disabled={busy} onClick={() => saveResend(m)}>
                     Save resend

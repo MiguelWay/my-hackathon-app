@@ -113,6 +113,16 @@ if (config.serveSpa && fs.existsSync(distDir)) {
 
 // Central error handler (Express 4 needs 4 args).
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  const type = (err as { type?: string } | null)?.type;
+  // A bad body is the caller's fault, so it must not be reported as a server error.
+  if (type === "entity.parse.failed") {
+    res.status(400).json({ error: "invalid JSON body" });
+    return;
+  }
+  if (type === "entity.too.large") {
+    res.status(413).json({ error: "request body too large" });
+    return;
+  }
   console.error(err);
   res.status(500).json({ error: "internal error" });
 });
