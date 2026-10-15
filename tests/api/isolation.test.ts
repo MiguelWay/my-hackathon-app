@@ -283,6 +283,8 @@ describe("anonymous callers are rejected everywhere", () => {
     ["POST", "/returns"],
     ["POST", "/returns/resend"],
     ["GET", "/admin/customers"],
+    ["GET", "/admin/customers/1/campaigns"],
+    ["GET", "/admin/campaigns/1/export"],
   ];
 
   it.each(protectedCalls)("%s %s → 401", async (method, path) => {
@@ -497,5 +499,39 @@ describe("narrowing a lookup to one campaign", () => {
     >(`/returns/lookup?senderId=${SENDER_A}&campaignId=abc`);
     expect(bad.status).toBe(400);
     expect(bad.body).toEqual({ error: "campaignId must be a positive number" });
+  });
+});
+
+// The Customers screen: a platform super-admin can list and export every customer's campaigns.
+describe("a platform super-admin works across customers", () => {
+  it("lists a customer's campaigns, with package and return counts", async () => {
+    const list = await superadmin.get<
+      { name: string; package_count: number; return_count: number }[]
+    >(`/admin/customers/${alphaCustomerId}/campaigns`);
+    expect(list.status).toBe(200);
+    expect(list.body.map((c) => c.name)).toEqual(
+      expect.arrayContaining(["Alpha March", "Alpha Other", "Alpha Reprise"])
+    );
+
+    const of = (name: string) => list.body.find((c) => c.name === name)!;
+    expect(of("Alpha March")).toMatchObject({ package_count: 5, return_count: 3 });
+    // A campaign with nothing in it still appears, with zeroes.
+    expect(of("Alpha Other")).toMatchObject({ package_count: 0, return_count: 0 });
+  });
+
+  it("exports a campaign of a customer it is not attached to", async () => {
+    const res = await superadmin.get(`/admin/campaigns/${betaCampaign}/export`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("spreadsheetml");
+    expect(res.headers.get("content-disposition")).toContain(".xlsx");
+  });
+
+  it("cannot use the tenant export route, which stays scoped to one company", async () => {
+    expect((await superadmin.get(`/campaigns/${betaCampaign}/export`)).status).toBe(404);
+  });
+
+  it("gives a `user` neither the campaign list nor a campaign export", async () => {
+    expect((await alphaUser.get(`/admin/customers/${alphaCustomerId}/campaigns`)).status).toBe(403);
+    expect((await alphaUser.get(`/admin/campaigns/${alphaCampaign}/export`)).status).toBe(403);
   });
 });

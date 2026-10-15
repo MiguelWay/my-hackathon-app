@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { requireAuth, requireSuperAdmin } from "./auth";
+import { sendCampaignExport } from "./export";
 import { boundedString, isValidEmail, MAX_NAME_LENGTH, passwordProblem } from "./validate";
 
 const ah =
@@ -56,6 +57,39 @@ adminRouter.get(
       [req.params.id]
     );
     res.json(rows);
+  })
+);
+
+// Every campaign of one customer, with the counts a platform admin needs to choose one.
+adminRouter.get(
+  "/customers/:id/campaigns",
+  ah(async (req, res) => {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT c.id, c.name, c.start_date, c.finish_date,
+              COUNT(p.id) AS package_count,
+              COUNT(r.id) AS return_count
+         FROM campaigns c
+         LEFT JOIN packages p ON p.campaign_id = c.id
+         LEFT JOIN returns r ON r.package_id = p.id
+        WHERE c.customer_id = ?
+        GROUP BY c.id, c.name, c.start_date, c.finish_date
+        ORDER BY c.id DESC`,
+      [req.params.id]
+    );
+    res.json(rows);
+  })
+);
+
+// One campaign's flagged .xlsx, for ANY customer: the tenant route (/campaigns/:id/export) stays
+// scoped to the caller's own company, and this is the platform-wide equivalent.
+adminRouter.get(
+  "/campaigns/:id/export",
+  ah(async (req, res) => {
+    const campaignId = Number(req.params.id);
+    if (!Number.isInteger(campaignId) || campaignId <= 0) {
+      return res.status(400).json({ error: "invalid campaign id" });
+    }
+    await sendCampaignExport(res, campaignId, null);
   })
 );
 

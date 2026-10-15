@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
+import { downloadCampaignExportForAdmin } from "../lib/campaignExport";
 import { PasswordInput } from "../components/PasswordInput";
 
 interface Customer {
@@ -16,6 +17,15 @@ interface CustomerUser {
   created_at: string;
 }
 
+interface CustomerCampaign {
+  id: number;
+  name: string;
+  start_date: string | null;
+  finish_date: string | null;
+  package_count: number;
+  return_count: number;
+}
+
 interface NewUserForm {
   email: string;
   password: string;
@@ -24,17 +34,22 @@ interface NewUserForm {
 
 const emptyForm = (): NewUserForm => ({ email: "", password: "", role: "superadmin" });
 
+/** A customer's panel below the table: their accounts, or their campaigns. */
+type PanelKind = "users" | "campaigns";
+
 export function CustomersPage() {
   const [items, setItems] = useState<Customer[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Which customer's "add user" form is open, and that form's values.
-  const [openFor, setOpenFor] = useState<number | null>(null);
+  // Which customer's panel is open, and the "add account" form's values.
+  const [panel, setPanel] = useState<{ customerId: number; kind: PanelKind } | null>(null);
   const [form, setForm] = useState<NewUserForm>(emptyForm());
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<CustomerUser[]>([]);
+  const [campaigns, setCampaigns] = useState<CustomerCampaign[]>([]);
+  const [exporting, setExporting] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setItems(await api.get<Customer[]>("/admin/customers"));
@@ -57,21 +72,21 @@ export function CustomersPage() {
     }
   }
 
-  async function addUser(e: FormEvent, customerId: number) {
+  async function addUser(e: FormEvent) {
     e.preventDefault();
-    if (!openFor) return;
+    if (panel?.kind !== "users") return;
     setError(null);
     setNotice(null);
     setBusy(true);
     try {
-      const created = await api.post<CustomerUser>(`/admin/customers/${customerId}/users`, {
+      const created = await api.post<CustomerUser>(`/admin/customers/${panel.customerId}/users`, {
         email: form.email,
         password: form.password,
         role: form.role,
       });
       setNotice(`Created ${created.role === "superadmin" ? "super-admin" : "user"} ${created.email}.`);
       setForm(emptyForm());
-      setOpenFor(null);
+      setPanel(null);
       setUsers([]);
       await load();
     } catch (err) {
@@ -81,23 +96,46 @@ export function CustomersPage() {
     }
   }
 
-  async function toggleUsers(customerId: number) {
-    if (openFor === customerId) {
-      setOpenFor(null);
+  async function togglePanel(customerId: number, kind: PanelKind) {
+    if (panel?.customerId === customerId && panel.kind === kind) {
+      setPanel(null);
       setUsers([]);
+      setCampaigns([]);
       setForm(emptyForm());
       return;
     }
-    setOpenFor(customerId);
+    setPanel({ customerId, kind });
     setForm(emptyForm());
     setError(null);
     setNotice(null);
+    setUsers([]);
+    setCampaigns([]);
     try {
-      setUsers(await api.get<CustomerUser[]>(`/admin/customers/${customerId}/users`));
+      if (kind === "users") {
+        setUsers(await api.get<CustomerUser[]>(`/admin/customers/${customerId}/users`));
+      } else {
+        setCampaigns(await api.get<CustomerCampaign[]>(`/admin/customers/${customerId}/campaigns`));
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
+      setError(err instanceof Error ? err.message : "Failed to load that customer's data");
     }
   }
+
+  async function downloadCampaign(campaign: CustomerCampaign) {
+    setError(null);
+    setNotice(null);
+    setExporting(campaign.id);
+    try {
+      const filename = await downloadCampaignExportForAdmin(campaign.id);
+      setNotice(`Downloaded ${campaign.name} as ${filename}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  const openCustomer = items.find((c) => c.id === panel?.customerId);
 
   return (
     <div>
@@ -137,9 +175,24 @@ export function CustomersPage() {
                 <td>{c.name}</td>
                 <td>{c.user_count}</td>
                 <td>
-                  <button type="button" className="secondary" onClick={() => toggleUsers(c.id)}>
-                    {openFor === c.id ? "Close" : "Users"}
-                  </button>
+                  <div className="btn-row">
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => togglePanel(c.id, "users")}
+                    >
+                      {panel?.customerId === c.id && panel.kind === "users" ? "Close" : "Users"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => togglePanel(c.id, "campaigns")}
+                    >
+                      {panel?.customerId === c.id && panel.kind === "campaigns"
+                        ? "Close"
+                        : "Campaigns"}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -147,9 +200,9 @@ export function CustomersPage() {
         </table>
       )}
 
-      {openFor !== null && (
+      {panel?.kind === "users" && (
         <div className="card">
-          <h2>{items.find((c) => c.id === openFor)?.name}: accounts</h2>
+          <h2>{openCustomer?.name}: accounts</h2>
 
           {users.length > 0 && (
             <ul className="user-list">
@@ -161,7 +214,7 @@ export function CustomersPage() {
             </ul>
           )}
 
-          <form className="customer-row" onSubmit={(e) => addUser(e, openFor)}>
+          <form className="customer-row" onSubmit={addUser}>
             <label>
               Email
               <input
@@ -198,6 +251,58 @@ export function CustomersPage() {
           <p className="muted">
             Passwords must be 8–100 characters. Emails are unique across the whole platform.
           </p>
+        </div>
+      )}
+
+      {panel?.kind === "campaigns" && (
+        <div className="card">
+          <h2>{openCustomer?.name}: campaigns</h2>
+          <p className="muted">
+            Every campaign this customer has. The download is the flagged .xlsx: the uploaded columns
+            plus the return status, the reason and the resend of each package.
+          </p>
+
+          {campaigns.length === 0 ? (
+            <p className="muted">This customer has no campaigns yet.</p>
+          ) : (
+            <div className="scroll">
+              <table className="grid">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Campaign</th>
+                    <th>Start</th>
+                    <th>Finish</th>
+                    <th>Packages</th>
+                    <th>Returns</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {campaigns.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.id}</td>
+                      <td>{c.name}</td>
+                      <td>{c.start_date ?? "—"}</td>
+                      <td>{c.finish_date ?? "—"}</td>
+                      <td>{c.package_count}</td>
+                      <td>{c.return_count}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={exporting !== null || c.package_count === 0}
+                          onClick={() => downloadCampaign(c)}
+                        >
+                          {exporting === c.id ? "Preparing…" : "Download .xlsx"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

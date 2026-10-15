@@ -1,11 +1,8 @@
 import { baseUrl } from "./api";
 
-/**
- * Downloads one campaign's flagged .xlsx — every uploaded column, plus the return status, the
- * reason and the resend of each package — and returns the file name the server chose.
- */
-export async function downloadCampaignExport(campaignId: number): Promise<string> {
-  const res = await fetch(`${baseUrl}/campaigns/${campaignId}/export`, { credentials: "include" });
+/** Fetches one campaign's .xlsx and hands it to the browser, returning the file name it was saved as. */
+async function fetchExport(path: string, campaignId: number): Promise<string> {
+  const res = await fetch(`${baseUrl}${path}`, { credentials: "include" });
   if (!res.ok) {
     let message = res.statusText;
     try {
@@ -31,3 +28,14 @@ export async function downloadCampaignExport(campaignId: number): Promise<string
   URL.revokeObjectURL(url);
   return filename;
 }
+
+/**
+ * Downloads one campaign's flagged .xlsx — every uploaded column, plus the return status, the
+ * reason and the resend of each package — for a campaign of the caller's own company.
+ */
+export const downloadCampaignExport = (campaignId: number): Promise<string> =>
+  fetchExport(`/campaigns/${campaignId}/export`, campaignId);
+
+/** The same file for a campaign of ANY customer, for the platform super-admin's Customers screen. */
+export const downloadCampaignExportForAdmin = (campaignId: number): Promise<string> =>
+  fetchExport(`/admin/campaigns/${campaignId}/export`, campaignId);

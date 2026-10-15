@@ -562,3 +562,31 @@ April drop / March drop; looking up a March drop package while filtered to April
 
 **Files:** `server/src/returns.ts`, `src/pages/ReturnsPage.tsx`, `tests/api/isolation.test.ts`
 **Scope:** Medium
+
+## Every customer's campaigns on the Customers screen
+
+**Description:** The platform admin screen should list each customer's campaigns and let any of them
+be picked for download — "I would like to see a list of all campaigns per customer ... select any
+campaign from any customer".
+
+**Progress:** **Done.** Each customer row has a `Campaigns` button next to `Users`, opening a panel
+with that customer's campaigns (name, start, finish, package count, return count) and a
+`Download .xlsx` button each. Two platform routes back it: `GET /admin/customers/:id/campaigns`
+(counts from `LEFT JOIN`s, so a campaign with no packages still appears with zeroes) and
+`GET /admin/campaigns/:id/export`. Both sit on `adminRouter`, which is `requireSuperAdmin`. The
+export moved into `sendCampaignExport(res, campaignId, scopeToCustomer)` in `server/src/export.ts`:
+the tenant route passes the caller's own customer — and now answers 404 for a super-admin who has no
+company, where before it fell through to an empty match — while the platform route passes null.
+Every later query uses the campaign's real owner, so one sheet can never mix two companies.
+
+**Verification:** `npm test` — **151 tests**: the campaign list and its counts (5 packages / 3
+returns for the fixture campaign, 0/0 for an empty one), exporting another customer's campaign, the
+tenant route still 404 for a platform super-admin, 403 for a `user`, plus both routes added to the
+"anonymous callers are rejected" table. `npm run typecheck:api` and `npm run build` clean.
+Browser-verified as `root@platform.test` (a super-admin with no company of its own): the Acme Retail
+panel lists April drop (5 packages, 4 returns) and March drop (503, 42); downloading April drop gave
+`campaign-3-april-drop.xlsx`; the `Users` panel still works.
+
+**Files:** `server/src/{admin,export}.ts`, `src/pages/CustomersPage.tsx`,
+`src/lib/campaignExport.ts`, `tests/api/isolation.test.ts`
+**Scope:** Medium
