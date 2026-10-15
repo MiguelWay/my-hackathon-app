@@ -206,14 +206,16 @@ export function CustomersPage() {
         Each customer is a separate company. Their data never mixes with another customer&rsquo;s.
       </p>
 
-      <form className="card inline" onSubmit={create}>
-        <h2>New customer</h2>
-        <label>
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <button>Create</button>
-      </form>
+      <details className="card">
+        <summary>New customer</summary>
+        <form className="customer-row" onSubmit={create}>
+          <label>
+            Name
+            <input value={name} onChange={(e) => setName(e.target.value)} required />
+          </label>
+          <button>Create</button>
+        </form>
+      </details>
 
       {error && <p className="error">{error}</p>}
       {notice && <p className="ok">{notice}</p>}

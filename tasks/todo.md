@@ -774,3 +774,19 @@ part — **Current users** with both accounts — fully on screen.
 
 **Files:** `src/styles.css`, `src/pages/CustomersPage.tsx`
 **Scope:** Small
+
+## Collapsible tools everywhere
+
+**Description:** Make the *New customer* form an accordion too, matching the campaign tools and the two
+user sections.
+
+**Progress:** **Done.** *New customer* is a `details.card` bar, collapsed on load, opening to the same
+Name field and Create button. Every tool in the app — new customer, new campaign, add a list, new users
+— is now a collapsed bar that opens on click, with the lists themselves always visible.
+
+**Verification:** `npm test` — **163 tests** · `npm run build` clean · browser-verified: collapsed on
+load, opening shows the Name field and the Create button while the customer table stays visible (six
+rows), and clicking again collapses it.
+
+**Files:** `src/pages/CustomersPage.tsx`
+**Scope:** Small
