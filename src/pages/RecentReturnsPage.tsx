@@ -50,7 +50,7 @@ export function RecentReturnsPage() {
     <div>
       <h1>Recently recorded</h1>
       <p className="muted">
-        Your company&rsquo;s most recent returns, newest first. <Link to="/returns">Process returns</Link>
+        Your company&rsquo;s most recent returns, newest first. <Link to="/returns">Packages returns</Link>
       </p>
 
       {error && <p className="error">{error}</p>}

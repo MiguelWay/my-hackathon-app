@@ -174,7 +174,7 @@ export function ReturnsPage() {
   if (!hasCompany) {
     return (
       <div>
-        <h1>Process returns</h1>
+        <h1>Packages returns</h1>
         <p className="muted">
           This account is not attached to a company, so it has no returns to process. Create
           companies and their accounts on the <Link to="/superadmin/customers">Customers</Link>{" "}
@@ -186,7 +186,7 @@ export function ReturnsPage() {
 
   return (
     <div>
-      <h1>Process returns</h1>
+      <h1>Packages returns</h1>
       <p className="muted">
         Type the package ID printed on the returned package. A package can be returned once.
       </p>
