@@ -33,6 +33,24 @@ interface ReturnSummary {
   recent: number;
 }
 
+interface ReturnSummary {
+  /** Every package the company has sent, resends included. */
+  sent: number;
+  /** Every return the company has, not just the ones the capped list shows. */
+  returns: number;
+  /** Every package created by a resend. */
+  resends: number;
+  /** How many returns the recent list can hold. */
+  recent: number;
+}
+
+/** A share, rounded to something readable: 0.7%, 12%, 100%. */
+function share(part: number, whole: number): string {
+  if (whole === 0) return "—";
+  const value = (part / whole) * 100;
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)}%`;
+}
+
 /** Handed over by /returns after a resend is saved, so the operator sees it confirmed here. */
 interface ResentNotice {
   original: string;
@@ -164,14 +182,20 @@ export function RecentReturnsPage() {
         <>
           <div className="stats">
             <div className="stat">
+              <span className="stat-number">{summary.sent}</span>
+              <span className="muted">packages sent</span>
+            </div>
+            <div className="stat">
               <span className="stat-number">{summary.returns}</span>
               <span className="muted">
                 returned package{summary.returns === 1 ? "" : "s"}
               </span>
+              <span className="stat-share">{share(summary.returns, summary.sent)} of sent</span>
             </div>
             <div className="stat">
               <span className="stat-number">{summary.resends}</span>
-              <span className="muted">resend{summary.resends === 1 ? "" : "s"}</span>
+              <span className="muted">Resent</span>
+              <span className="stat-share">{share(summary.resends, summary.sent)} of sent</span>
             </div>
           </div>
           {summary.returns > summary.recent && (

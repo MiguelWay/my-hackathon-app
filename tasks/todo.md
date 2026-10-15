@@ -1002,23 +1002,26 @@ campaign-6-vuelta-al-cole.xlsx, in your browser's download folder.`).
 **Files:** `src/pages/CampaignDetailPage.tsx`
 **Scope:** Small
 
-## Counters on Return packages
+## Counters on Returned Packages
 
 **Description:** "put a counter in returned packages so I can easily see the total amount of returns and
-resends."
+resends", then "change to Resent. Add total packages sent ... Also add %".
 
-**Progress:** **Done.** Two counters sit above the list: **returned packages** and **resends**. They are
-totals, not the length of the list, because the list is capped at the newest 100 — `GET /returns/summary`
-counts the company's rows in `returns` and its packages with `created_via = 'resend'`, scoped by customer
-like everything else. When a company has more than the cap, the page adds "The list below shows the
-latest 100."
+**Progress:** **Done.** Three counters sit above the list: **packages sent** (every package the company
+has, resends included), **returned packages** and **Resent**, each of the last two with its share of what
+was sent (`0.7% of sent`, `9.1% of sent`). They are totals, not the length of the list, because the list
+is capped at the newest 100 — `GET /returns/summary` counts the company's rows in `packages`, in
+`returns`, and in `packages` with `created_via = 'resend'`, scoped by customer like everything else. When
+a company has more than the cap, the page adds "The list below shows the latest 100." Shares are rounded
+to something readable: one decimal below 10%, whole numbers above.
 
 **Verification:** `npm test` — **169 tests**, three new (the counters for a company with returns and
 resends, a second company counted as zero, and the route added to the anonymous-401 table). `npm run
-typecheck:api` and `npm run build` clean · browser-verified: the *vuelta al cole* account shows
-**1 returned package · 1 resend**, matching its single row; the Acme load-test account shows
-**46 returned packages · 3 resends** with 46 rows. Neither account has more than 100 returns, so the
-"latest 100" note could not be exercised with real data.
+typecheck:api` and `npm run build` clean · browser-verified: the *vuelta al cole* account reads
+**151 packages sent · 1 returned package (0.7% of sent) · 1 Resent (0.7% of sent)**, and the Acme
+load-test account **508 packages sent · 46 returned packages (9.1% of sent) · 3 Resent (0.6% of sent)**.
+Neither account has more than 100 returns, so the "latest 100" note could not be exercised with real
+data.
 
 **Files:** `server/src/returns.ts`, `src/pages/RecentReturnsPage.tsx`, `src/styles.css`,
 `tests/api/isolation.test.ts`

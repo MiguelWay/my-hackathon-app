@@ -629,20 +629,26 @@ describe("exporting one uploaded list", () => {
 
 // The counters above the recent list: how many returns and resends there are in total.
 describe("return counters", () => {
-  it("counts every return and resend of the company", async () => {
-    const summary = await alpha.get<{ returns: number; resends: number; recent: number }>(
-      "/returns/summary"
-    );
+  it("counts every package sent, every return and every resend of the company", async () => {
+    const summary = await alpha.get<{
+      sent: number;
+      returns: number;
+      resends: number;
+      recent: number;
+    }>("/returns/summary");
     expect(summary.status).toBe(200);
-    // Three packages came back (beforeAll, the recent-list test, the resend test) and two were resent.
+    // Six packages exist (three uploaded, three resends), three of them came back, two were resent.
+    expect(summary.body.sent).toBe(6);
     expect(summary.body.returns).toBe(3);
     expect(summary.body.resends).toBe(2);
     expect(summary.body.recent).toBe(100);
   });
 
   it("counts only the caller's own company", async () => {
-    const betaSummary = await beta.get<{ returns: number; resends: number }>("/returns/summary");
-    expect(betaSummary.body).toMatchObject({ returns: 0, resends: 0 });
+    const betaSummary = await beta.get<{ sent: number; returns: number; resends: number }>(
+      "/returns/summary"
+    );
+    expect(betaSummary.body).toMatchObject({ sent: 1, returns: 0, resends: 0 });
   });
 });
 

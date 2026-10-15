@@ -48,23 +48,27 @@ async function chainsFor(customerId: number | null, roots: number[]) {
 export const returnsRouter = Router();
 returnsRouter.use(requireAuth);
 
-// ---- how many returns and resends there are in total ----
+// ---- how many packages went out, came back, or were sent again ----
 // The recent list is capped, so its length is not the total; these counters are.
 returnsRouter.get(
   "/summary",
   ah(async (_req, res) => {
     const user = currentUser(res);
     const [rows] = await pool.query<
-      (RowDataPacket & { returns_count: number; resend_count: number })[]
+      (
+        RowDataPacket & { sent_count: number; returns_count: number; resend_count: number }
+      )[]
     >(
       `SELECT
+         (SELECT COUNT(*) FROM packages WHERE customer_id = ?) AS sent_count,
          (SELECT COUNT(*) FROM returns WHERE customer_id = ?) AS returns_count,
          (SELECT COUNT(*) FROM packages WHERE customer_id = ? AND created_via = 'resend')
            AS resend_count`,
-      [user.customerId, user.customerId]
+      [user.customerId, user.customerId, user.customerId]
     );
     const counts = rows[0];
     res.json({
+      sent: Number(counts?.sent_count ?? 0),
       returns: Number(counts?.returns_count ?? 0),
       resends: Number(counts?.resend_count ?? 0),
       recent: RECENT_LIMIT,
