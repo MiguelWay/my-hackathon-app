@@ -36,6 +36,14 @@ interface LookupRow {
   chain: unknown[];
 }
 
+// Campaigns require a full start/finish window, so every creation supplies one.
+const newCampaign = (client: Client, name: string) =>
+  client.post<CampaignRow>("/campaigns", {
+    name,
+    startDate: "2026-03-01",
+    finishDate: "2026-03-31",
+  });
+
 let server: TestServer;
 let anon: Client;
 let alpha: Client;
@@ -68,7 +76,7 @@ beforeAll(async () => {
   await superadmin.login("root@test.local", "password123");
 
   // ---- customer A: a campaign with three packages, one returned and resent ----
-  const campaign = await alpha.post<CampaignRow>("/campaigns", { name: "Alpha March" });
+  const campaign = await newCampaign(alpha, "Alpha March");
   alphaCampaign = campaign.body.id;
   await alpha.post(`/campaigns/${alphaCampaign}/packages`, {
     filename: "alpha.xlsx",
@@ -94,7 +102,7 @@ beforeAll(async () => {
   });
 
   // ---- customer B: its own campaign and one package ----
-  const betaCampaignRes = await beta.post<CampaignRow>("/campaigns", { name: "Beta March" });
+  const betaCampaignRes = await newCampaign(beta, "Beta March");
   betaCampaign = betaCampaignRes.body.id;
   await beta.post(`/campaigns/${betaCampaign}/packages`, {
     filename: "beta.xlsx",
@@ -291,7 +299,7 @@ describe("roles", () => {
   });
 
   it("a `user` may not create campaigns, upload, or link resends", async () => {
-    expect((await alphaUser.post("/campaigns", { name: "Nope" })).status).toBe(403);
+    expect((await newCampaign(alphaUser, "Nope")).status).toBe(403);
     expect(
       (
         await alphaUser.post(`/campaigns/${alphaCampaign}/packages`, {
@@ -359,7 +367,7 @@ describe("roles", () => {
     const newUser = newClient(server.baseUrl);
     await newUser.login("made-user@test.local", "password123");
     expect((await newUser.get("/campaigns")).status).toBe(200);
-    expect((await newUser.post("/campaigns", { name: "nope" })).status).toBe(403);
+    expect((await newCampaign(newUser, "nope")).status).toBe(403);
   });
 
   it("a super-admin has no customer data of its own", async () => {

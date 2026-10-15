@@ -3,7 +3,7 @@ import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { requireAuth, requireCompany, requireSuperAdmin, type AuthUser } from "./auth";
-import { MAX_NAME_LENGTH, boundedString } from "./validate";
+import { MAX_NAME_LENGTH, boundedString, parseIsoDate } from "./validate";
 
 const ah =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler =>
@@ -57,9 +57,21 @@ campaignsRouter.post(
     if (!campaignName) {
       return res.status(400).json({ error: "name is required (max 255 characters)" });
     }
+    // Both dates are mandatory: a campaign with no window cannot be reported on.
+    const start = parseIsoDate(startDate);
+    if (!start) {
+      return res.status(400).json({ error: "startDate is required and must be a valid date (YYYY-MM-DD)" });
+    }
+    const finish = parseIsoDate(finishDate);
+    if (!finish) {
+      return res.status(400).json({ error: "finishDate is required and must be a valid date (YYYY-MM-DD)" });
+    }
+    if (finish < start) {
+      return res.status(400).json({ error: "finishDate cannot be before startDate" });
+    }
     const [result] = await pool.query<ResultSetHeader>(
       "INSERT INTO campaigns (customer_id, name, start_date, finish_date) VALUES (?, ?, ?, ?)",
-      [user.customerId, campaignName, startDate ?? null, finishDate ?? null]
+      [user.customerId, campaignName, start, finish]
     );
     const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT id, name, start_date, finish_date FROM campaigns WHERE id = ? AND customer_id = ?",
@@ -89,6 +101,28 @@ campaignsRouter.patch(
   ah(async (req, res) => {
     const user = currentUser(res);
     const { name, startDate, finishDate } = req.body ?? {};
+
+    const [existing] = await pool.query<
+      (RowDataPacket & { start_date: string | null; finish_date: string | null })[]
+    >("SELECT start_date, finish_date FROM campaigns WHERE id = ? AND customer_id = ?", [
+      req.params.id,
+      user.customerId,
+    ]);
+    if (!existing[0]) return res.status(404).json({ error: "campaign not found" });
+
+    // Only the dates that were supplied are validated, against the values that will result.
+    const start = startDate === undefined ? existing[0].start_date : parseIsoDate(startDate);
+    const finish = finishDate === undefined ? existing[0].finish_date : parseIsoDate(finishDate);
+    if (!start) {
+      return res.status(400).json({ error: "startDate is required and must be a valid date (YYYY-MM-DD)" });
+    }
+    if (!finish) {
+      return res.status(400).json({ error: "finishDate is required and must be a valid date (YYYY-MM-DD)" });
+    }
+    if (finish < start) {
+      return res.status(400).json({ error: "finishDate cannot be before startDate" });
+    }
+
     const [result] = await pool.query<ResultSetHeader>(
       `UPDATE campaigns SET
          name = COALESCE(?, name),

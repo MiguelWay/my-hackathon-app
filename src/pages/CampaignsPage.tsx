@@ -53,17 +53,30 @@ export function CampaignsPage() {
       {isSuperAdmin && (
         <form className="card inline" onSubmit={create}>
           <h2>New campaign</h2>
+          <p className="muted">
+            Start and finish dates are required: a campaign without a window cannot be reported on.
+          </p>
           <label>
             Name
             <input value={name} onChange={(e) => setName(e.target.value)} required />
           </label>
           <label>
             Start date
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              required
+            />
           </label>
           <label>
             Finish date
-            <input type="date" value={finishDate} onChange={(e) => setFinishDate(e.target.value)} />
+            <input
+              type="date"
+              value={finishDate}
+              onChange={(e) => setFinishDate(e.target.value)}
+              required
+            />
           </label>
           <button>Create</button>
         </form>

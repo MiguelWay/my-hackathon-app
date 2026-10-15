@@ -360,6 +360,34 @@ are no credentials in the repo). The app is now production-shaped:
 
 ---
 
+## Campaign dates are mandatory
+
+**Requested:** "end date is mandatory. thus no campaign can be created without start and end date."
+
+**Progress:** **Done.** Both `startDate` and `finishDate` are now required on create, and the pair is
+validated on update too. `parseIsoDate` rejects anything that is not a real calendar day, so
+`2026-02-31` and `2026-13-01` are refused rather than silently rolled over, and `finishDate` may not
+precede `startDate`.
+
+- API: `POST /campaigns` → 400 with a specific message for each failure; `PATCH` validates the
+  *resulting* pair (so an update cannot leave the dates out of order), while a rename on its own is
+  still allowed.
+- UI: both date inputs are `required`, with a note explaining why.
+- Columns stay nullable in the database so existing rows are not invented data. Two campaigns predate
+  the rule and have gaps: "Delta Q1" (Delta Ltd, both missing) and "vuelta al cole" (Plátano, no
+  finish). Note a legacy date-less campaign can no longer be renamed via `PATCH` until it is given
+  dates — that is deliberate, but worth knowing.
+
+**Verification:** `npm test` — **132 tests** (was 123), including a "campaign dates are mandatory"
+suite covering missing/both-missing/impossible dates, reversed windows, a single-day window, and the
+update path. Live check of all five cases against the running API.
+
+**Files:** `server/src/{campaigns,validate}.ts`, `src/pages/CampaignsPage.tsx`,
+`tests/validate.test.ts`, `tests/api/security.test.ts`, `tests/api/isolation.test.ts`
+**Scope:** Small
+
+---
+
 ## Role model change (post-Task 12): two roles instead of three
 
 **Requested:** "admin and super admin roles can be merged. Super admin can create campaigns."

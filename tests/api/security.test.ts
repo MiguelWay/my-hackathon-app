@@ -18,6 +18,8 @@ import {
 
 const COLUMNS = ["Fecha de envío", "ID de envío"];
 
+const WINDOW = { startDate: "2026-05-01", finishDate: "2026-05-31" };
+
 let server: TestServer;
 let anon: Client;
 let admin: Client;
@@ -103,13 +105,16 @@ describe("input validation happens at the boundary", () => {
   });
 
   it("rejects an over-long campaign name with 400, not a database error", async () => {
-    const res = await admin.post("/campaigns", { name: "x".repeat(300) });
+    const res = await admin.post("/campaigns", { name: "x".repeat(300), ...WINDOW });
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: expect.stringContaining("name is required") });
   });
 
   it("rejects an over-long sender ID with 400, not a database error", async () => {
-    const campaign = await admin.post<{ id: number }>("/campaigns", { name: "Limits" });
+    const campaign = await admin.post<{ id: number }>("/campaigns", {
+      name: "Limits",
+      ...WINDOW,
+    });
     const res = await admin.post(`/campaigns/${campaign.body.id}/packages`, {
       filename: "x.xlsx",
       columns: COLUMNS,
@@ -131,7 +136,10 @@ describe("input validation happens at the boundary", () => {
   });
 
   it("accepts a sender ID exactly at the column limit", async () => {
-    const campaign = await admin.post<{ id: number }>("/campaigns", { name: "Boundary" });
+    const campaign = await admin.post<{ id: number }>("/campaigns", {
+      name: "Boundary",
+      ...WINDOW,
+    });
     const res = await admin.post(`/campaigns/${campaign.body.id}/packages`, {
       filename: "x.xlsx",
       columns: COLUMNS,
@@ -139,5 +147,54 @@ describe("input validation happens at the boundary", () => {
       rows: [["2026-03-01", "P".repeat(128)]],
     });
     expect(res.status).toBe(201);
+  });
+});
+
+describe("campaign dates are mandatory", () => {
+  const post = (body: unknown) =>
+    admin.post<{ id: number; start_date: string; finish_date: string }>("/campaigns", body);
+
+  it("rejects a campaign with no dates at all", async () => {
+    const res = await post({ name: "No window" });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: expect.stringContaining("startDate is required") });
+  });
+
+  it("rejects a campaign with only a start date", async () => {
+    const res = await post({ name: "Half window", startDate: "2026-05-01" });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: expect.stringContaining("finishDate is required") });
+  });
+
+  it("rejects a date that is not a real calendar day", async () => {
+    for (const bad of ["2026-02-31", "2026-13-01", "2026-5-1", "tomorrow"]) {
+      const res = await post({ name: "Bad date", startDate: bad, finishDate: "2026-05-31" });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("rejects a finish date before the start date", async () => {
+    const res = await post({ name: "Backwards", startDate: "2026-05-31", finishDate: "2026-05-01" });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: "finishDate cannot be before startDate" });
+  });
+
+  it("accepts a valid window, including a single day", async () => {
+    const res = await post({ name: "One day", startDate: "2026-05-01", finishDate: "2026-05-01" });
+    expect(res.status).toBe(201);
+    expect(res.body.start_date).toBe("2026-05-01");
+    expect(res.body.finish_date).toBe("2026-05-01");
+  });
+
+  it("will not let an update put the dates out of order", async () => {
+    const created = await post({ name: "Patch me", ...WINDOW });
+    const res = await admin.patch(`/campaigns/${created.body.id}`, { finishDate: "2026-04-01" });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: "finishDate cannot be before startDate" });
+
+    // A rename on its own is still fine.
+    expect((await admin.patch(`/campaigns/${created.body.id}`, { name: "Renamed" })).status).toBe(
+      200
+    );
   });
 });

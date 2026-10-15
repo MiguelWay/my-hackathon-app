@@ -41,3 +41,20 @@ export function passwordProblem(value: unknown): string | null {
   }
   return null;
 }
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Accepts a `YYYY-MM-DD` string and returns it, or null when it is missing or not a real calendar
+ * date (`2026-02-31` and `2026-13-01` are rejected, not silently rolled over).
+ */
+export function parseIsoDate(value: unknown): string | null {
+  if (typeof value !== "string" || !ISO_DATE_RE.test(value)) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const roundTrips =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+  return roundTrips ? value : null;
+}

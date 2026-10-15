@@ -3,6 +3,7 @@ import {
   boundedString,
   isValidEmail,
   MAX_PASSWORD_LENGTH,
+  parseIsoDate,
   passwordProblem,
 } from "../server/src/validate";
 
@@ -61,5 +62,27 @@ describe("passwordProblem", () => {
 
   it("accepts exactly the maximum length", () => {
     expect(passwordProblem("x".repeat(MAX_PASSWORD_LENGTH))).toBeNull();
+  });
+});
+
+describe("parseIsoDate", () => {
+  it("accepts real dates", () => {
+    expect(parseIsoDate("2026-03-01")).toBe("2026-03-01");
+    expect(parseIsoDate("2024-02-29")).toBe("2024-02-29");
+  });
+
+  it("rejects impossible dates instead of rolling them over", () => {
+    expect(parseIsoDate("2026-02-31")).toBeNull();
+    expect(parseIsoDate("2026-13-01")).toBeNull();
+    expect(parseIsoDate("2026-00-10")).toBeNull();
+    expect(parseIsoDate("2023-02-29")).toBeNull();
+  });
+
+  it("rejects wrong shapes and non-strings", () => {
+    for (const bad of ["", "  ", "01-03-2026", "2026-3-1", "2026/03/01", "yesterday"]) {
+      expect(parseIsoDate(bad)).toBeNull();
+    }
+    expect(parseIsoDate(null)).toBeNull();
+    expect(parseIsoDate(undefined)).toBeNull();
   });
 });
