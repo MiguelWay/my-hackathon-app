@@ -5,7 +5,8 @@ resends, and export a clearly-flagged list so closed stores are not sent to agai
 
 **Stack:** React + Vite (SPA) · Node.js + Express (API) · MySQL / MariaDB. No Supabase.
 
-Docs: `SPECIFICATION.md` (spec) · `tasks/plan.md` + `tasks/todo.md` (plan) · `docs/intent/` (intent).
+Docs: `SPECIFICATION.md` (spec) · `tasks/plan.md` + `tasks/todo.md` (plan) · `docs/intent/` (intent) ·
+`docs/deploy-plesk.md` (deployment).
 
 ## Prerequisites
 - Node.js 20+ (tested with 24.21.0)
@@ -23,11 +24,17 @@ Docs: `SPECIFICATION.md` (spec) · `tasks/plan.md` + `tasks/todo.md` (plan) · `
 |---|---|
 | `npm run dev` | Vite dev server (frontend) |
 | `npm run build` | Build the frontend to `dist/` |
+| `npm start` | Run the API (production entrypoint, `server/start.mjs`) |
 | `npm run api:dev` | Run the API with watch |
 | `npm run api:start` | Run the API |
 | `npm run db:migrate` | Apply `db/migrations/*.sql` in order |
 | `npm run typecheck:api` | Type-check the server |
 | `npm test` | Tests (vitest): unit tests + the API isolation suite |
+
+## Production
+In production **one process serves both the API and the SPA**: JSON endpoints live under `/api`, and
+the built `dist/` is served from the same origin with an SPA deep-link fallback. See
+[`docs/deploy-plesk.md`](docs/deploy-plesk.md) for the full Plesk deployment guide.
 
 ## Local dev database (standalone MySQL, no Homebrew)
 This machine runs a self-contained MySQL at `~/.local/mysql`:

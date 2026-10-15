@@ -85,7 +85,8 @@ export class Client {
     path: string,
     body?: unknown
   ): Promise<ApiResponse<T>> {
-    const res = await fetch(this.baseUrl + path, {
+    // Production keeps the API under /api so the SPA and the API can share one origin.
+    const res = await fetch(`${this.baseUrl}/api${path}`, {
       method,
       headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),

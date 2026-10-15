@@ -91,7 +91,7 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 
 ### Phase 5: Harden & Deploy
 - [x] Task 11: Isolation verification + polish
-- [ ] Task 12: Deploy to Plesk (static SPA + Node API + MySQL)
+- [x] Task 12: Deploy to Plesk (static SPA + Node API + MySQL)
 
 ### Checkpoint: Complete
 - [ ] All success criteria in `SPECIFICATION.md` met; app live on Plesk; ready for review

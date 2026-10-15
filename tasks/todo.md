@@ -322,16 +322,37 @@ throwaway database (`package_returns_test`), so dev data is never touched.
 **Description:** Create the MySQL database in Plesk, run migrations, deploy the Node API, build the
 SPA to `dist/` and serve it, with SPA fallback and HTTPS.
 
-**Acceptance criteria:**
-- [ ] MySQL DB created; migrations applied.
-- [ ] API reachable over HTTPS; env vars set (DB creds, session secret).
-- [ ] SPA served with deep-link fallback; sign-in works in production.
+**Progress:** **Prepared & verified locally; the final push to Plesk needs your server access** (there
+are no credentials in the repo). The app is now production-shaped:
 
-**Verification:**
-- [ ] Manual: load the app, sign in, open a deep link, run one upload.
+- All JSON endpoints moved under `/api`, and the same process serves the built SPA with a deep-link
+  fallback. Single origin ⇒ `SameSite=Lax` session cookies work and no cross-site cookie problem.
+- `server/start.mjs` is the Plesk startup file (registers tsx, loads the TS server); `tsx` moved to
+  runtime dependencies. `npm start` runs it.
+- `Port` honours Plesk's `PORT` as well as `API_PORT`; empty env values are ignored.
+- `SERVE_SPA` / `.env.production` (`VITE_API_BASE_URL=/api`); `trust proxy` in production.
+- `docs/deploy-plesk.md`: step-by-step runbook (DB, code, `.env`, build, migrate, Node.js settings,
+  HTTPS, update/rollback, troubleshooting, security).
+
+**Acceptance criteria:**
+- [~] MySQL DB created; migrations applied. *(runbook ready; local DB migrated)*
+- [~] API reachable over HTTPS; env vars set. *(verified locally over HTTP in production mode)*
+- [~] SPA served with deep-link fallback; sign-in works in production. *(verified locally)*
+
+**Verification (local, running the production config exactly as Plesk does):**
+- [x] `NODE_ENV=production node server/start.mjs` → `/` and `/returns` and `/campaigns/3` return the
+      SPA (HTML), while `/api/returns` returns 401 JSON and `/api/nope` returns 404 JSON.
+- [x] Fresh sign-in in a browser against the production build; session survives a reload.
+- [x] Return lookup, resend chain and the `.xlsx` export all work on the production build.
+- [x] `npm test` (90) · `npm run typecheck:api` · `npm run build` · no diagnostics.
+- [x] The client bundle contains **no** secrets (checked for DB password/user/name and test passwords).
+- [x] `PORT` fallback verified with `API_PORT` deliberately empty.
+
+**Remaining:** run the runbook against the real Plesk server (needs access + the DB password).
 
 **Dependencies:** Tasks 1–11
-**Files:** `server/**`, `.env.production`, Plesk config, `README.md`
+**Files:** `server/start.mjs`, `server/src/app.ts`, `server/src/config.ts`, `.env.production`,
+`.env.example`, `docs/deploy-plesk.md`, `README.md`, `package.json`
 **Scope:** Medium
 
 ## Checkpoint: Complete
