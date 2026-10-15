@@ -304,8 +304,14 @@ describe("roles", () => {
   it("a `user` may read campaigns and record returns", async () => {
     expect((await alphaUser.get("/campaigns")).status).toBe(200);
     expect((await alphaUser.get(`/campaigns/${alphaCampaign}/packages`)).status).toBe(200);
-    expect((await alphaUser.get(`/campaigns/${alphaCampaign}/export`)).status).toBe(200);
     expect((await alphaUser.get<unknown[]>("/returns/reasons")).body).toHaveLength(5);
+  });
+
+  it("a `user` may not export the flagged sheet", async () => {
+    // The export buttons are hidden from a `user`; the route refuses them the same way.
+    const res = await alphaUser.get(`/campaigns/${alphaCampaign}/export`);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "super-admin only" });
   });
 
   it("a `user` may not create campaigns, upload, or link resends", async () => {

@@ -1041,3 +1041,30 @@ Packages still points at `/returns` and lands on that screen.
 
 **Files:** `src/components/Layout.tsx`, `src/pages/{RecentReturnsPage,ReturnsPage}.tsx`
 **Scope:** Small
+
+## User-role review: the export route now matches the screen
+
+**Description:** "lets review user role." Follow-up decisions: close the export to a `user`, keep the
+counters, keep the campaigns screen, keep both screen names.
+
+**Progress:** **Reviewed, one gap closed.** Measured the `user` role end to end (live as
+`user@acme.test`, customer 2) rather than trusting the buttons: the nav is `Campaigns | Returned
+Packages`, campaign creation/upload/resend and `/admin/*` are 403, `/superadmin/customers` redirects
+home, and the processing screen keeps working (lookup + reason). Everything was correctly scoped by
+company — except the flagged `.xlsx`: the *Download a campaign* card is hidden from a `user`, but
+`GET /campaigns/:id/export` still served them their company's whole sheet (200, 22 KB). The route now
+carries `requireSuperAdmin`, so the API says what the screen already implied; a `user` gets 403
+`super-admin only`, while a company super-admin keeps the sheet (200) and the platform route
+(`/admin/campaigns/:id/export`) is unchanged. Kept, by decision: the sent/returned/Resent counters
+(read-only context), the read-only campaigns screen, and both screen names.
+
+**Verification:** `npm test` — **170 tests**, the `user`-export expectation flipped to 403 and a
+purpose-named test added. `npm run typecheck:api` and `npm run build` clean · curl-verified against the
+restarted API: `user@acme.test` → 403 `{"error":"super-admin only"}` on campaign 1; a company
+super-admin → 200, 27,537 bytes, `spreadsheetml` on campaign 6. Also fixed a missing `}` in
+`src/styles.css` that nested the rest of the stylesheet inside `ul.campaign-list` — Vite's minifier
+reported it as `css-syntax-error` on every build, and it stopped `.campaign-choice`'s `flex: 1`
+applying; the build is now warning-free.
+
+**Files:** `server/src/export.ts`, `tests/api/isolation.test.ts`, `src/styles.css`
+**Scope:** Small

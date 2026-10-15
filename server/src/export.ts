@@ -3,7 +3,7 @@ import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket } from "mysql2";
 import ExcelJS from "exceljs";
 import { pool } from "./db";
-import { requireAuth, type AuthUser } from "./auth";
+import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
 import { optionalPositiveInt } from "./validate";
 import {
   buildExportLayout,
@@ -217,8 +217,11 @@ export async function sendCampaignExport(
 export const exportRouter = Router({ mergeParams: true });
 exportRouter.use(requireAuth);
 
+// Exporting the flagged sheet is a planning action, so it is a super-admin's to take: the buttons are
+// already hidden from a `user`, and this keeps the API saying the same thing as the screen.
 exportRouter.get(
   "/",
+  requireSuperAdmin,
   ah(async (req, res) => {
     const campaignId = Number(req.params.campaignId);
     if (!Number.isInteger(campaignId) || campaignId <= 0) {
