@@ -48,6 +48,30 @@ async function chainsFor(customerId: number | null, roots: number[]) {
 export const returnsRouter = Router();
 returnsRouter.use(requireAuth);
 
+// ---- how many returns and resends there are in total ----
+// The recent list is capped, so its length is not the total; these counters are.
+returnsRouter.get(
+  "/summary",
+  ah(async (_req, res) => {
+    const user = currentUser(res);
+    const [rows] = await pool.query<
+      (RowDataPacket & { returns_count: number; resend_count: number })[]
+    >(
+      `SELECT
+         (SELECT COUNT(*) FROM returns WHERE customer_id = ?) AS returns_count,
+         (SELECT COUNT(*) FROM packages WHERE customer_id = ? AND created_via = 'resend')
+           AS resend_count`,
+      [user.customerId, user.customerId]
+    );
+    const counts = rows[0];
+    res.json({
+      returns: Number(counts?.returns_count ?? 0),
+      resends: Number(counts?.resend_count ?? 0),
+      recent: RECENT_LIMIT,
+    });
+  })
+);
+
 // ---- the five seeded reasons ----
 // Shared configuration, identical for every customer, so there is nothing to scope.
 returnsRouter.get(

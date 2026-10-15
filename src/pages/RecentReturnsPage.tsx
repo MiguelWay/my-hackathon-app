@@ -24,6 +24,15 @@ interface CampaignOption {
   name: string;
 }
 
+interface ReturnSummary {
+  /** Every return the company has, not just the ones the capped list shows. */
+  returns: number;
+  /** Every package created by a resend. */
+  resends: number;
+  /** How many returns the recent list can hold. */
+  recent: number;
+}
+
 /** Handed over by /returns after a resend is saved, so the operator sees it confirmed here. */
 interface ResentNotice {
   original: string;
@@ -40,6 +49,7 @@ export function RecentReturnsPage() {
   const resent = (location.state as { resent?: ResentNotice } | null)?.resent;
 
   const [items, setItems] = useState<RecentReturnRow[]>([]);
+  const [summary, setSummary] = useState<ReturnSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   // Every campaign of the company can be exported, not just the ones with returns below.
@@ -49,7 +59,12 @@ export function RecentReturnsPage() {
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setItems(await api.get<RecentReturnRow[]>("/returns"));
+    const [rows, totals] = await Promise.all([
+      api.get<RecentReturnRow[]>("/returns"),
+      api.get<ReturnSummary>("/returns/summary"),
+    ]);
+    setItems(rows);
+    setSummary(totals);
   }, []);
 
   useEffect(() => {
@@ -144,6 +159,26 @@ export function RecentReturnsPage() {
 
       {error && <p className="error">{error}</p>}
       {exportNotice && <p className="ok">{exportNotice}</p>}
+
+      {summary && (
+        <>
+          <div className="stats">
+            <div className="stat">
+              <span className="stat-number">{summary.returns}</span>
+              <span className="muted">
+                returned package{summary.returns === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="stat">
+              <span className="stat-number">{summary.resends}</span>
+              <span className="muted">resend{summary.resends === 1 ? "" : "s"}</span>
+            </div>
+          </div>
+          {summary.returns > summary.recent && (
+            <p className="muted">The list below shows the latest {summary.recent}.</p>
+          )}
+        </>
+      )}
 
       {isSuperAdmin && campaigns.length > 0 && (
         <div className="card">

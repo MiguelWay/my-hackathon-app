@@ -1001,3 +1001,25 @@ campaign-6-vuelta-al-cole.xlsx, in your browser's download folder.`).
 
 **Files:** `src/pages/CampaignDetailPage.tsx`
 **Scope:** Small
+
+## Counters on Return packages
+
+**Description:** "put a counter in returned packages so I can easily see the total amount of returns and
+resends."
+
+**Progress:** **Done.** Two counters sit above the list: **returned packages** and **resends**. They are
+totals, not the length of the list, because the list is capped at the newest 100 — `GET /returns/summary`
+counts the company's rows in `returns` and its packages with `created_via = 'resend'`, scoped by customer
+like everything else. When a company has more than the cap, the page adds "The list below shows the
+latest 100."
+
+**Verification:** `npm test` — **169 tests**, three new (the counters for a company with returns and
+resends, a second company counted as zero, and the route added to the anonymous-401 table). `npm run
+typecheck:api` and `npm run build` clean · browser-verified: the *vuelta al cole* account shows
+**1 returned package · 1 resend**, matching its single row; the Acme load-test account shows
+**46 returned packages · 3 resends** with 46 rows. Neither account has more than 100 returns, so the
+"latest 100" note could not be exercised with real data.
+
+**Files:** `server/src/returns.ts`, `src/pages/RecentReturnsPage.tsx`, `src/styles.css`,
+`tests/api/isolation.test.ts`
+**Scope:** Small

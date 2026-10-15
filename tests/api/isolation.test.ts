@@ -282,6 +282,7 @@ describe("anonymous callers are rejected everywhere", () => {
     ["GET", "/campaigns/1/export"],
     ["GET", "/returns"],
     ["GET", "/returns/reasons"],
+    ["GET", "/returns/summary"],
     ["GET", "/returns/lookup?senderId=ANY"],
     ["POST", "/returns"],
     ["POST", "/returns/resend"],
@@ -623,6 +624,25 @@ describe("exporting one uploaded list", () => {
     );
     expect(bad.status).toBe(400);
     expect(bad.body).toEqual({ error: "uploadId must be a positive number" });
+  });
+});
+
+// The counters above the recent list: how many returns and resends there are in total.
+describe("return counters", () => {
+  it("counts every return and resend of the company", async () => {
+    const summary = await alpha.get<{ returns: number; resends: number; recent: number }>(
+      "/returns/summary"
+    );
+    expect(summary.status).toBe(200);
+    // Three packages came back (beforeAll, the recent-list test, the resend test) and two were resent.
+    expect(summary.body.returns).toBe(3);
+    expect(summary.body.resends).toBe(2);
+    expect(summary.body.recent).toBe(100);
+  });
+
+  it("counts only the caller's own company", async () => {
+    const betaSummary = await beta.get<{ returns: number; resends: number }>("/returns/summary");
+    expect(betaSummary.body).toMatchObject({ returns: 0, resends: 0 });
   });
 });
 

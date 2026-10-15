@@ -468,6 +468,30 @@ ul.upload-list .file {
   margin-bottom: 10px;
 }
 
+/* The handful of totals that answer "how many?" at a glance. */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.stat-number {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 /* The "do the next one" button, right under the result you just acted on. */
 .next-action {
   margin: 0 0 24px;
