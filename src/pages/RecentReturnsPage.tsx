@@ -51,6 +51,20 @@ function share(part: number, whole: number): string {
   return `${value >= 10 ? Math.round(value) : value.toFixed(1)}%`;
 }
 
+/** One chain of attempts: the package a store sent back, then each time it went out again. */
+interface ChainRow {
+  original_id: number;
+  original_sender_id: string;
+  /** The sender IDs of the attempts after the original, in the order they were sent. */
+  resends: string[];
+}
+
+/** The heading for the nth resend column: "Resent as", "Resent again as", "Resent a 3rd time as"… */
+const RESEND_WORDS = ["as", "again as", "a 3rd time as", "a 4th time as", "a 5th time as"];
+function resendHeader(i: number): string {
+  return `Resent ${RESEND_WORDS[i - 1] ?? `${i}th time as`}`;
+}
+
 /** Handed over by /returns after a resend is saved, so the operator sees it confirmed here. */
 interface ResentNotice {
   original: string;
@@ -68,6 +82,7 @@ export function RecentReturnsPage() {
 
   const [items, setItems] = useState<RecentReturnRow[]>([]);
   const [summary, setSummary] = useState<ReturnSummary | null>(null);
+  const [chains, setChains] = useState<ChainRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   // Every campaign of the company can be exported, not just the ones with returns below.
@@ -77,12 +92,14 @@ export function RecentReturnsPage() {
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [rows, totals] = await Promise.all([
+    const [rows, totals, chained] = await Promise.all([
       api.get<RecentReturnRow[]>("/returns"),
       api.get<ReturnSummary>("/returns/summary"),
+      api.get<ChainRow[]>("/returns/chains"),
     ]);
     setItems(rows);
     setSummary(totals);
+    setChains(chained);
   }, []);
 
   useEffect(() => {
@@ -160,6 +177,12 @@ export function RecentReturnsPage() {
       </div>
     );
   }
+
+  // As many resend columns as the longest chain needs.
+  const resendHeaders = Array.from(
+    { length: chains.reduce((deepest, c) => Math.max(deepest, c.resends.length), 0) },
+    (_, i) => resendHeader(i + 1)
+  );
 
   return (
     <div>
@@ -244,6 +267,40 @@ export function RecentReturnsPage() {
             )}
           </div>
           <SaveLocationHint />
+        </div>
+      )}
+
+      {chains.length > 0 && (
+        <div className="card">
+          <h2>Resend chains</h2>
+          <p className="muted">
+            Each package that went out again, next to the ID it replaced. The first column is the
+            package the store sent back.
+          </p>
+          <div className="scroll">
+            <table className="grid">
+              <thead>
+                <tr>
+                  <th>Original ID</th>
+                  {resendHeaders.map((h, i) => (
+                    <th key={i}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {chains.map((c) => (
+                  <tr key={c.original_id}>
+                    <td>{c.original_sender_id}</td>
+                    {resendHeaders.map((_, i) => (
+                      <td key={i}>
+                        {c.resends[i] ?? <span className="muted">—</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

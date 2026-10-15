@@ -1121,3 +1121,27 @@ plus a second that resends a resend and asserts it still attaches to the origina
 
 **Files:** `tests/api/isolation.test.ts`
 **Scope:** Small
+
+## The chain report: the original ID, then each resend
+
+**Description:** "make a report which shows the linking column 1 original ID, column 2 resend id,
+column 3, 3rd resend id."
+
+**Progress:** **Done.** A *Resend chains* card sits on Returned Packages, above the returns list: one
+row per chain, read left to right — the original sending ID first, then each package it went out as.
+The columns follow the company's longest chain, so a two-attempt chain prints two and the four-attempt
+one prints four: `Original ID | Resent as | Resent again as | Resent a 3rd time as`. Backed by a new
+`GET /returns/chains`, which groups the company's packages by chain root, drops chains of one (a
+package that never went out again is not a chain) and returns the attempts in order. It is scoped by
+`customer_id` like every other query and is readable by a `user`, since it is the same report they
+already see.
+
+**Verification:** `npm test` — **177 tests**, three new (the row is the original then each resend in
+order; only chains of two or more appear, and never another company's; a `user` sees their own), plus
+the route added to the anonymous-401 table. `npm run typecheck:api` and `npm run build` clean · live:
+customer 8 reads `PortaP_39 → PackVerano_7`, Acme's chain reads
+`PQ555000002ES → PQ777000123ES → PQ888000999ES → PQ999000111ES`, a `user` gets 200 and an anonymous
+caller 401. Browser-verified at both widths (two columns for customer 8, four for Acme).
+
+**Files:** `server/src/returns.ts`, `src/pages/RecentReturnsPage.tsx`, `tests/api/isolation.test.ts`
+**Scope:** Small

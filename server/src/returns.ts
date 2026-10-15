@@ -189,6 +189,48 @@ returnsRouter.get(
   })
 );
 
+// ---- every chain, laid out end to end: the original ID, then each resend ----
+// Only chains that were actually resent appear (a chain of one is just a package). Rows are handed
+// back already grouped, and in attempt order, so a screen can print them as columns.
+returnsRouter.get(
+  "/chains",
+  ah(async (_req, res) => {
+    const user = currentUser(res);
+    const [rows] = await pool.query<
+      (RowDataPacket & { id: number; sender_id: string; chain_id: number | null })[]
+    >(
+      `SELECT p.id, p.sender_id, p.chain_id
+         FROM packages p
+        WHERE p.customer_id = ?
+          AND COALESCE(p.chain_id, p.id) IN (
+            SELECT root FROM (
+              SELECT COALESCE(chain_id, id) AS root
+                FROM packages
+               WHERE customer_id = ?
+               GROUP BY root
+              HAVING COUNT(*) > 1
+            ) AS chained
+          )
+        ORDER BY COALESCE(p.chain_id, p.id), p.id`,
+      [user.customerId, user.customerId]
+    );
+
+    // The first row of each group is the lowest id, so it is the original the rest were resent from.
+    const chains: { original_id: number; original_sender_id: string; resends: string[] }[] = [];
+    let current: (typeof chains)[number] | null = null;
+    for (const row of rows) {
+      const root = row.chain_id ?? row.id;
+      if (!current || current.original_id !== root) {
+        current = { original_id: root, original_sender_id: row.sender_id, resends: [] };
+        chains.push(current);
+      } else {
+        current.resends.push(row.sender_id);
+      }
+    }
+    res.json(chains);
+  })
+);
+
 // ---- send the same goods again under a new sender ID ----
 // Whoever processes the returns records this too: it is the same operator's job, and every query below
 // is scoped to their own company, so a `user` can only ever touch their own packages.

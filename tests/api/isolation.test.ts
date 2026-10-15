@@ -283,6 +283,7 @@ describe("anonymous callers are rejected everywhere", () => {
     ["GET", "/returns"],
     ["GET", "/returns/reasons"],
     ["GET", "/returns/summary"],
+    ["GET", "/returns/chains"],
     ["GET", "/returns/lookup?senderId=ANY"],
     ["POST", "/returns"],
     ["POST", "/returns/resend"],
@@ -646,6 +647,44 @@ describe("return counters", () => {
       "/returns/summary"
     );
     expect(betaSummary.body).toMatchObject({ sent: 1, returns: 0, resends: 0 });
+  });
+});
+
+// The chain report: the original sending ID, then each package it was sent again as.
+describe("resend chains", () => {
+  interface ChainRow {
+    original_id: number;
+    original_sender_id: string;
+    resends: string[];
+  }
+
+  it("lays a chain out as the original then each resend, in order", async () => {
+    const res = await alpha.get<ChainRow[]>("/returns/chains");
+    expect(res.status).toBe(200);
+
+    const chain = res.body.find((c) => c.original_sender_id === SENDER_A_RETURNED);
+    expect(chain).toBeDefined();
+    // The returned package opens the row and is never repeated as one of its own resends.
+    expect(chain!.original_id).toBe(alphaReturnedPackageId);
+    expect(chain!.resends[0]).toBe(SENDER_A_RESEND);
+    expect(chain!.resends).toContain(SENDER_A_SECOND_RESEND);
+    expect(chain!.resends).not.toContain(SENDER_A_RETURNED);
+  });
+
+  it("lists only chains that were actually resent, and only the caller's company", async () => {
+    const mine = await alpha.get<ChainRow[]>("/returns/chains");
+    // A package that never went out again is not a chain of one in the report.
+    expect(mine.body.map((c) => c.original_sender_id)).not.toContain(SENDER_A);
+    expect(mine.body.every((c) => c.resends.length > 0)).toBe(true);
+
+    // Customer B has a campaign but no resends, so it has no chains at all.
+    expect((await beta.get<ChainRow[]>("/returns/chains")).body).toEqual([]);
+  });
+
+  it("shows a `user` their own company's chains", async () => {
+    const res = await alphaUser.get<ChainRow[]>("/returns/chains");
+    expect(res.status).toBe(200);
+    expect(res.body.map((c) => c.original_sender_id)).toContain(SENDER_A_RETURNED);
   });
 });
 
