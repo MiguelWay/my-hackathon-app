@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
-import { requireAuth, type AuthUser } from "./auth";
+import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
 import { loadChains } from "./chains";
 import { sendChainsExport } from "./export";
 import { normalizeSenderId } from "./senderId";
@@ -93,20 +93,72 @@ returnsRouter.get(
     }
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT c.id, c.name, c.start_date, c.finish_date,
-              (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS package_count
+              (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS package_count,
+              (SELECT COUNT(*) FROM returns r
+                 JOIN packages p ON p.id = r.package_id
+                WHERE p.campaign_id = c.id) AS return_count
          FROM campaigns c
         WHERE c.customer_id = ?
         ORDER BY c.start_date DESC, c.id DESC`,
       [customerId]
     );
-    res.json(rows.map((row) => ({ ...row, package_count: Number(row.package_count) })));
+    res.json(
+      rows.map((row) => ({
+        ...row,
+        package_count: Number(row.package_count),
+        return_count: Number(row.return_count),
+      }))
+    );
+  })
+);
+
+// ---- one campaign's identity and its own counters, for its returns screen ----
+// The campaign names its own customer, so a request needs nothing else — the per-request model in
+// SECURITY.md finding 21. Every count is the campaign's own, never its customer's.
+returnsRouter.get(
+  "/campaigns/:id",
+  ah(async (req, res) => {
+    const campaignId = optionalPositiveInt(req.params.id);
+    if (campaignId === null || campaignId === undefined) {
+      return res.status(400).json({ error: "campaignId must be a positive number" });
+    }
+    const [rows] = await pool.query<
+      (RowDataPacket & {
+        sent: number;
+        returns: number;
+        resends: number;
+      })[]
+    >(
+      `SELECT c.id, c.name, c.start_date, c.finish_date,
+              cu.id AS customer_id, cu.name AS customer_name,
+              (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS sent,
+              (SELECT COUNT(*) FROM returns r
+                 JOIN packages p ON p.id = r.package_id
+                WHERE p.campaign_id = c.id) AS returns,
+              (SELECT COUNT(*) FROM packages p
+                WHERE p.campaign_id = c.id AND p.created_via = 'resend') AS resends
+         FROM campaigns c
+         JOIN customers cu ON cu.id = c.customer_id
+        WHERE c.id = ?`,
+      [campaignId]
+    );
+    const campaign = rows[0];
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
+    res.json({
+      ...campaign,
+      sent: Number(campaign.sent),
+      returns: Number(campaign.returns),
+      resends: Number(campaign.resends),
+    });
   })
 );
 
 // ---- how many packages went out, came back, or were sent again ----
 // The recent list is capped, so its length is not the total; these counters are.
+// A company-wide report, so it is a super-admin's: a campaign screen has its own counters.
 returnsRouter.get(
   "/summary",
+  requireSuperAdmin,
   ah(async (req, res) => {
     const scope = await scopeOf(res, req.query.customerId);
     if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
@@ -148,6 +200,7 @@ returnsRouter.get(
 // ---- most recently recorded returns -------------------------
 returnsRouter.get(
   "/",
+  requireSuperAdmin,
   ah(async (req, res) => {
     const scope = await scopeOf(res, req.query.customerId);
     if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
@@ -258,6 +311,7 @@ returnsRouter.get(
 // backs the .xlsx below, so the download and the screen can never disagree.
 returnsRouter.get(
   "/chains",
+  requireSuperAdmin,
   ah(async (req, res) => {
     const scope = await scopeOf(res, req.query.customerId);
     if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
@@ -268,6 +322,7 @@ returnsRouter.get(
 // The chain report as a file, for pruning the source database outside the app.
 returnsRouter.get(
   "/chains/export",
+  requireSuperAdmin,
   ah(async (req, res) => {
     const scope = await scopeOf(res, req.query.customerId);
     if ("error" in scope) return res.status(scope.status).json({ error: scope.error });

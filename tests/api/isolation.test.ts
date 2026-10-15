@@ -289,6 +289,7 @@ describe("anonymous callers are rejected everywhere", () => {
     ["GET", "/returns/chains/export"],
     ["GET", "/returns/customers"],
     ["GET", "/returns/customers/1/campaigns"],
+    ["GET", "/returns/campaigns/1"],
     ["GET", "/returns/lookup?senderId=ANY"],
     ["POST", "/returns"],
     ["POST", "/returns/resend"],
@@ -691,8 +692,11 @@ describe("resend chains", () => {
     expect((await beta.get<ChainRow[]>("/returns/chains")).body).toEqual([]);
   });
 
-  it("shows a `user` their own company's chains", async () => {
-    const res = await alphaUser.get<ChainRow[]>("/returns/chains");
+  it("keeps the chain report for a super-admin", async () => {
+    // A `user` has no company-wide reports; the gate test below spells that out endpoint by endpoint.
+    expect((await alphaUser.get("/returns/chains")).status).toBe(403);
+
+    const res = await alpha.get<ChainRow[]>("/returns/chains");
     expect(res.status).toBe(200);
     expect(res.body.map((c) => c.original_sender_id)).toContain(SENDER_A_RETURNED);
   });
@@ -997,5 +1001,72 @@ describe("the boundary is the request, not the account", () => {
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "customer not found" });
     expect((await alpha.get<{ error: string }>("/returns/summary?customerId=abc")).status).toBe(400);
+  });
+});
+
+// One campaign's identity and its own counters: what the campaign returns screen loads, and what a
+// campaign row in the picker prints.
+describe("a campaign's own read", () => {
+  interface CampaignHead {
+    id: number;
+    name: string;
+    start_date: string | null;
+    finish_date: string | null;
+    customer_id: number;
+    customer_name: string;
+    sent: number;
+    returns: number;
+    resends: number;
+  }
+
+  it("hands back any campaign's identity and counters, from the same session", async () => {
+    // The request names the campaign, and the campaign names its customer — so a `user` of Alpha can
+    // read Beta's campaign without naming Beta at all.
+    const res = await alphaUser.get<CampaignHead>(`/returns/campaigns/${betaCampaign}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: betaCampaign,
+      name: "Beta March",
+      customer_id: betaCustomerId,
+      customer_name: "Beta Co",
+    });
+    expect(res.body.sent).toBeGreaterThan(0);
+  });
+
+  it("counts only the campaign, never its customer", async () => {
+    // A second campaign of the same customer, empty. If these counters were the customer's, the two
+    // would read the same.
+    const empty = await newCampaign(alpha, "Alpha Empty");
+    const idle = await alpha.get<CampaignHead>(`/returns/campaigns/${empty.body.id}`);
+    expect(idle.body.customer_id).toBe(alphaCustomerId);
+    expect(idle.body).toMatchObject({ sent: 0, returns: 0, resends: 0 });
+
+    const busy = await alpha.get<CampaignHead>(`/returns/campaigns/${alphaCampaign}`);
+    expect(busy.body.sent).toBeGreaterThan(0);
+    expect(busy.body.returns).toBeGreaterThan(0);
+  });
+
+  it("refuses a campaign that does not exist", async () => {
+    expect((await alpha.get<{ error: string }>("/returns/campaigns/999999")).status).toBe(404);
+    expect((await alpha.get<{ error: string }>("/returns/campaigns/abc")).status).toBe(400);
+  });
+
+  it("reports each campaign's package and return counts for the picker", async () => {
+    const list = await alphaUser.get<
+      { name: string; package_count: number; return_count: number }[]
+    >(`/returns/customers/${betaCustomerId}/campaigns`);
+    expect(list.status).toBe(200);
+    // Beta March holds its uploaded package and the resend added earlier, and one return.
+    expect(list.body).toEqual([
+      expect.objectContaining({ name: "Beta March", package_count: 2, return_count: 1 }),
+    ]);
+  });
+
+  it("keeps the company-wide reports for a super-admin", async () => {
+    const reports = ["/returns", "/returns/summary", "/returns/chains", "/returns/chains/export"];
+    for (const path of reports) {
+      expect((await alphaUser.get(path)).status).toBe(403);
+      expect((await alpha.get(path)).status).toBe(200);
+    }
   });
 });
