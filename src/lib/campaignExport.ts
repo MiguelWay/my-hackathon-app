@@ -1,8 +1,12 @@
 import { baseUrl } from "./api";
 
-// Saving: browsers with the File System Access API (Chrome, Edge) are asked to show a real save dialog,
-// where the folder and the file name can be chosen. Firefox and Safari have no equivalent, so there the
-// file goes to the browser's download folder under the name the server sent.
+// Two ways to save an export:
+//   Download   — the file goes to the browser's download folder (which the browser itself can be told
+//                to ask about), and the control is a real link, so right-click → "Download linked file
+//                as…" chooses the folder in any browser.
+//   Save as…   — Chrome and Edge only: the browser's own save dialog, which picks folder and name.
+// Firefox and Safari have no such dialog for a page to call, hence the separate, clearly labelled
+// control instead of hijacking every download.
 
 interface SavePickerOptions {
   suggestedName?: string;
@@ -21,19 +25,16 @@ type SavePicker = (options?: SavePickerOptions) => Promise<SaveHandle>;
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-/** The browser's save picker, when it has one that can be called from a page. */
+/** The browser's save dialog, when it has one a page may call. */
 function savePicker(): SavePicker | undefined {
   const w = window as unknown as { showSaveFilePicker?: SavePicker };
   return typeof w.showSaveFilePicker === "function" ? w.showSaveFilePicker.bind(window) : undefined;
 }
 
-/**
- * Whether clicking a download can open a save dialog. Chrome and Edge can; Safari and Firefox cannot,
- * so there the file lands in the browser's own download folder unless the user asks for it explicitly.
- */
+/** Whether this browser can open a save dialog at all. */
 export const canChooseSaveLocation = (): boolean => savePicker() !== undefined;
 
-/** The export URL for one campaign, for use as a real link so "download linked file as…" works. */
+/** The export URL of one campaign of the caller's own company, for use as a real link. */
 export const campaignExportUrl = (campaignId: number): string =>
   `${baseUrl}/campaigns/${campaignId}/export`;
 
@@ -41,25 +42,20 @@ export const campaignExportUrl = (campaignId: number): string =>
 export const adminCampaignExportUrl = (campaignId: number): string =>
   `${baseUrl}/admin/campaigns/${campaignId}/export`;
 
-/** Hands the blob to the browser's own download machinery (the fallback, and Safari/Firefox's path). */
-function saveThroughBrowser(blob: Blob, filename: string): string {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-  return filename;
+/** The name the server gives the file, so the save dialog can suggest it before the file is built. */
+export function exportFileName(campaignId: number, campaignName: string): string {
+  const slug =
+    campaignName
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase() || "campaign";
+  return `campaign-${campaignId}-${slug}.xlsx`;
 }
 
-/**
- * Fetches one campaign's .xlsx and saves it, returning the name it was saved under — or null when the
- * user cancelled the save dialog, so callers can stay quiet instead of reporting a success.
- */
-async function fetchExport(path: string, campaignId: number): Promise<string | null> {
-  const res = await fetch(`${baseUrl}${path}`, { credentials: "include" });
+async function fetchExport(url: string, campaignIdHint: number): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(url, { credentials: "include" });
   if (!res.ok) {
     let message = res.statusText;
     try {
@@ -70,46 +66,61 @@ async function fetchExport(path: string, campaignId: number): Promise<string | n
     }
     throw new Error(message);
   }
-
   const disposition = res.headers.get("Content-Disposition") ?? "";
   const named = /filename="([^"]+)"/.exec(disposition);
-  const filename = named?.[1] ?? `campaign-${campaignId}.xlsx`;
-  const blob = await res.blob();
-
-  const picker = savePicker();
-  if (picker) {
-    let handle: SaveHandle | null = null;
-    try {
-      handle = await picker({
-        suggestedName: filename,
-        types: [{ description: "Excel workbook", accept: { [XLSX_MIME]: [".xlsx"] } }],
-      });
-    } catch (err) {
-      const name = (err as { name?: string }).name;
-      // The user closed the dialog: not a failure, and nothing should be downloaded.
-      if (name === "AbortError") return null;
-      // The gesture that opened the dialog had expired by the time the file was ready: fall back to the
-      // ordinary download rather than losing the file.
-      if (name !== "SecurityError") throw err;
-    }
-    if (handle) {
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      return handle.name;
-    }
-  }
-
-  return saveThroughBrowser(blob, filename);
+  return {
+    blob: await res.blob(),
+    filename: named?.[1] ?? `campaign-${campaignIdHint}.xlsx`,
+  };
 }
 
 /**
- * Downloads one campaign's flagged .xlsx — every uploaded column, plus the return status, the
- * reason and the resend of each package — for a campaign of the caller's own company.
+ * Downloads the export into the browser's download folder and returns the file name. This never opens a
+ * dialog, so it works everywhere — including browsers (and automated windows) where a save dialog cannot
+ * be shown.
  */
-export const downloadCampaignExport = (campaignId: number): Promise<string | null> =>
-  fetchExport(`/campaigns/${campaignId}/export`, campaignId);
+export async function downloadExport(url: string, campaignIdHint = 0): Promise<string> {
+  const { blob, filename } = await fetchExport(url, campaignIdHint);
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+  return filename;
+}
 
-/** The same file for a campaign of ANY customer, for the platform super-admin's Customers screen. */
-export const downloadCampaignExportForAdmin = (campaignId: number): Promise<string | null> =>
-  fetchExport(`/admin/campaigns/${campaignId}/export`, campaignId);
+/**
+ * Asks the browser's save dialog where to put the export, then writes it there. Returns the chosen name,
+ * or null when the user closed the dialog. Throws when the browser has no save dialog — callers should
+ * only offer this where `canChooseSaveLocation()` is true.
+ */
+export async function saveExportAs(
+  url: string,
+  suggestedName: string,
+  campaignIdHint = 0
+): Promise<string | null> {
+  const picker = savePicker();
+  if (!picker) throw new Error("this browser cannot open a save dialog");
+
+  // Asked first, while the click that started this is still fresh: the request can take a moment, and a
+  // dialog opened too late is refused.
+  let handle: SaveHandle;
+  try {
+    handle = await picker({
+      suggestedName,
+      types: [{ description: "Excel workbook", accept: { [XLSX_MIME]: [".xlsx"] } }],
+    });
+  } catch (err) {
+    if ((err as { name?: string }).name === "AbortError") return null;
+    throw err;
+  }
+
+  const { blob } = await fetchExport(url, campaignIdHint);
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+  return handle.name;
+}

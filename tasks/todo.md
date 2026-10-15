@@ -931,3 +931,28 @@ as…" uses); with the save API removed before load the hint renders; *Return pa
 **Files:** `src/lib/campaignExport.ts`, `src/components/SaveLocationHint.tsx`, `src/styles.css`,
 `src/pages/{CampaignDetailPage,RecentReturnsPage,CustomersPage}.tsx`
 **Scope:** Small
+
+## Download works again, and Save as… chooses the folder
+
+**Description:** "now download does not work. 1. Make download work 2. Make so super admin user can
+determine where to save the file on their computer."
+
+**Progress:** **Done.** The fault was mine: every download went through `showSaveFilePicker`, so when
+that dialog was dismissed or suppressed the answer was "Export cancelled." and nothing was saved. The
+two intents are now separate controls. **Download .xlsx** is a plain download — a real link
+(`href="/api/campaigns/6/export" download`) whose click fetches and saves through the browser's own
+download machinery, never a dialog, so it always works; right-click → "Download linked file as…" still
+chooses the folder in any browser. **Save as…** is offered only where the browser can open a save dialog
+(Chrome, Edge) and does exactly that: it asks *before* the request, so the click's user gesture cannot
+expire, then writes the bytes to the handle it returns, suggesting the same name the server would
+(`campaign-6-vuelta-al-cole.xlsx`). Closing that dialog says "Save cancelled." and saves nothing.
+
+**Verification:** `npm test` — **166 tests** · `npm run build` clean · browser-verified on *vuelta al
+cole*: a plain click produced a real download (`campaign-6-vuelta-al-cole.xlsx`) and "Exported 151
+packages to …" instead of the cancelled message; `Save as…` was offered the right suggested name and
+wrote 27,538 bytes to the handle ("Saved Chosen/… to the folder you chose."); an `AbortError` gave
+"Save cancelled."; and the link keeps its `href`/`download` for the context-menu route.
+
+**Files:** `src/lib/campaignExport.ts`,
+`src/pages/{CampaignDetailPage,RecentReturnsPage,CustomersPage}.tsx`, `src/styles.css`
+**Scope:** Medium

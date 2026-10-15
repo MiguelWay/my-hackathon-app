@@ -489,9 +489,14 @@ ul.campaign-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  ul.campaign-list li {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 6px;
+}
+
+ul.campaign-list a.campaign-choice {
+  flex: 1;
 }
 
 button.campaign-choice,

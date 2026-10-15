@@ -2,7 +2,10 @@ import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, typ
 import { api } from "../lib/api";
 import {
   adminCampaignExportUrl,
-  downloadCampaignExportForAdmin,
+  canChooseSaveLocation,
+  downloadExport,
+  exportFileName,
+  saveExportAs,
 } from "../lib/campaignExport";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { PasswordInput } from "../components/PasswordInput";
@@ -184,12 +187,30 @@ export function CustomersPage() {
     setChosenCampaign(campaign.id);
     setExporting(campaign.id);
     try {
-      const filename = await downloadCampaignExportForAdmin(campaign.id);
-      setNotice(
-        filename ? `Downloaded ${campaign.name} as ${filename}.` : "Download cancelled."
-      );
+      const filename = await downloadExport(adminCampaignExportUrl(campaign.id), campaign.id);
+      setNotice(`Downloaded ${campaign.name} as ${filename}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  /** Chrome and Edge: ask the super-admin where to put this customer's export. */
+  async function saveCampaignAs(campaign: CustomerCampaign) {
+    setError(null);
+    setNotice(null);
+    setChosenCampaign(campaign.id);
+    setExporting(campaign.id);
+    try {
+      const name = await saveExportAs(
+        adminCampaignExportUrl(campaign.id),
+        exportFileName(campaign.id, campaign.name),
+        campaign.id
+      );
+      setNotice(name ? `Saved ${name} to the folder you chose.` : "Save cancelled.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open a save dialog");
     } finally {
       setExporting(null);
     }
@@ -323,6 +344,16 @@ export function CustomersPage() {
                                     {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
                                   </span>
                                 </a>
+                                {canChooseSaveLocation() && (
+                                  <button
+                                    type="button"
+                                    className="secondary"
+                                    disabled={exporting !== null || camp.package_count === 0}
+                                    onClick={() => saveCampaignAs(camp)}
+                                  >
+                                    Save as…
+                                  </button>
+                                )}
                               </li>
                             ))}
                           </ul>

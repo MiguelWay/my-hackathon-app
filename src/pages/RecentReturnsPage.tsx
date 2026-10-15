@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
-import { campaignExportUrl, downloadCampaignExport } from "../lib/campaignExport";
+import { campaignExportUrl, canChooseSaveLocation, downloadExport, exportFileName, saveExportAs } from "../lib/campaignExport";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { useAuth } from "../auth/AuthContext";
 
@@ -82,12 +82,34 @@ export function RecentReturnsPage() {
     setExportNotice(null);
     setExporting(true);
     try {
-      const filename = await downloadCampaignExport(campaign.id);
-      setExportNotice(
-        filename ? `Downloaded ${campaign.name} as ${filename}.` : "Download cancelled."
-      );
+      const filename = await downloadExport(campaignExportUrl(campaign.id), campaign.id);
+      setExportNotice(`Downloaded ${campaign.name} as ${filename}.`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  /** Chrome and Edge: ask where to put the file, then write it there. */
+  async function runSaveAs() {
+    const campaign = campaigns.find((c) => String(c.id) === selectedCampaign);
+    if (!campaign) {
+      setError("Pick a campaign to save.");
+      return;
+    }
+    setError(null);
+    setExportNotice(null);
+    setExporting(true);
+    try {
+      const name = await saveExportAs(
+        campaignExportUrl(campaign.id),
+        exportFileName(campaign.id, campaign.name),
+        campaign.id
+      );
+      setExportNotice(name ? `Saved ${name} to the folder you chose.` : "Save cancelled.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not open a save dialog");
     } finally {
       setExporting(false);
     }
@@ -154,8 +176,13 @@ export function RecentReturnsPage() {
             >
               {exporting ? "Preparing…" : "Download .xlsx"}
             </a>
-            <SaveLocationHint />
+            {canChooseSaveLocation() && (
+              <button type="button" className="secondary" disabled={exporting} onClick={runSaveAs}>
+                Save as…
+              </button>
+            )}
           </div>
+          <SaveLocationHint />
         </div>
       )}
 

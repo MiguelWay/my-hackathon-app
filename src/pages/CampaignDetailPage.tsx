@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { campaignExportUrl, downloadCampaignExport } from "../lib/campaignExport";
+import { campaignExportUrl, canChooseSaveLocation, downloadExport, exportFileName, saveExportAs } from "../lib/campaignExport";
 import { CampaignListUpload } from "../components/CampaignListUpload";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { useAuth } from "../auth/AuthContext";
@@ -71,15 +71,14 @@ export function CampaignDetailPage() {
     );
   }, [load]);
 
-  async function downloadExport() {
+  /** Saves into the browser's download folder. No dialog is involved, so this always works. */
+  async function download() {
     setError(null);
     setNotice(null);
     setExporting(true);
     try {
-      const filename = await downloadCampaignExport(Number(id));
-      setNotice(
-        filename ? `Exported ${packages.length} packages to ${filename}.` : "Export cancelled."
-      );
+      const filename = await downloadExport(campaignExportUrl(Number(id)), Number(id));
+      setNotice(`Exported ${packages.length} packages to ${filename}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -87,15 +86,33 @@ export function CampaignDetailPage() {
     }
   }
 
+  /** Chrome and Edge: ask where to put the file, then write it there. */
+  async function saveAs() {
+    setError(null);
+    setNotice(null);
+    setExporting(true);
+    try {
+      const name = await saveExportAs(
+        campaignExportUrl(Number(id)),
+        exportFileName(Number(id), campaign?.name ?? `Campaign ${id}`),
+        Number(id)
+      );
+      setNotice(name ? `Saved ${name} to the folder you chose.` : "Save cancelled.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open a save dialog");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   /**
-   * A plain left-click runs the app's own download (which opens a save dialog where the browser has
-   * one). The element stays a real link, so right-click → "download linked file as…" still lets the
-   * user choose the folder in any browser.
+   * A plain left-click downloads through the app. The element stays a real link, so right-click →
+   * "download linked file as…" chooses the folder in any browser.
    */
   function onDownloadClick(e: ReactMouseEvent<HTMLAnchorElement>) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
-    void downloadExport();
+    void download();
   }
 
   // Every extra column we've stored for this campaign, in first-seen order.
@@ -164,6 +181,11 @@ export function CampaignDetailPage() {
               >
                 {exporting ? "Preparing…" : "Download .xlsx"}
               </a>
+              {canChooseSaveLocation() && (
+                <button type="button" className="secondary" disabled={exporting} onClick={saveAs}>
+                  Save as…
+                </button>
+              )}
             </div>
             <SaveLocationHint />
           </>
