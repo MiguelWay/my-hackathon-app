@@ -45,8 +45,14 @@ interface ResendForm {
   senderId: string;
 }
 
-/** One of the company's campaigns, for narrowing a lookup to the one being processed. */
+/** One of a customer's campaigns, for narrowing a lookup to the one being processed. */
 interface CampaignOption {
+  id: number;
+  name: string;
+}
+
+/** A customer the operator can work in. One team handles returns for every client company. */
+interface CustomerOption {
   id: number;
   name: string;
 }
@@ -65,12 +71,11 @@ function parseExtra(value: Match["extra_columns"]): Record<string, string> {
 export function ReturnsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  // The Customers screen sends the campaign it was asked about, so the operator lands on it.
+  // The Customers screen sends the customer and the campaign it was asked about, so the operator
+  // lands on them.
   const [searchParams] = useSearchParams();
+  const requestedCustomer = searchParams.get("customer") ?? "";
   const requestedCampaign = searchParams.get("campaign") ?? "";
-  // A super-admin also runs the campaigns; anyone who processes returns records a resend.
-  const isSuperAdmin = user?.role === "superadmin";
-  const hasCompany = user?.customerId != null;
 
   const [reasons, setReasons] = useState<Reason[]>([]);
   const [term, setTerm] = useState("");
@@ -80,9 +85,12 @@ export function ReturnsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // A super-admin can narrow the lookup to one campaign; "" means all of them.
+  // Whose returns: pick a customer, then optionally narrow to one of its campaigns ("" = all of them).
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState("");
   const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState("");
+  const [loadingCustomers, setLoadingCustomers] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
   const selectedName = campaigns.find((c) => String(c.id) === selectedCampaign)?.name;
 
@@ -101,39 +109,67 @@ export function ReturnsPage() {
   }, []);
 
   useEffect(() => {
-    // A platform super-admin with no company attached has no returns to show.
-    if (!hasCompany) return;
+    // The reasons are shared by every customer, so they load once and the screen is ready either way.
     loadReference().catch((e: unknown) =>
       setError(e instanceof Error ? e.message : "Failed to load return reasons")
     );
-  }, [hasCompany, loadReference]);
+  }, [loadReference]);
 
-  const lookup = useCallback(async (senderId: string, campaignId: string) => {
-    const only = campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : "";
-    return api.get<Match[]>(
-      `/returns/lookup?senderId=${encodeURIComponent(senderId)}${only}`
-    );
-  }, []);
-
+  // The customer directory. The operator's own choice wins; failing that the customer they came in on,
+  // then their own company.
   useEffect(() => {
-    if (!hasCompany || !isSuperAdmin) return;
     api
-      .get<CampaignOption[]>("/campaigns")
+      .get<CustomerOption[]>("/returns/customers")
+      .then((list) => {
+        setCustomers(list);
+        setSelectedCustomer((current) => {
+          if (current && list.some((c) => String(c.id) === current)) return current;
+          const fromUrl = list.find((c) => String(c.id) === requestedCustomer);
+          if (fromUrl) return String(fromUrl.id);
+          const own = list.find((c) => c.id === user?.customerId);
+          return own ? String(own.id) : "";
+        });
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load customers"))
+      .finally(() => setLoadingCustomers(false));
+  }, [requestedCustomer, user?.customerId]);
+
+  // Then that customer's campaigns. Changing customer drops any campaign chosen under the old one.
+  useEffect(() => {
+    if (!selectedCustomer) {
+      setCampaigns([]);
+      setSelectedCampaign("");
+      return;
+    }
+    api
+      .get<CampaignOption[]>(`/returns/customers/${selectedCustomer}/campaigns`)
       .then((list) => {
         setCampaigns(list);
-        // Open on the campaign that was picked on the Customers screen, when it is one of ours.
-        if (list.some((c) => String(c.id) === requestedCampaign)) {
-          setSelectedCampaign(requestedCampaign);
-        }
+        setSelectedCampaign(
+          list.some((c) => String(c.id) === requestedCampaign) ? requestedCampaign : ""
+        );
       })
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Failed to load the campaign list")
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load campaigns"));
+  }, [selectedCustomer, requestedCampaign]);
+
+  const lookup = useCallback(
+    async (senderId: string, customerId: string, campaignId: string) => {
+      const only = campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : "";
+      return api.get<Match[]>(
+        `/returns/lookup?senderId=${encodeURIComponent(senderId)}` +
+          `&customerId=${encodeURIComponent(customerId)}${only}`
       );
-  }, [hasCompany, isSuperAdmin, requestedCampaign]);
+    },
+    []
+  );
 
   async function search(e: FormEvent) {
     e.preventDefault();
     const senderId = term.trim();
+    if (!selectedCustomer) {
+      setError("Pick a customer first.");
+      return;
+    }
     if (!senderId) {
       setError("Type a package ID first.");
       return;
@@ -143,7 +179,7 @@ export function ReturnsPage() {
     setBusy(true);
     setNotes({});
     try {
-      setMatches(await lookup(senderId, selectedCampaign));
+      setMatches(await lookup(senderId, selectedCustomer, selectedCampaign));
     } catch (err) {
       setMatches(null);
       setError(err instanceof Error ? err.message : "Search failed");
@@ -160,11 +196,12 @@ export function ReturnsPage() {
       const res = await api.post<{ reasonLabel: string }>("/returns", {
         senderId: match.sender_id,
         packageId: match.id,
+        customerId: Number(selectedCustomer),
         reasonCode: reason.code,
         note: notes[match.id] ?? "",
       });
       setNotice(`Recorded "${res.reasonLabel}" for ${match.sender_id}.`);
-      setMatches(await lookup(match.sender_id, selectedCampaign));
+      setMatches(await lookup(match.sender_id, selectedCustomer, selectedCampaign));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not record the return");
     } finally {
@@ -205,14 +242,13 @@ export function ReturnsPage() {
     }
   }
 
-  if (!hasCompany) {
+  if (!loadingCustomers && customers.length === 0) {
     return (
       <div>
         <h1>Packages returns</h1>
         <p className="muted">
-          This account is not attached to a company, so it has no returns to process. Create
-          companies and their accounts on the <Link to="/superadmin/customers">Customers</Link>{" "}
-          screen.
+          There are no customers yet, so there is nothing to process here. Create one on the{" "}
+          <Link to="/superadmin/customers">Customers</Link> screen.
         </p>
       </div>
     );
@@ -222,11 +258,32 @@ export function ReturnsPage() {
     <div>
       <h1>Packages returns</h1>
       <p className="muted">
-        Type the package ID printed on the returned package. A package can be returned once.
+        Pick the customer the package belongs to, then type the package ID printed on it. A package can
+        be returned once.
       </p>
 
       <form className="card inline" onSubmit={search}>
-        {isSuperAdmin && campaigns.length > 0 && (
+        <label>
+          Customer
+          <select
+            value={selectedCustomer}
+            onChange={(e) => {
+              setSelectedCustomer(e.target.value);
+              // The results on screen belong to the customer we are leaving.
+              setMatches(null);
+              setError(null);
+              setNotice(null);
+            }}
+          >
+            {selectedCustomer === "" && <option value="">Pick a customer…</option>}
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {campaigns.length > 0 && (
           <label>
             Campaign
             <select

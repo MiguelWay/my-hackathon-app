@@ -12,17 +12,18 @@ Spec: `SPECIFICATION.md`. Intent: `docs/intent/package-returns-traceability.md`.
 ## Architecture Decisions
 - **Database: MySQL / MariaDB** on Plesk. Schema lives in ordered SQL files under `db/migrations/`.
   No Row Level Security (MySQL has none) — isolation is enforced in the API.
-- **Isolation:** every API query is scoped by the caller's `customer_id`. This is the single most
-  important rule; it gets its own verification task.
+- **Isolation:** every API query is scoped to the single customer the request names. This is the
+  single most important rule; it gets its own verification task.
 - **Backend: Node.js + Express (TypeScript)** — auth, data and export. API code lives in `server/`
   and runs via `tsx` (no build step); type-checked with `npm run typecheck:api`.
 - **Auth:** our own. Email + password (hashed with bcrypt/argon2); server sessions stored in a
   `sessions` table, with the raw token only in an httpOnly cookie.
 - **Roles:** `users.role ∈ {superadmin, user}`. Two roles only: a **super-admin** has full
   access (runs campaigns, uploads lists, exports, and manages customers); a **user** processes
-  returns and records their resends. A super-admin may optionally be attached to a customer (`users.customer_id`),
-  which is what scopes its campaign/package/return access; with no customer it is a pure platform
-  owner that only manages customers.
+  returns and records their resends. One operator team handles returns for every client company, so
+  **returns are not scoped to the account**: a `user` picks the customer it is working in and every
+  request is then scoped to that one customer. `users.customer_id` is the account's own company, used
+  to default the picker and to scope what a super-admin runs.
 - **Excel ingestion** is client-side (SheetJS): preview → auto-detect the sender-ID column →
   one-click confirm. **Column names are never changed**; unknown columns are stored verbatim in
   `extra_columns` (JSON).

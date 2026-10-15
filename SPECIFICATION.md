@@ -11,9 +11,12 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 
 ## 2. Target users
 - **Admin** — uploads campaign send files; sees all reports.
-- **User** — processes returns (types the sender ID, picks the reason) and records the resend when the goods go out again; several users work at once.
-- Multiple **customers** (tenants); each has exactly one master store database and many campaigns.
-  Data is **totally separated** per customer.
+- **User** — processes returns (picks the customer, then the campaign, then types the sender ID and the
+  reason) and records the resend when the goods go out again; several users work at once.
+- Multiple **customers** (client companies); each has exactly one master store database and many
+  campaigns. One operator team handles returns for every one of them, so a **user picks the customer it
+  is working in**. The boundary is the request, not the account: every query is scoped to the single
+  customer that request names, and no query ever spans two.
 - Non-user: the operator who prunes the source database (outside the app).
 
 ## 3. Core user flows
@@ -32,7 +35,7 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 
 ## 4. Features
 **Must-have (v1)**
-- Auth + roles (Admin, User) with per-customer row-level isolation.
+- Auth + roles (Admin, User), with every request scoped to the one customer it names.
 - Excel upload per campaign (multiple uploads per campaign); sender-ID column auto-detect + confirm.
 - Store every row with all columns; one row = one store = one sender ID = one package.
 - Return capture: **manual sender-ID entry** → validate against the campaign → reason dropdown
@@ -65,8 +68,8 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
   26.11.0.)
 - **Database:** **MySQL / MariaDB** on the existing Plesk server — the source of truth.
 - **Auth:** our own — email + password (hashed) with server sessions in an httpOnly cookie.
-- **Isolation:** enforced in the API — every query scoped by the caller's `customer_id` (MySQL has no
-  Row Level Security).
+- **Isolation:** enforced in the API — every query is scoped to the one customer the request names
+  (MySQL has no Row Level Security). The boundary is the request, not the account.
 - **Export:** an API route generating the .xlsx (SheetJS).
 - **Hosting:** Plesk serves the static SPA and runs the Node API.
 
@@ -75,9 +78,9 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 - (No Supabase, no OCR, no Solana / blockchain.)
 
 ## 8. Security & privacy boundaries
-- **Always:** scope every API query by the caller's `customer_id` (isolation is enforced in the API,
-  not the database); validate the entered sender ID against the campaign; hash passwords and store
-  only hashed session tokens.
+- **Always:** scope every API query to the single customer the request names (isolation is enforced in
+  the API, not the database); validate the entered sender ID against the campaign; hash passwords and
+  store only hashed session tokens.
 - **Ask first:** changing the DB schema; adding dependencies; changing auth/roles.
 - **Never:** log or transmit secrets/credentials; expose one customer's data to another; write back
   to the source database in v1.
@@ -102,7 +105,8 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 4. The export is a .xlsx of all rows with returned rows clearly marked (status + colour), per
    campaign and customer.
 5. Return rate by category (bar) per campaign and resend volume are visible to the right roles.
-6. One customer's data is never visible to another.
+6. Each request is scoped to exactly one customer: a response only ever contains that customer's rows,
+   and a write always lands in the customer the named package belongs to.
 
 ## 11. Decisions on previously-open points
 - **Return reasons (decided):** data-driven, seeded with the five — tienda cerrada, ausente, dirección

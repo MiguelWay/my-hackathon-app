@@ -1,7 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import { useAuth } from "../auth/AuthContext";
 import {
   adminCampaignExportUrl,
   canChooseSaveLocation,
@@ -52,7 +51,6 @@ const emptyForm = (): NewUserForm => ({ email: "", password: "", role: "superadm
 type PanelKind = "users" | "campaigns";
 
 export function CustomersPage() {
-  const { user } = useAuth();
   const [items, setItems] = useState<Customer[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -314,19 +312,8 @@ export function CustomersPage() {
                         <>
                           <p className="muted">
                             <strong>{c.name}</strong> — {campaigns.length} campaign
-                            {campaigns.length === 1 ? "" : "s"}.{" "}
-                            {c.id === user?.customerId ? (
-                              <>
-                                Click one to record its returns and resends; download its flagged
-                                .xlsx from the control beside it.
-                              </>
-                            ) : (
-                              <>
-                                Download a campaign&rsquo;s flagged .xlsx: the uploaded columns plus
-                                the return status, the reason and the resend of each package. Returns
-                                are recorded for your own company&rsquo;s campaigns.
-                              </>
-                            )}
+                            {campaigns.length === 1 ? "" : "s"}. Click one to record its returns and
+                            resends; download its flagged .xlsx from the control beside it.
                           </p>
                           <ul className="campaign-list">
                             {campaigns.map((camp) => {
@@ -345,17 +332,13 @@ export function CustomersPage() {
                               );
                               return (
                                 <li key={camp.id}>
-                                  {c.id === user?.customerId ? (
-                                    <Link
-                                      className="campaign-choice"
-                                      to={`/returns?campaign=${camp.id}`}
-                                    >
-                                      {details}
-                                      <span className="download">Process returns →</span>
-                                    </Link>
-                                  ) : (
-                                    <div className="campaign-choice">{details}</div>
-                                  )}
+                                  <Link
+                                    className="campaign-choice"
+                                    to={`/returns?customer=${c.id}&campaign=${camp.id}`}
+                                  >
+                                    {details}
+                                    <span className="download">Process returns →</span>
+                                  </Link>
                                   <a
                                     className="button secondary"
                                     aria-disabled={exporting !== null || camp.package_count === 0}

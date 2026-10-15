@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
-import { requireAuth, requireCompany, type AuthUser } from "./auth";
+import { requireAuth, type AuthUser } from "./auth";
 import { loadChains } from "./chains";
 import { sendChainsExport } from "./export";
 import { normalizeSenderId } from "./senderId";
@@ -18,6 +18,28 @@ const ah =
     Promise.resolve(fn(req, res, next)).catch(next);
 
 const currentUser = (res: Response) => res.locals.user as AuthUser;
+
+/**
+ * Whose data a request is about.
+ *
+ * The app is run by one team processing returns for every client company, so the boundary is the
+ * REQUEST, not the account: the caller names the customer it is working in, and every query is then
+ * scoped to that one customer. Naming none means the caller's own company, which is what an account
+ * that never picks one keeps doing.
+ */
+async function scopeOf(
+  res: Response,
+  named: unknown
+): Promise<{ customerId: number | null } | { status: number; error: string }> {
+  const namedId = optionalPositiveInt(named);
+  if (namedId === null) return { status: 400, error: "customerId must be a positive number" };
+  if (namedId === undefined) return { customerId: currentUser(res).customerId };
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT id FROM customers WHERE id = ?", [
+    namedId,
+  ]);
+  if (!rows[0]) return { status: 404, error: "customer not found" };
+  return { customerId: namedId };
+}
 
 const RECENT_LIMIT = 100;
 
@@ -50,12 +72,45 @@ async function chainsFor(customerId: number | null, roots: number[]) {
 export const returnsRouter = Router();
 returnsRouter.use(requireAuth);
 
+// ---- the directory an operator works from: pick a customer, then a campaign ----
+// Read-only, and the same list for everyone: one team handles every client company.
+returnsRouter.get(
+  "/customers",
+  ah(async (_req, res) => {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      "SELECT id, name FROM customers ORDER BY name, id"
+    );
+    res.json(rows);
+  })
+);
+
+returnsRouter.get(
+  "/customers/:id/campaigns",
+  ah(async (req, res) => {
+    const customerId = optionalPositiveInt(req.params.id);
+    if (customerId === null || customerId === undefined) {
+      return res.status(400).json({ error: "customerId must be a positive number" });
+    }
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT c.id, c.name, c.start_date, c.finish_date,
+              (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS package_count
+         FROM campaigns c
+        WHERE c.customer_id = ?
+        ORDER BY c.start_date DESC, c.id DESC`,
+      [customerId]
+    );
+    res.json(rows.map((row) => ({ ...row, package_count: Number(row.package_count) })));
+  })
+);
+
 // ---- how many packages went out, came back, or were sent again ----
 // The recent list is capped, so its length is not the total; these counters are.
 returnsRouter.get(
   "/summary",
-  ah(async (_req, res) => {
-    const user = currentUser(res);
+  ah(async (req, res) => {
+    const scope = await scopeOf(res, req.query.customerId);
+    if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
+    const customerId = scope.customerId;
     const [rows] = await pool.query<
       (
         RowDataPacket & { sent_count: number; returns_count: number; resend_count: number }
@@ -66,7 +121,7 @@ returnsRouter.get(
          (SELECT COUNT(*) FROM returns WHERE customer_id = ?) AS returns_count,
          (SELECT COUNT(*) FROM packages WHERE customer_id = ? AND created_via = 'resend')
            AS resend_count`,
-      [user.customerId, user.customerId, user.customerId]
+      [customerId, customerId, customerId]
     );
     const counts = rows[0];
     res.json({
@@ -93,8 +148,10 @@ returnsRouter.get(
 // ---- most recently recorded returns -------------------------
 returnsRouter.get(
   "/",
-  ah(async (_req, res) => {
-    const user = currentUser(res);
+  ah(async (req, res) => {
+    const scope = await scopeOf(res, req.query.customerId);
+    if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
+    const customerId = scope.customerId;
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT r.id, r.returned_at, r.note,
               p.id AS package_id, p.sender_id, p.chain_id, p.extra_columns,
@@ -107,7 +164,7 @@ returnsRouter.get(
         WHERE r.customer_id = ?
         ORDER BY r.id DESC
         LIMIT ${RECENT_LIMIT}`,
-      [user.customerId]
+      [customerId]
     );
 
     // Did the package get sent again? The next package in its chain is the resend.
@@ -116,7 +173,7 @@ returnsRouter.get(
         rows.map((row) => chainRootId({ id: Number(row.package_id), chain_id: row.chain_id }))
       ),
     ];
-    const chains = await chainsFor(user.customerId, roots);
+    const chains = await chainsFor(customerId, roots);
     const resentAs = new Map<number, string>();
     for (const row of rows) {
       const root = chainRootId({ id: Number(row.package_id), chain_id: row.chain_id });
@@ -140,29 +197,34 @@ returnsRouter.get(
 returnsRouter.get(
   "/lookup",
   ah(async (req, res) => {
-    const user = currentUser(res);
+    const scope = await scopeOf(res, req.query.customerId);
+    if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
+    let customerId = scope.customerId;
+
     const senderId = normalizeSenderId(req.query.senderId);
     if (!senderId) return res.status(400).json({ error: "senderId is required" });
 
-    // A lookup can be narrowed to one campaign: with the same package ID used in more than one of
-    // the company's campaigns, the caller has to say which one they are holding.
+    // A lookup can be narrowed to one campaign: with the same package ID used in more than one
+    // campaign, the caller has to say which one they are holding.
     const campaignId = optionalPositiveInt(req.query.campaignId);
     if (campaignId === null) {
       return res.status(400).json({ error: "campaignId must be a positive number" });
     }
     if (campaignId !== undefined) {
-      const [own] = await pool.query<RowDataPacket[]>(
-        "SELECT id FROM campaigns WHERE id = ? AND customer_id = ?",
-        [campaignId, user.customerId]
+      // A campaign names its own owner, so it can stand in for the customer; naming both means they
+      // have to agree.
+      const [own] = await pool.query<(RowDataPacket & { customer_id: number })[]>(
+        "SELECT id, customer_id FROM campaigns WHERE id = ?",
+        [campaignId]
       );
-      // A foreign campaign must stay indistinguishable from a missing one.
-      if (!own[0]) return res.status(404).json({ error: "campaign not found" });
+      if (!own[0] || (customerId !== null && Number(own[0].customer_id) !== customerId)) {
+        return res.status(404).json({ error: "campaign not found" });
+      }
+      customerId = Number(own[0].customer_id);
     }
     const campaignFilter = campaignId === undefined ? "" : " AND p.campaign_id = ?";
     const params: (number | string | null)[] =
-      campaignId === undefined
-        ? [user.customerId, senderId]
-        : [user.customerId, senderId, campaignId];
+      campaignId === undefined ? [customerId, senderId] : [customerId, senderId, campaignId];
 
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT p.id, p.sender_id, p.chain_id, p.created_via, p.extra_columns, p.source_row,
@@ -179,7 +241,7 @@ returnsRouter.get(
     );
 
     const chains = await chainsFor(
-      user.customerId,
+      customerId,
       [...new Set(rows.map((r) => chainRootId(r as unknown as { id: number; chain_id: number | null })))]
     );
     res.json(
@@ -196,25 +258,28 @@ returnsRouter.get(
 // backs the .xlsx below, so the download and the screen can never disagree.
 returnsRouter.get(
   "/chains",
-  ah(async (_req, res) => {
-    res.json(await loadChains(currentUser(res).customerId));
+  ah(async (req, res) => {
+    const scope = await scopeOf(res, req.query.customerId);
+    if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
+    res.json(await loadChains(scope.customerId));
   })
 );
 
 // The chain report as a file, for pruning the source database outside the app.
 returnsRouter.get(
   "/chains/export",
-  ah(async (_req, res) => {
-    await sendChainsExport(res, currentUser(res).customerId);
+  ah(async (req, res) => {
+    const scope = await scopeOf(res, req.query.customerId);
+    if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
+    await sendChainsExport(res, scope.customerId);
   })
 );
 
 // ---- send the same goods again under a new sender ID ----
-// Whoever processes the returns records this too: it is the same operator's job, and every query below
-// is scoped to their own company, so a `user` can only ever touch their own packages.
+// Whoever processes the returns records this too: it is the same operator's job. The package names
+// its own customer, so nothing else has to be scoped here.
 returnsRouter.post(
   "/resend",
-  requireCompany,
   ah(async (req, res) => {
     const user = currentUser(res);
 
@@ -222,23 +287,27 @@ returnsRouter.post(
     if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
     const { packageId, newSenderId, campaignId: requestedCampaign } = parsed.value;
 
+    // The package names its own customer, and every query below is scoped to that one.
     const [orig] = await pool.query<
       (RowDataPacket & {
         id: number;
         chain_id: number | null;
         campaign_id: number;
+        customer_id: number;
         campaign_name: string;
         return_id: number | null;
       })[]
     >(
-      `SELECT p.id, p.chain_id, p.campaign_id, c.name AS campaign_name, r.id AS return_id
+      `SELECT p.id, p.chain_id, p.campaign_id, p.customer_id, c.name AS campaign_name,
+              r.id AS return_id
          FROM packages p
          JOIN campaigns c ON c.id = p.campaign_id
          LEFT JOIN returns r ON r.package_id = p.id
-        WHERE p.id = ? AND p.customer_id = ?`,
-      [packageId, user.customerId]
+        WHERE p.id = ?`,
+      [packageId]
     );
     if (!orig[0]) return res.status(404).json({ error: "package not found" });
+    const customerId = Number(orig[0].customer_id);
     if (!orig[0].return_id) {
       return res.status(400).json({ error: "only a returned package can be resent" });
     }
@@ -246,10 +315,11 @@ returnsRouter.post(
     // A resend always goes in the SAME campaign as the package it replaces.
     const campaignId = orig[0].campaign_id;
     if (requestedCampaign !== undefined && requestedCampaign !== campaignId) {
-      // Keep ownership errors as 404s: a foreign campaign id must not be distinguishable.
+      // Keep ownership errors as 404s: a campaign outside this package's company must not be
+      // distinguishable from one that does not exist.
       const [foreign] = await pool.query<RowDataPacket[]>(
         "SELECT id FROM campaigns WHERE id = ? AND customer_id = ?",
-        [requestedCampaign, user.customerId]
+        [requestedCampaign, customerId]
       );
       if (!foreign[0]) return res.status(404).json({ error: "campaign not found" });
       return res.status(400).json({
@@ -259,7 +329,7 @@ returnsRouter.post(
 
     const [dupe] = await pool.query<RowDataPacket[]>(
       "SELECT id FROM packages WHERE customer_id = ? AND campaign_id = ? AND sender_id = ?",
-      [user.customerId, campaignId, newSenderId]
+      [customerId, campaignId, newSenderId]
     );
     if (dupe[0]) {
       return res.status(409).json({ error: "that package ID is already used in that campaign" });
@@ -270,7 +340,7 @@ returnsRouter.post(
       `INSERT INTO packages
          (customer_id, campaign_id, upload_id, source_row, sender_id, chain_id, created_via, extra_columns)
        VALUES (?, ?, NULL, NULL, ?, ?, 'resend', ?)`,
-      [user.customerId, campaignId, newSenderId, root, JSON.stringify({})]
+      [customerId, campaignId, newSenderId, root, JSON.stringify({})]
     );
     res.status(201).json({
       id: result.insertId,
@@ -299,19 +369,25 @@ returnsRouter.post(
     );
     if (!reasons[0]) return res.status(400).json({ error: "unknown reason" });
 
-    // The client sends packageId back when the sender ID matched more than one campaign.
+    // The client sends packageId back when the sender ID matched more than one campaign. The package
+    // then names its own customer, so a name in the body cannot disagree with it.
     let pkgId: number | null = null;
+    let customerId: number | null = null;
     if (packageId !== undefined && packageId !== null && packageId !== "") {
-      const [byId] = await pool.query<(RowDataPacket & { id: number })[]>(
-        "SELECT id FROM packages WHERE id = ? AND customer_id = ?",
-        [Number(packageId), user.customerId]
+      const [byId] = await pool.query<(RowDataPacket & { id: number; customer_id: number })[]>(
+        "SELECT id, customer_id FROM packages WHERE id = ?",
+        [Number(packageId)]
       );
       if (!byId[0]) return res.status(404).json({ error: "package not found" });
       pkgId = byId[0].id;
+      customerId = Number(byId[0].customer_id);
     } else {
+      const scope = await scopeOf(res, req.body?.customerId);
+      if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
+      customerId = scope.customerId;
       const [found] = await pool.query<(RowDataPacket & { id: number })[]>(
         "SELECT id FROM packages WHERE customer_id = ? AND sender_id = ?",
-        [user.customerId, sid]
+        [customerId, sid]
       );
       if (!found[0]) return res.status(404).json({ error: "no package with that ID" });
       if (found.length > 1) {
@@ -327,7 +403,7 @@ returnsRouter.post(
         `INSERT INTO returns (customer_id, package_id, reason_id, note, recorded_by)
          VALUES (?, ?, ?, ?, ?)`,
         [
-          user.customerId,
+          customerId,
           pkgId,
           reasons[0].id,
           note ? String(note).slice(0, 500) : null,

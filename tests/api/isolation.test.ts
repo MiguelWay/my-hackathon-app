@@ -58,6 +58,7 @@ let alphaCampaign = 0;
 let alphaCustomerId = 0;
 let alphaReturnedPackageId = 0;
 let betaCampaign = 0;
+let betaCustomerId = 0;
 let betaPackageId = 0;
 let rootUserId = 0;
 
@@ -74,6 +75,7 @@ beforeAll(async () => {
   const a = await alpha.register("Alpha Co", "alpha-admin@test.local", "password123");
   const b = await beta.register("Beta Co", "beta-admin@test.local", "password123");
   alphaCustomerId = a.customerId;
+  betaCustomerId = b.customerId;
   await seedUser(a.customerId, "alpha-user@test.local", "password123", "user");
   // The one account with no customer of its own, so it is the platform's only super-admin.
   rootUserId = await seedUser(null, "root@test.local", "password123", "superadmin");
@@ -233,35 +235,35 @@ describe("customer A can never write customer B's data", () => {
     expect(bPackages.body.map((p) => p.sender_id)).toEqual([SENDER_B]);
   });
 
-  it("cannot record a return against B's package, even by package id", async () => {
-    const bySender = await alpha.post("/returns", { senderId: SENDER_B, reasonCode: "otro" });
-    expect(bySender.status).toBe(404);
-
-    const byPackageId = await alpha.post("/returns", {
-      senderId: SENDER_B,
-      packageId: betaPackageId,
-      reasonCode: "otro",
-    });
-    expect(byPackageId.status).toBe(404);
+  it("cannot record a return on B's package without naming B", async () => {
+    // No customer named, so the request is scoped to the caller's own company and B's package is
+    // invisible to it.
+    const res = await alpha.post("/returns", { senderId: SENDER_B, reasonCode: "otro" });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "no package with that ID" });
 
     const asB = await beta.get<LookupRow[]>(`/returns/lookup?senderId=${SENDER_B}`);
     expect(asB.body[0].return_id).toBeNull();
   });
 
-  it("cannot attach a resend to B's package, nor into B's campaign", async () => {
-    const foreignPackage = await alpha.post("/returns/resend", {
+  it("refuses a resend aimed at another company's campaign", async () => {
+    // Beta's package was never returned, so it cannot be resent at all.
+    const notReturned = await alpha.post("/returns/resend", {
       packageId: betaPackageId,
       newSenderId: "PQHACK002ES",
       campaignId: alphaCampaign,
     });
-    expect(foreignPackage.status).toBe(404);
+    expect(notReturned.status).toBe(400);
+    expect(notReturned.body).toEqual({ error: "only a returned package can be resent" });
 
+    // Alpha's own returned package cannot be pushed into Beta's campaign.
     const foreignCampaign = await alpha.post("/returns/resend", {
       packageId: alphaReturnedPackageId,
       newSenderId: "PQHACK003ES",
       campaignId: betaCampaign,
     });
     expect(foreignCampaign.status).toBe(404);
+    expect(foreignCampaign.body).toEqual({ error: "campaign not found" });
 
     const bPackages = await beta.get<PackageRow[]>(`/campaigns/${betaCampaign}/packages`);
     expect(bPackages.body).toHaveLength(1);
@@ -285,6 +287,8 @@ describe("anonymous callers are rejected everywhere", () => {
     ["GET", "/returns/summary"],
     ["GET", "/returns/chains"],
     ["GET", "/returns/chains/export"],
+    ["GET", "/returns/customers"],
+    ["GET", "/returns/customers/1/campaigns"],
     ["GET", "/returns/lookup?senderId=ANY"],
     ["POST", "/returns"],
     ["POST", "/returns/resend"],
@@ -908,14 +912,90 @@ describe("a `user` links the resend that follows a return", () => {
     expect(created.body[0].chain[0].sender_id).toBe(SENDER_A_RETURNED);
   });
 
-  it("may not resend another company's package", async () => {
+  it("may not resend a package that was never returned", async () => {
+    const res = await alphaUser.post("/returns/resend", {
+      packageId: betaPackageId,
+      newSenderId: "PQUSERFOREIGN01ES",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "only a returned package can be resent" });
+  });
+});
+
+// The boundary is the REQUEST, not the account: one team processes returns for every client company,
+// so a caller names the customer it is working in and no query ever spans two.
+describe("the boundary is the request, not the account", () => {
+  it("shows an operator every customer, and each one's campaigns", async () => {
+    const customers = await alphaUser.get<{ id: number; name: string }[]>("/returns/customers");
+    expect(customers.status).toBe(200);
+    expect(customers.body.map((c) => c.name)).toEqual(
+      expect.arrayContaining(["Alpha Co", "Beta Co"])
+    );
+
+    const campaigns = await alphaUser.get<{ name: string; package_count: number }[]>(
+      `/returns/customers/${betaCustomerId}/campaigns`
+    );
+    expect(campaigns.status).toBe(200);
+    expect(campaigns.body).toEqual([
+      expect.objectContaining({ name: "Beta March", package_count: 1 }),
+    ]);
+
     expect(
-      (
-        await alphaUser.post("/returns/resend", {
-          packageId: betaPackageId,
-          newSenderId: "PQUSERFOREIGN01ES",
-        })
-      ).status
-    ).toBe(404);
+      (await alphaUser.get<{ error: string }>("/returns/customers/999999/campaigns")).status
+    ).toBe(200);
+  });
+
+  it("scopes a lookup to the customer it names, and never mixes two", async () => {
+    // With no customer named, only the caller's own company is searched.
+    expect((await alpha.get<LookupRow[]>(`/returns/lookup?senderId=${SENDER_B}`)).body).toEqual([]);
+
+    // Naming Beta finds Beta's package, and nothing of Alpha's.
+    const asBeta = await alpha.get<LookupRow[]>(
+      `/returns/lookup?senderId=${SENDER_B}&customerId=${betaCustomerId}`
+    );
+    expect(asBeta.body).toHaveLength(1);
+    expect(asBeta.body[0].campaign_id).toBe(betaCampaign);
+  });
+
+  it("records a return in the customer the package belongs to, not the caller's", async () => {
+    const res = await alphaUser.post("/returns", {
+      senderId: SENDER_B,
+      packageId: betaPackageId,
+      reasonCode: "tienda_cerrada",
+    });
+    expect(res.status).toBe(201);
+
+    // It belongs to Beta...
+    const asBeta = await beta.get<LookupRow[]>(`/returns/lookup?senderId=${SENDER_B}`);
+    expect(asBeta.body[0].return_id).not.toBeNull();
+    // ...and never appears in the caller's own company.
+    const alphaRecent = await alpha.get<{ sender_id: string }[]>("/returns");
+    expect(alphaRecent.body.map((r) => r.sender_id)).not.toContain(SENDER_B);
+  });
+
+  it("resends another customer's returned package, still inside that customer", async () => {
+    const res = await alphaUser.post<{ campaignId: number }>("/returns/resend", {
+      packageId: betaPackageId,
+      newSenderId: "PQCROSS001ES",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.campaignId).toBe(betaCampaign);
+
+    const betaPackages = await beta.get<PackageRow[]>(`/campaigns/${betaCampaign}/packages`);
+    expect(betaPackages.body.map((p) => p.sender_id)).toContain("PQCROSS001ES");
+  });
+
+  it("counts each customer separately, whichever one the caller asked for", async () => {
+    const betaSummary = await alpha.get<{ sent: number; returns: number; resends: number }>(
+      `/returns/summary?customerId=${betaCustomerId}`
+    );
+    expect(betaSummary.body).toMatchObject({ sent: 2, returns: 1, resends: 1 });
+  });
+
+  it("refuses a customer that does not exist", async () => {
+    const res = await alpha.get<{ error: string }>("/returns/summary?customerId=999999");
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "customer not found" });
+    expect((await alpha.get<{ error: string }>("/returns/summary?customerId=abc")).status).toBe(400);
   });
 });

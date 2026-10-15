@@ -527,14 +527,12 @@ ul.campaign-list li {
   gap: 6px;
 }
 
-ul.campaign-list a.campaign-choice,
-ul.campaign-list div.campaign-choice {
+ul.campaign-list a.campaign-choice {
   flex: 1;
 }
 
 button.campaign-choice,
-a.campaign-choice,
-div.campaign-choice {
+a.campaign-choice {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;

@@ -1211,3 +1211,49 @@ process link and with the copy "Returns are recorded for your own company's camp
 
 **Files:** `src/pages/{CustomersPage,ReturnsPage}.tsx`, `src/styles.css`
 **Scope:** Small
+
+## The operator picks a customer, then a campaign, then processes
+
+**Description:** "The logic is wrong. a user must be able to select a customer and within a customer
+select a campaign. within each campaign you see the the funcionality to input a returned package and
+resend funcionality." — decided **A**: a `user` sees every customer.
+
+**Progress:** **Done, processing side.** The boundary moved from the account to the **request**.
+`server/src/returns.ts` gained `scopeOf()`: a request names the customer it is working in
+(`?customerId=`), or the entity names it — a campaign names its owner, a package names its customer —
+and naming nobody keeps the caller's own company. A new read-only directory feeds the picker:
+`GET /returns/customers` (every client company) and `GET /returns/customers/:id/campaigns`. `/lookup`
+takes `customerId` plus an optional `campaignId` that must agree with it; `POST /returns` resolves the
+customer from the `packageId` the client sends, else from the named customer; `/resend` resolves it
+from the package; `summary`, `GET /returns`, `/chains` and `/chains/export` all take `customerId`.
+`requireCompany` is gone from the returns router, which is what used to nail an operator to one
+company.
+
+On screen, *Packages returns* now leads with a **Customer** picker — defaulting to the account's own
+company when it has one — then a **Campaign** picker of that customer's campaigns, then the package
+ID. `?customer=` + `?campaign=` preselect both, so the Customers screen's *Process returns →* link now
+works for **every** customer; the own-company gate is gone, along with the "not attached to a company"
+dead end for a platform super-admin.
+
+Guarantee rewritten to match: `SPECIFICATION.md` (#2, features, stack, security boundaries, criterion
+6), `tasks/plan.md` (isolation + roles), `SECURITY.md` (findings 11 and 16a, plus new **21** recording
+the deliberate cross-customer reach and when to narrow it), and the `auth.ts` comment.
+
+**Verification:** `npm test` — **192 tests** (+8): the three that asserted the old account-scoped
+guarantee were rewritten, and a new suite *the boundary is the request, not the account* proves the
+directory, the per-request scope, a write landing in the package's own customer, a cross-customer
+resend staying put, per-customer counters, and the 404/400 for an unknown customer. `npm run
+typecheck:api` and `npm run build` clean. Live as `user@acme.test` (attached to Acme):
+`/returns/customers` lists all six customers, campaign 8's campaigns read back, `PortaP_39` looks up in
+customer 8 with its chain, and summaries read 508/46/3 for Acme and 151/1/1 for company 8 from the same
+session. Browser-verified: the Customer picker defaults to *Acme Retail*, switching to *Plátano 150
+paquetes* swaps the Campaign list to *vuelta al cole*, and the lookup shows the return with the resend
+form — nothing saved.
+
+**Still open:** the reports (*Returned Packages* counters, list and chains) are still scoped to the
+account's own company; they need the same picker. And `/campaigns` — the Campaigns screen — is still
+the caller's own company for a `user`.
+
+**Files:** `server/src/{returns.ts,auth.ts}`, `src/pages/{ReturnsPage,CustomersPage}.tsx`,
+`src/styles.css`, `tests/api/isolation.test.ts`, `SPECIFICATION.md`, `SECURITY.md`, `tasks/plan.md`
+**Scope:** Large
