@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
+import { ReturnCounters } from "../components/ReturnCounters";
 import {
   CHAINS_EXPORT_FILENAME,
   campaignExportUrl,
@@ -34,15 +35,6 @@ interface CampaignOption {
 }
 
 interface ReturnSummary {
-  /** Every return the company has, not just the ones the capped list shows. */
-  returns: number;
-  /** Every package created by a resend. */
-  resends: number;
-  /** How many returns the recent list can hold. */
-  recent: number;
-}
-
-interface ReturnSummary {
   /** Every package the company has sent, resends included. */
   sent: number;
   /** Every return the company has, not just the ones the capped list shows. */
@@ -51,13 +43,6 @@ interface ReturnSummary {
   resends: number;
   /** How many returns the recent list can hold. */
   recent: number;
-}
-
-/** A share, rounded to something readable: 0.7%, 12%, 100%. */
-function share(part: number, whole: number): string {
-  if (whole === 0) return "—";
-  const value = (part / whole) * 100;
-  return `${value >= 10 ? Math.round(value) : value.toFixed(1)}%`;
 }
 
 /** One chain of attempts: the package a store sent back, then each time it went out again. */
@@ -236,9 +221,7 @@ export function RecentReturnsPage() {
   return (
     <div>
       <h1>Returned Packages</h1>
-      <p className="muted">
-        Your company&rsquo;s most recent returns, newest first. <Link to="/returns">Packages returns</Link>
-      </p>
+      <p className="muted">Your company&rsquo;s most recent returns, newest first.</p>
 
       {resent && (
         <p className="ok">
@@ -252,24 +235,11 @@ export function RecentReturnsPage() {
 
       {summary && (
         <>
-          <div className="stats">
-            <div className="stat">
-              <span className="stat-number">{summary.sent}</span>
-              <span className="muted">packages sent</span>
-            </div>
-            <div className="stat">
-              <span className="stat-number">{summary.returns}</span>
-              <span className="muted">
-                returned package{summary.returns === 1 ? "" : "s"}
-              </span>
-              <span className="stat-share">{share(summary.returns, summary.sent)} of sent</span>
-            </div>
-            <div className="stat">
-              <span className="stat-number">{summary.resends}</span>
-              <span className="muted">Resent</span>
-              <span className="stat-share">{share(summary.resends, summary.sent)} of sent</span>
-            </div>
-          </div>
+          <ReturnCounters
+            sent={summary.sent}
+            returns={summary.returns}
+            resends={summary.resends}
+          />
           {summary.returns > summary.recent && (
             <p className="muted">The list below shows the latest {summary.recent}.</p>
           )}

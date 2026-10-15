@@ -1,6 +1,6 @@
 # Spec: User profile — customer → campaign → returns
 
-**Status:** awaiting approval
+**Status:** implemented (Tasks 13–15; see `tasks/todo.md`)
 **Owner:** Miguel
 **Date:** 2026-10-15
 **Builds on:** `SPECIFICATION.md` (app-level PRD), `SECURITY.md`, `tasks/plan.md`

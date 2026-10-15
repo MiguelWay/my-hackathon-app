@@ -162,17 +162,17 @@ Task 13  GET /returns/campaigns/:id  +  return_count  +  the four report gates
 
 ## Task List
 
-- [ ] Task 13: The campaign's own read, and the reports behind a super-admin
-- [ ] Task 14: The campaign's returns screen at `/campaigns/:id/returns`
-- [ ] Task 15: Customers is the way in — role-aware page, nav, redirects
+- [x] Task 13: The campaign's own read, and the reports behind a super-admin
+- [x] Task 14: The campaign's returns screen at `/campaigns/:id/returns`
+- [x] Task 15: Customers is the way in — role-aware page, nav, redirects
 
 ### Checkpoint: After Task 13
-- [ ] `npm test` (six new API tests), `npm run typecheck:api` and `npm run build` clean
+- [x] `npm test` (six new API tests), `npm run typecheck:api` and `npm run build` clean
 
 ### Checkpoint: Feature complete
-- [ ] All eight success criteria in the spec hold
-- [ ] Browser walkthrough as `user@acme.test` and `owner@mycompany.test`
-- [ ] `SPECIFICATION.md`, `SECURITY.md` and `README.md` match the shipped behaviour
+- [x] All eight success criteria in the spec hold
+- [x] Browser walkthrough as `user@acme.test` and `owner@mycompany.test`
+- [x] `SPECIFICATION.md`, `SECURITY.md` and `README.md` match the shipped behaviour
 - [ ] Review with the human before the change log is closed
 
 ## Risks and Mitigations

@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { useAuth } from "../auth/AuthContext";
 import {
   adminCampaignExportUrl,
   canChooseSaveLocation,
@@ -15,9 +16,9 @@ import { PasswordInput } from "../components/PasswordInput";
 interface Customer {
   id: number;
   name: string;
-  created_at: string;
-  user_count: number;
-  active_user_count: number;
+  /** A super-admin sees how many accounts a customer has; the operator's directory does not carry it. */
+  user_count?: number;
+  active_user_count?: number;
 }
 
 interface CustomerUser {
@@ -33,8 +34,8 @@ interface CustomerCampaign {
   name: string;
   start_date: string | null;
   finish_date: string | null;
-  /** Lines in the uploaded lists; a resend adds a package without a line. */
-  total_rows: number;
+  /** Lines in the uploaded lists; a resend adds a package without a line. Only a super-admin's view. */
+  total_rows?: number;
   package_count: number;
   return_count: number;
 }
@@ -51,6 +52,12 @@ const emptyForm = (): NewUserForm => ({ email: "", password: "", role: "superadm
 type PanelKind = "users" | "campaigns";
 
 export function CustomersPage() {
+  const { user } = useAuth();
+  // A super-admin runs the customers and their accounts; an operator only reads them. One page, two
+  // roles: the only difference is which controls render.
+  const isSuperAdmin = user?.role === "superadmin";
+  const [searchParams] = useSearchParams();
+  const wantedCustomer = searchParams.get("customer") ?? "";
   const [items, setItems] = useState<Customer[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -70,9 +77,15 @@ export function CustomersPage() {
   // The users panel, which opens below the customers table.
   const panelRef = useRef<HTMLDivElement | null>(null);
 
+  // The list comes from the endpoint that matches the role: an operator reads the returns directory,
+  // which carries the names; a super-admin reads the admin one, which also carries the account counts.
   const load = useCallback(async () => {
-    setItems(await api.get<Customer[]>("/admin/customers"));
-  }, []);
+    setItems(
+      isSuperAdmin
+        ? await api.get<Customer[]>("/admin/customers")
+        : await api.get<Customer[]>("/returns/customers")
+    );
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     load().catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
@@ -173,7 +186,13 @@ export function CustomersPage() {
       if (kind === "users") {
         setUsers(await api.get<CustomerUser[]>(`/admin/customers/${customerId}/users`));
       } else {
-        setCampaigns(await api.get<CustomerCampaign[]>(`/admin/customers/${customerId}/campaigns`));
+        setCampaigns(
+          await api.get<CustomerCampaign[]>(
+            isSuperAdmin
+              ? `/admin/customers/${customerId}/campaigns`
+              : `/returns/customers/${customerId}/campaigns`
+          )
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load that customer's data");
@@ -232,36 +251,52 @@ export function CustomersPage() {
     opened?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [panel]);
 
+  // Arriving from a campaign's returns screen: open that customer's campaigns straight away.
+  const openedFromUrl = useRef(false);
+  useEffect(() => {
+    if (openedFromUrl.current || !wantedCustomer || items.length === 0) return;
+    openedFromUrl.current = true;
+    const id = Number(wantedCustomer);
+    if (items.some((c) => c.id === id)) void togglePanel(id, "campaigns");
+  }, [wantedCustomer, items]);
+
   return (
     <div>
       <h1>Customers</h1>
       <p className="muted">
-        Each customer is a separate company. Their data never mixes with another customer&rsquo;s.
+        {isSuperAdmin
+          ? "Each customer is a separate company. Their data never mixes with another customer's."
+          : "Pick a customer to see its campaigns, then a campaign to record its returns."}
       </p>
 
-      <details className="card">
-        <summary>New customer</summary>
-        <form className="customer-row" onSubmit={create}>
-          <label>
-            Name
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </label>
-          <button>Create</button>
-        </form>
-      </details>
+      {isSuperAdmin && (
+        <details className="card">
+          <summary>New customer</summary>
+          <form className="customer-row" onSubmit={create}>
+            <label>
+              Name
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </label>
+            <button>Create</button>
+          </form>
+        </details>
+      )}
 
       {error && <p className="error">{error}</p>}
       {notice && <p className="ok">{notice}</p>}
 
       {items.length === 0 ? (
-        <p className="muted">No customers yet. Create the first one above.</p>
+        <p className="muted">
+          No customers yet.{" "}
+          {isSuperAdmin && "Create the first one above."}
+        </p>
       ) : (
         <table className="grid">
           <thead>
             <tr>
               <th>ID</th>
               <th>Name</th>
-              <th>Users</th>
+              {isSuperAdmin && <th>Users</th>}
               <th></th>
             </tr>
           </thead>
@@ -271,21 +306,25 @@ export function CustomersPage() {
                 <tr className={panel?.customerId === c.id ? "open" : undefined}>
                   <td>{c.id}</td>
                   <td>{c.name}</td>
-                  <td>
-                    {c.user_count}
-                    {c.active_user_count !== c.user_count && (
-                      <span className="muted"> · {c.active_user_count} active</span>
-                    )}
-                  </td>
+                  {isSuperAdmin && (
+                    <td>
+                      {c.user_count}
+                      {c.active_user_count !== c.user_count && (
+                        <span className="muted"> · {c.active_user_count} active</span>
+                      )}
+                    </td>
+                  )}
                   <td>
                     <div className="btn-row">
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => togglePanel(c.id, "users")}
-                      >
-                        {panel?.customerId === c.id && panel.kind === "users" ? "Close" : "Users"}
-                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => togglePanel(c.id, "users")}
+                        >
+                          {panel?.customerId === c.id && panel.kind === "users" ? "Close" : "Users"}
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="secondary"
@@ -301,7 +340,7 @@ export function CustomersPage() {
 
                 {panel?.customerId === c.id && panel.kind === "campaigns" && (
                   <tr className="expand" ref={expandRef}>
-                    <td colSpan={4}>
+                    <td colSpan={isSuperAdmin ? 4 : 3}>
                       {campaigns === null ? (
                         <p className="muted">Loading…</p>
                       ) : campaigns.length === 0 ? (
@@ -312,8 +351,10 @@ export function CustomersPage() {
                         <>
                           <p className="muted">
                             <strong>{c.name}</strong> — {campaigns.length} campaign
-                            {campaigns.length === 1 ? "" : "s"}. Click one to record its returns and
-                            resends; download its flagged .xlsx from the control beside it.
+                            {campaigns.length === 1 ? "" : "s"}.{" "}
+                            {isSuperAdmin
+                              ? "Click one to record its returns and resends; download its flagged .xlsx from the control beside it."
+                              : "Click one to record its returns and resends."}
                           </p>
                           <ul className="campaign-list">
                             {campaigns.map((camp) => {
@@ -325,8 +366,9 @@ export function CustomersPage() {
                                     {camp.start_date ?? "—"} → {camp.finish_date ?? "—"}
                                   </span>
                                   <span className="muted">
-                                    {camp.total_rows} lines · {camp.package_count} packages ·{" "}
-                                    {camp.return_count} return{camp.return_count === 1 ? "" : "s"}
+                                    {camp.total_rows !== undefined && <>{camp.total_rows} lines · </>}
+                                    {camp.package_count} packages · {camp.return_count} return
+                                    {camp.return_count === 1 ? "" : "s"}
                                   </span>
                                 </>
                               );
@@ -334,35 +376,41 @@ export function CustomersPage() {
                                 <li key={camp.id}>
                                   <Link
                                     className="campaign-choice"
-                                    to={`/returns?customer=${c.id}&campaign=${camp.id}`}
+                                    to={`/campaigns/${camp.id}/returns`}
                                   >
                                     {details}
-                                    <span className="download">Process returns →</span>
+                                    <span className="download">Record returns →</span>
                                   </Link>
-                                  <a
-                                    className="button secondary"
-                                    aria-disabled={exporting !== null || camp.package_count === 0}
-                                    href={adminCampaignExportUrl(camp.id)}
-                                    download
-                                    onClick={(e) => onCampaignChoiceClick(e, camp)}
-                                  >
-                                    {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
-                                  </a>
-                                  {canChooseSaveLocation() && (
-                                    <button
-                                      type="button"
-                                      className="secondary"
-                                      disabled={exporting !== null || camp.package_count === 0}
-                                      onClick={() => saveCampaignAs(camp)}
-                                    >
-                                      Save as…
-                                    </button>
+                                  {isSuperAdmin && (
+                                    <>
+                                      <a
+                                        className="button secondary"
+                                        aria-disabled={
+                                          exporting !== null || camp.package_count === 0
+                                        }
+                                        href={adminCampaignExportUrl(camp.id)}
+                                        download
+                                        onClick={(e) => onCampaignChoiceClick(e, camp)}
+                                      >
+                                        {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
+                                      </a>
+                                      {canChooseSaveLocation() && (
+                                        <button
+                                          type="button"
+                                          className="secondary"
+                                          disabled={exporting !== null || camp.package_count === 0}
+                                          onClick={() => saveCampaignAs(camp)}
+                                        >
+                                          Save as…
+                                        </button>
+                                      )}
+                                    </>
                                   )}
                                 </li>
                               );
                             })}
                           </ul>
-                          <SaveLocationHint />
+                          {isSuperAdmin && <SaveLocationHint />}
                         </>
                       )}
                     </td>
@@ -374,7 +422,7 @@ export function CustomersPage() {
         </table>
       )}
 
-      {panel?.kind === "users" && (
+      {isSuperAdmin && panel?.kind === "users" && (
         <div className="card" ref={panelRef}>
           <h2>{openCustomer?.name}</h2>
 

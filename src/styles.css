@@ -372,65 +372,6 @@ details.section[open] > summary::before {
   transform: rotate(90deg);
 }
 
-/* The drill-down an operator works in: customer, then campaign, then the package. */
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(180px, 230px) minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
-}
-
-.rail h2 {
-  margin: 20px 0 8px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-
-.rail h2:first-child {
-  margin-top: 0;
-}
-
-ul.picker {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-button.picker-item {
-  display: block;
-  width: 100%;
-  padding: 8px 10px;
-  text-align: left;
-  font-size: 14px;
-  color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-button.picker-item:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-
-button.picker-item.now {
-  border-color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent);
-  font-weight: 600;
-}
-
-/* A narrow window stacks the rail above the pane rather than squeezing both. */
-@media (max-width: 760px) {
-  .workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 /* A tool that fills the card it lives in, so its header can sit edge to edge. */
 details.card > summary {
   margin: -16px -16px 0;

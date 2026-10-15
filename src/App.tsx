@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
@@ -17,10 +17,28 @@ function Protected({ children }: { children: ReactNode }) {
   return <Layout>{children}</Layout>;
 }
 
+/** The company-wide reports, and the admin screens. An operator is sent to their customers instead. */
 function SuperAdminOnly({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  if (user?.role !== "superadmin") return <Navigate to="/" replace />;
+  if (user?.role !== "superadmin") return <Navigate to="/customers" replace />;
   return <>{children}</>;
+}
+
+/** An operator starts at the customers; a super-admin still starts at the campaigns. */
+function Home() {
+  const { user } = useAuth();
+  if (user?.role !== "superadmin") return <Navigate to="/customers" replace />;
+  return <CampaignsPage />;
+}
+
+/**
+ * The returns screen used to live at `/returns`, behind a customer and campaign picker. A link that
+ * still names a campaign leads to that campaign's own screen; one that does not goes to the customers.
+ */
+function LegacyReturns() {
+  const [params] = useSearchParams();
+  const campaign = params.get("campaign");
+  return <Navigate to={campaign ? `/campaigns/${campaign}/returns` : "/customers"} replace />;
 }
 
 export default function App() {
@@ -32,10 +50,19 @@ export default function App() {
         path="/"
         element={
           <Protected>
-            <CampaignsPage />
+            <Home />
           </Protected>
         }
       />
+      <Route
+        path="/customers"
+        element={
+          <Protected>
+            <CustomersPage />
+          </Protected>
+        }
+      />
+      <Route path="/superadmin/customers" element={<Navigate to="/customers" replace />} />
       <Route
         path="/campaigns/:id"
         element={
@@ -45,7 +72,7 @@ export default function App() {
         }
       />
       <Route
-        path="/returns"
+        path="/campaigns/:id/returns"
         element={
           <Protected>
             <ReturnsPage />
@@ -53,19 +80,19 @@ export default function App() {
         }
       />
       <Route
-        path="/returns/recent"
+        path="/returns"
         element={
           <Protected>
-            <RecentReturnsPage />
+            <LegacyReturns />
           </Protected>
         }
       />
       <Route
-        path="/superadmin/customers"
+        path="/returns/recent"
         element={
           <Protected>
             <SuperAdminOnly>
-              <CustomersPage />
+              <RecentReturnsPage />
             </SuperAdminOnly>
           </Protected>
         }

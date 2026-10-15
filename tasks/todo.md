@@ -372,20 +372,20 @@ its own counters in a single call — extend the campaign list an operator picks
 count, and move the four company-wide report endpoints behind `requireSuperAdmin`.
 
 **Acceptance criteria:**
-- [ ] `GET /returns/campaigns/:id` returns `id, name, start_date, finish_date, customer_id,
+- [x] `GET /returns/campaigns/:id` returns `id, name, start_date, finish_date, customer_id,
       customer_name, sent, returns, resends` for a campaign of a customer the caller is **not**
       attached to, from the same session.
-- [ ] Its numbers are the campaign's own: a second campaign of the same customer does not leak in.
-- [ ] An unknown campaign id is a `404`.
-- [ ] `GET /returns/customers/:id/campaigns` also returns `return_count`, per campaign.
-- [ ] A `user` gets `403 super-admin only` from `GET /returns`, `/returns/summary`, `/returns/chains`
+- [x] Its numbers are the campaign's own: a second campaign of the same customer does not leak in.
+- [x] An unknown campaign id is a `404`.
+- [x] `GET /returns/customers/:id/campaigns` also returns `return_count`, per campaign.
+- [x] A `user` gets `403 super-admin only` from `GET /returns`, `/returns/summary`, `/returns/chains`
       and `/returns/chains/export`; a super-admin still gets `200` from each.
-- [ ] All five endpoints are in the anonymous-`401` table.
+- [x] All five endpoints are in the anonymous-`401` table.
 
 **Verification:**
-- [ ] `npm test` — the six new API tests pass, and the existing 192 still do
-- [ ] `npm run typecheck:api` clean
-- [ ] Manual: `curl` each gated endpoint as `user@acme.test` and as `owner@mycompany.test`
+- [x] `npm test` — the six new API tests pass, and the existing 192 still do
+- [x] `npm run typecheck:api` clean
+- [x] Manual: `curl` each gated endpoint as `user@acme.test` and as `owner@mycompany.test`
 
 **Dependencies:** None
 **Files:** `server/src/returns.ts`, `tests/api/isolation.test.ts`
@@ -399,17 +399,17 @@ the resend form exactly as they behave today, adds a way back to the customer's 
 the rail, both pickers, "All campaigns" and their state.
 
 **Acceptance criteria:**
-- [ ] The route renders the campaign's name, dates, customer and the three counters.
-- [ ] The ID box, the match with its chain, the reason buttons and the resend form all still work, and
+- [x] The route renders the campaign's name, dates, customer and the three counters.
+- [x] The ID box, the match with its chain, the reason buttons and the resend form all still work, and
       recording a return and saving a resend both succeed from this screen.
-- [ ] The counters move after a recorded return and after a saved resend.
-- [ ] No customer picker, no campaign picker, no rail, no "All campaigns".
-- [ ] An unknown campaign id reports an error rather than rendering an empty screen.
-- [ ] The rail's styles (`.workspace`, `.rail`, `ul.picker`, `button.picker-item`) are gone.
+- [x] The counters move after a recorded return and after a saved resend.
+- [x] No customer picker, no campaign picker, no rail, no "All campaigns".
+- [x] An unknown campaign id reports an error rather than rendering an empty screen.
+- [x] The rail's styles (`.workspace`, `.rail`, `ul.picker`, `button.picker-item`) are gone.
 
 **Verification:**
-- [ ] `npm run build` and `npx tsc --noEmit` clean
-- [ ] Manual: as `user@acme.test`, `/campaigns/6/returns` — look up `PortaP_39`, read the counters,
+- [x] `npm run build` and `npx tsc --noEmit` clean
+- [x] Manual: as `user@acme.test`, `/campaigns/6/returns` — look up `PortaP_39`, read the counters,
       record a return on an unreturned package, then save its resend (and undo both)
 
 **Dependencies:** Task 13
@@ -424,27 +424,27 @@ everyone, the admin controls and export controls for a super-admin only, a campa
 role, take `Packages returns` off the menu, and wire the redirects the spec lists.
 
 **Acceptance criteria:**
-- [ ] A `user` signing in lands on `/customers`; their nav shows only *Customers*.
-- [ ] A super-admin keeps *Customers · Campaigns · Returned Packages*, and *Packages returns* is gone
+- [x] A `user` signing in lands on `/customers`; their nav shows only *Customers*.
+- [x] A super-admin keeps *Customers · Campaigns · Returned Packages*, and *Packages returns* is gone
       from the menu for everyone.
-- [ ] Clicking a customer expands its campaigns inline; each row reads `name · dates · N packages ·
+- [x] Clicking a customer expands its campaigns inline; each row reads `name · dates · N packages ·
       M returns`; clicking a campaign opens `/campaigns/:id/returns`.
-- [ ] A `user` sees no *New customer*, no *Users* panel, no account management and no download control.
-- [ ] `/superadmin/customers`, `/returns` and `/returns?customer=&campaign=` redirect as the spec's
+- [x] A `user` sees no *New customer*, no *Users* panel, no account management and no download control.
+- [x] `/superadmin/customers`, `/returns` and `/returns?customer=&campaign=` redirect as the spec's
       route table says, and a `user` is sent away from `/returns/recent`.
 
 **Verification:**
-- [ ] `npm run build` and `npx tsc --noEmit` clean
-- [ ] Manual: walk every URL in the spec's route table as both roles
+- [x] `npm run build` and `npx tsc --noEmit` clean
+- [x] Manual: walk every URL in the spec's route table as both roles
 
 **Dependencies:** Task 14
 **Files:** `src/pages/CustomersPage.tsx`, `src/App.tsx`, `src/components/Layout.tsx`
 **Scope:** Medium
 
 ## Checkpoint: Feature complete
-- [ ] All eight success criteria in `docs/specs/user-profile-drilldown.md` hold
-- [ ] `npm test`, `npm run typecheck:api` and `npm run build` clean
-- [ ] `SPECIFICATION.md`, `SECURITY.md` and `README.md` match the shipped behaviour
+- [x] All eight success criteria in `docs/specs/user-profile-drilldown.md` hold
+- [x] `npm test`, `npm run typecheck:api` and `npm run build` clean
+- [x] `SPECIFICATION.md`, `SECURITY.md` and `README.md` match the shipped behaviour
 - [ ] Review with the human before closing the feature out
 
 ---
@@ -1374,3 +1374,43 @@ could stay a super-admin tool. Say which.
 
 **Files:** `src/pages/ReturnsPage.tsx`, `src/styles.css`
 **Scope:** Medium
+
+## The operator's way in: customers → campaign → that campaign's returns
+
+**Description:** "I want to follow the logic in super user. I want that the user profile sees
+customers, They click on a customer, they see the campaign and click on the campaign and than see the
+funcionaity to input returns. Before programming ask me questions." Spec: `docs/specs/user-profile-drilldown.md`
+(approved after a three-question interview).
+
+**Progress:** **Done, Tasks 13–15.** A `user` now lands on **Customers** — their only nav item — with
+campaigns expanding inline under a customer row and each row reading `name · dates · N packages ·
+M returns`. Clicking one opens that campaign's own screen at `/campaigns/:id/returns`, which carries the
+campaign's identity and **its own counters** and nothing else: the rail, both pickers and "All
+campaigns" are deleted, not hidden. One screen serves both roles, so a super-admin reaches it the same
+way. The company-wide reports — the recent list, the counters, the chains and the chains download — are
+now `requireSuperAdmin`, and *Packages returns* is off the menu for everyone.
+
+Two things differ from the spec, both deliberate. Landing on the campaign screen **keeps you there**
+after a resend instead of jumping to the reports page (which is no longer an operator's to see), so the
+chain and the counters move under your eyes. And the counters live in one component
+(`src/components/ReturnCounters.tsx`) used by both screens, because "the same wording" is easier to
+keep than to re-type.
+
+**Verification:** `npm test` — **198 tests** (+6): a campaign's own read from another customer, its
+numbers being the campaign's and not the customer's, the 404/400, the picker counts, and the four gates
+(403 for a `user`, 200 for a super-admin). `npm run typecheck:api`, `npx tsc --noEmit` and `npm run
+build` clean. Browser: as `user@acme.test` — lands on `/customers`, nav is *Customers* alone, no
+*New customer*, no *Users* column or button, six customers; clicking *Plátano 150 paquetes* expands
+*vuelta al cole* as `151 packages · 1 return`; clicking it opens the screen with `151 · 1 (0.7%) · 1
+(0.7%)`; recording `ausente` on `PortaP_1` moved the counters to `2 (1.3%)`; saving a resend for
+`PortaP_39` moved `packages sent` to 152 and `Resent` to 2 and showed *Attempt 3* in the chain. Both
+test writes were deleted afterwards (`campaign_6_returns` back to 1, no `AGENT*` packages). As
+`owner@mycompany.test` — the same screen, plus the admin controls and the reports. Redirects checked:
+`/returns/recent` and `/returns` → `/customers`, `/returns?customer=2&campaign=3` →
+`/campaigns/3/returns`, `/superadmin/customers` → `/customers`, and `/` → *Campaigns* for a super-admin.
+
+**Files:** `server/src/returns.ts`, `tests/api/isolation.test.ts`, `src/components/ReturnCounters.tsx`,
+`src/pages/{ReturnsPage,CustomersPage,RecentReturnsPage}.tsx`, `src/components/Layout.tsx`,
+`src/App.tsx`, `src/styles.css`, `SECURITY.md`, `docs/specs/user-profile-drilldown.md`,
+`tasks/{plan,todo}.md`
+**Scope:** Large
