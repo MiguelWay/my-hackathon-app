@@ -1098,3 +1098,26 @@ form (*"Sent it again? Record the new package ID"* + `Save resend`) now renders 
 **Files:** `server/src/returns.ts`, `src/pages/{ReturnsPage,CustomersPage}.tsx`, `src/components/Layout.tsx`,
 `tests/api/isolation.test.ts`, `SPECIFICATION.md`, `tasks/plan.md`, `server/src/auth.ts`
 **Scope:** Small
+
+## A resent package is tied to the original sending ID
+
+**Description:** "make sure that a resent package is associated with the original sending ID."
+
+**Progress:** **Verified — no production code needed changing — and now pinned by tests.** The link is
+`packages.chain_id`, which holds the **id of the original package** (the chain's first), not the id of
+the attempt it replaced; migration `006` enforces it with a foreign key. The resend handler derives it
+with `chainRootId(original)`, so it can only ever name the chain's original — including when the
+package being resent is itself a resend, which is the case most likely to regress. Checked on all
+three surfaces against the real *vuelta al cole* resend (`PortaP_39` → `PackVerano_7`): the lookup
+chain reads `PortaP_39 (returned) → PackVerano_7` whichever end you search, Returned Packages shows
+`Resent as: PackVerano_7`, and the export gives `PackVerano_7` a `Resend Of: PortaP_39`. The export
+also loads a chain's members even when they sit in another campaign, so the link survives when the
+original was uploaded elsewhere (campaign 1's resends still name their original in campaign 3). Two
+tests now state the rule: a resend's `chain_id` is the original's id and the original opens the chain,
+plus a second that resends a resend and asserts it still attaches to the original.
+
+**Verification:** `npm test` — **173 tests**, the resend-chain tests strengthened and one added.
+`npm run typecheck:api` and `npm run build` clean · live lookup/export reads quoted above.
+
+**Files:** `tests/api/isolation.test.ts`
+**Scope:** Small

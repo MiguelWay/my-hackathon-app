@@ -758,9 +758,11 @@ describe("managing accounts", () => {
 // Kept last in the file: it adds a package, and the counter tests above count them.
 describe("a `user` links the resend that follows a return", () => {
   interface ChainLookup {
+    id: number;
     sender_id: string;
+    chain_id: number | null;
     campaign_id: number;
-    chain: { sender_id: string }[];
+    chain: { id: number; sender_id: string }[];
   }
 
   it("links a resend of a returned package, in the original's campaign", async () => {
@@ -774,9 +776,32 @@ describe("a `user` links the resend that follows a return", () => {
 
     const found = await alphaUser.get<ChainLookup[]>("/returns/lookup?senderId=PQUSERRESEND01ES");
     expect(found.body).toHaveLength(1);
+    // The link is stored as the ORIGINAL package's id, not as "the package it replaced".
+    expect(found.body[0].chain_id).toBe(alphaReturnedPackageId);
+    // And the original opens the chain, whichever attempt you looked up.
+    expect(found.body[0].chain[0].id).toBe(alphaReturnedPackageId);
     expect(found.body[0].chain.map((n) => n.sender_id)).toEqual(
       expect.arrayContaining([SENDER_A_RETURNED, "PQUSERRESEND01ES"])
     );
+  });
+
+  it("attaches to the original even when the package resent is itself a resend", async () => {
+    // The attempt in the middle of a chain must not become the thing the next link points at:
+    // every resend in a chain names the same original.
+    const middle = await alphaUser.get<ChainLookup[]>(`/returns/lookup?senderId=${SENDER_A_RESEND}`);
+    expect(middle.body[0].id).not.toBe(alphaReturnedPackageId);
+    expect(middle.body[0].chain_id).toBe(alphaReturnedPackageId);
+
+    const res = await alphaUser.post<{ senderId: string }>("/returns/resend", {
+      packageId: middle.body[0].id,
+      newSenderId: "PQUSERRESEND04ES",
+    });
+    expect(res.status).toBe(201);
+
+    const created = await alphaUser.get<ChainLookup[]>("/returns/lookup?senderId=PQUSERRESEND04ES");
+    expect(created.body).toHaveLength(1);
+    expect(created.body[0].chain_id).toBe(alphaReturnedPackageId);
+    expect(created.body[0].chain[0].sender_id).toBe(SENDER_A_RETURNED);
   });
 
   it("may not resend another company's package", async () => {
