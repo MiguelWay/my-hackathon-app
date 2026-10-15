@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { downloadCampaignExport } from "../lib/campaignExport";
+import { campaignExportUrl, downloadCampaignExport } from "../lib/campaignExport";
 import { CampaignListUpload } from "../components/CampaignListUpload";
+import { SaveLocationHint } from "../components/SaveLocationHint";
 import { useAuth } from "../auth/AuthContext";
 
 interface Campaign {
@@ -86,6 +87,17 @@ export function CampaignDetailPage() {
     }
   }
 
+  /**
+   * A plain left-click runs the app's own download (which opens a save dialog where the browser has
+   * one). The element stays a real link, so right-click → "download linked file as…" still lets the
+   * user choose the folder in any browser.
+   */
+  function onDownloadClick(e: ReactMouseEvent<HTMLAnchorElement>) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    void downloadExport();
+  }
+
   // Every extra column we've stored for this campaign, in first-seen order.
   const extraKeys = useMemo(() => {
     const keys: string[] = [];
@@ -144,15 +156,16 @@ export function CampaignDetailPage() {
             </ul>
 
             <div className="btn-row">
-              <button
-                type="button"
-                className="secondary"
-                onClick={downloadExport}
-                disabled={exporting || packages.length === 0}
+              <a
+                className={exporting ? "button secondary disabled" : "button secondary"}
+                href={campaignExportUrl(Number(id))}
+                download
+                onClick={onDownloadClick}
               >
                 {exporting ? "Preparing…" : "Download .xlsx"}
-              </button>
+              </a>
             </div>
+            <SaveLocationHint />
           </>
         )}
       </details>

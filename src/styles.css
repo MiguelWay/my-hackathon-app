@@ -98,7 +98,9 @@ input {
   color: var(--text);
 }
 
-button {
+button,
+a.button {
+  display: inline-block;
   padding: 8px 14px;
   border: 1px solid var(--accent);
   background: var(--accent);
@@ -106,6 +108,7 @@ button {
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
+  text-decoration: none;
 }
 
 button:disabled {
@@ -113,9 +116,15 @@ button:disabled {
   cursor: default;
 }
 
-button.secondary {
+button.secondary,
+a.button.secondary {
   background: #fff;
   color: var(--accent);
+}
+
+a.button.disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .btn-row {
@@ -485,7 +494,8 @@ ul.campaign-list {
   gap: 6px;
 }
 
-button.campaign-choice {
+button.campaign-choice,
+a.campaign-choice {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -498,13 +508,16 @@ button.campaign-choice {
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 14px;
+  text-decoration: none;
 }
 
-button.campaign-choice:hover:not(:disabled) {
+button.campaign-choice:hover:not(:disabled),
+a.campaign-choice:hover {
   border-color: var(--accent);
 }
 
-button.campaign-choice.now {
+button.campaign-choice.now,
+a.campaign-choice.now {
   border-color: var(--accent);
   box-shadow: inset 3px 0 0 var(--accent);
 }

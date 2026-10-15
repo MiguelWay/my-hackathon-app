@@ -27,6 +27,20 @@ function savePicker(): SavePicker | undefined {
   return typeof w.showSaveFilePicker === "function" ? w.showSaveFilePicker.bind(window) : undefined;
 }
 
+/**
+ * Whether clicking a download can open a save dialog. Chrome and Edge can; Safari and Firefox cannot,
+ * so there the file lands in the browser's own download folder unless the user asks for it explicitly.
+ */
+export const canChooseSaveLocation = (): boolean => savePicker() !== undefined;
+
+/** The export URL for one campaign, for use as a real link so "download linked file as…" works. */
+export const campaignExportUrl = (campaignId: number): string =>
+  `${baseUrl}/campaigns/${campaignId}/export`;
+
+/** The same for a campaign of any customer, on the platform Customers screen. */
+export const adminCampaignExportUrl = (campaignId: number): string =>
+  `${baseUrl}/admin/campaigns/${campaignId}/export`;
+
 /** Hands the blob to the browser's own download machinery (the fallback, and Safari/Firefox's path). */
 function saveThroughBrowser(blob: Blob, filename: string): string {
   const url = URL.createObjectURL(blob);

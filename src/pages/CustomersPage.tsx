@@ -1,6 +1,10 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { api } from "../lib/api";
-import { downloadCampaignExportForAdmin } from "../lib/campaignExport";
+import {
+  adminCampaignExportUrl,
+  downloadCampaignExportForAdmin,
+} from "../lib/campaignExport";
+import { SaveLocationHint } from "../components/SaveLocationHint";
 import { PasswordInput } from "../components/PasswordInput";
 
 interface Customer {
@@ -191,6 +195,13 @@ export function CustomersPage() {
     }
   }
 
+  /** A plain left-click downloads through the app; the link itself stays for right-click → save as. */
+  function onCampaignChoiceClick(e: ReactMouseEvent<HTMLAnchorElement>, campaign: CustomerCampaign) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    void downloadCampaign(campaign);
+  }
+
   const openCustomer = items.find((c) => c.id === panel?.customerId);
   const activeUsers = users.filter((u) => u.is_active === 1).length;
 
@@ -288,16 +299,17 @@ export function CustomersPage() {
                           <ul className="campaign-list">
                             {campaigns.map((camp) => (
                               <li key={camp.id}>
-                                <button
-                                  type="button"
+                                <a
                                   className={
                                     chosenCampaign === camp.id
                                       ? "campaign-choice now"
                                       : "campaign-choice"
                                   }
                                   aria-pressed={chosenCampaign === camp.id}
-                                  disabled={exporting !== null || camp.package_count === 0}
-                                  onClick={() => downloadCampaign(camp)}
+                                  aria-disabled={exporting !== null || camp.package_count === 0}
+                                  href={adminCampaignExportUrl(camp.id)}
+                                  download
+                                  onClick={(e) => onCampaignChoiceClick(e, camp)}
                                 >
                                   <span className="campaign-name">{camp.name}</span>
                                   <span className="muted">
@@ -310,10 +322,11 @@ export function CustomersPage() {
                                   <span className="download">
                                     {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
                                   </span>
-                                </button>
+                                </a>
                               </li>
                             ))}
                           </ul>
+                          <SaveLocationHint />
                         </>
                       )}
                     </td>

@@ -905,3 +905,29 @@ deleted the ordinary download still fires with the same file name.
 **Files:** `src/lib/campaignExport.ts`,
 `src/pages/{CampaignDetailPage,RecentReturnsPage,CustomersPage}.tsx`
 **Scope:** Small
+
+## Choosing the folder, on every browser
+
+**Description:** "When downloading the list I can't decide where to store it locally. I must be able to
+decide where to store the list."
+
+**Progress:** **Done as far as a page can.** Every download control is now a real link
+(`<a href="/api/campaigns/6/export" download>`) instead of a button: a plain click still runs the app's
+path (save dialog where the browser has one, ordinary download elsewhere), while **right-click →
+"Download linked file as…"** lets the user choose the folder and name in any browser, Safari and
+Firefox included — that path is served straight by the API with
+`Content-Disposition: attachment; filename="campaign-6-vuelta-al-cole.xlsx"`. Under the control,
+`SaveLocationHint` appears only when the browser has no save dialog, saying exactly that and naming the
+right-click escape hatch. Same change on the campaign page, *Return packages* and *Customers*.
+
+**Verification:** `npm test` — **166 tests** · `npm run build` clean · browser-verified: the campaign
+control is an `<a>` with `href=/api/campaigns/6/export` and `download`; a plain click still went through
+the app (the stubbed picker received `campaign-6-vuelta-al-cole.xlsx`, no navigation); the raw link
+returned 200, the spreadsheet MIME type, that file name and 27,538 bytes (what "download linked file
+as…" uses); with the save API removed before load the hint renders; *Return packages* points at
+`/api/campaigns/3/export` and the Customers campaign list at `/api/admin/campaigns/3/export`, both with
+`download`.
+
+**Files:** `src/lib/campaignExport.ts`, `src/components/SaveLocationHint.tsx`, `src/styles.css`,
+`src/pages/{CampaignDetailPage,RecentReturnsPage,CustomersPage}.tsx`
+**Scope:** Small

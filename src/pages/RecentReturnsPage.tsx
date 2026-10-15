@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
-import { downloadCampaignExport } from "../lib/campaignExport";
+import { campaignExportUrl, downloadCampaignExport } from "../lib/campaignExport";
+import { SaveLocationHint } from "../components/SaveLocationHint";
 import { useAuth } from "../auth/AuthContext";
 
 interface RecentReturnRow {
@@ -141,9 +142,19 @@ export function RecentReturnsPage() {
                 ))}
               </select>
             </label>
-            <button type="button" className="secondary" disabled={exporting} onClick={runExport}>
+            <a
+              className={exporting ? "button secondary disabled" : "button secondary"}
+              href={selectedCampaign ? campaignExportUrl(Number(selectedCampaign)) : "#"}
+              download
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                void runExport();
+              }}
+            >
               {exporting ? "Preparing…" : "Download .xlsx"}
-            </button>
+            </a>
+            <SaveLocationHint />
           </div>
         </div>
       )}
