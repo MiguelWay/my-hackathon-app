@@ -527,12 +527,14 @@ ul.campaign-list li {
   gap: 6px;
 }
 
-ul.campaign-list a.campaign-choice {
+ul.campaign-list a.campaign-choice,
+ul.campaign-list div.campaign-choice {
   flex: 1;
 }
 
 button.campaign-choice,
-a.campaign-choice {
+a.campaign-choice,
+div.campaign-choice {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -551,12 +553,6 @@ a.campaign-choice {
 button.campaign-choice:hover:not(:disabled),
 a.campaign-choice:hover {
   border-color: var(--accent);
-}
-
-button.campaign-choice.now,
-a.campaign-choice.now {
-  border-color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .campaign-choice .campaign-name {

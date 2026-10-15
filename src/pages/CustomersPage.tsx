@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
+import { useAuth } from "../auth/AuthContext";
 import {
   adminCampaignExportUrl,
   canChooseSaveLocation,
@@ -50,6 +52,7 @@ const emptyForm = (): NewUserForm => ({ email: "", password: "", role: "superadm
 type PanelKind = "users" | "campaigns";
 
 export function CustomersPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState<Customer[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -63,8 +66,6 @@ export function CustomersPage() {
   // The account whose delete has been armed, so deleting is never one careless click.
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [campaigns, setCampaigns] = useState<CustomerCampaign[] | null>(null);
-  // The campaign clicked in the expanded list, so the operator can see which one they took.
-  const [chosenCampaign, setChosenCampaign] = useState<number | null>(null);
   const [exporting, setExporting] = useState<number | null>(null);
   // The expanded campaign list, which can open below the fold.
   const expandRef = useRef<HTMLTableRowElement | null>(null);
@@ -170,7 +171,6 @@ export function CustomersPage() {
     setNotice(null);
     setUsers([]);
     setCampaigns(null);
-    setChosenCampaign(null);
     try {
       if (kind === "users") {
         setUsers(await api.get<CustomerUser[]>(`/admin/customers/${customerId}/users`));
@@ -185,7 +185,6 @@ export function CustomersPage() {
   async function downloadCampaign(campaign: CustomerCampaign) {
     setError(null);
     setNotice(null);
-    setChosenCampaign(campaign.id);
     setExporting(campaign.id);
     try {
       const filename = await downloadExport(
@@ -204,7 +203,6 @@ export function CustomersPage() {
   async function saveCampaignAs(campaign: CustomerCampaign) {
     setError(null);
     setNotice(null);
-    setChosenCampaign(campaign.id);
     setExporting(campaign.id);
     try {
       const result = await saveExportAs(
@@ -316,25 +314,25 @@ export function CustomersPage() {
                         <>
                           <p className="muted">
                             <strong>{c.name}</strong> — {campaigns.length} campaign
-                            {campaigns.length === 1 ? "" : "s"}. Click one to download its flagged
-                            .xlsx: the uploaded columns plus the return status, the reason and the
-                            resend of each package.
+                            {campaigns.length === 1 ? "" : "s"}.{" "}
+                            {c.id === user?.customerId ? (
+                              <>
+                                Click one to record its returns and resends; download its flagged
+                                .xlsx from the control beside it.
+                              </>
+                            ) : (
+                              <>
+                                Download a campaign&rsquo;s flagged .xlsx: the uploaded columns plus
+                                the return status, the reason and the resend of each package. Returns
+                                are recorded for your own company&rsquo;s campaigns.
+                              </>
+                            )}
                           </p>
                           <ul className="campaign-list">
-                            {campaigns.map((camp) => (
-                              <li key={camp.id}>
-                                <a
-                                  className={
-                                    chosenCampaign === camp.id
-                                      ? "campaign-choice now"
-                                      : "campaign-choice"
-                                  }
-                                  aria-pressed={chosenCampaign === camp.id}
-                                  aria-disabled={exporting !== null || camp.package_count === 0}
-                                  href={adminCampaignExportUrl(camp.id)}
-                                  download
-                                  onClick={(e) => onCampaignChoiceClick(e, camp)}
-                                >
+                            {campaigns.map((camp) => {
+                              // Where the campaign sits, and how it is doing.
+                              const details = (
+                                <>
                                   <span className="campaign-name">{camp.name}</span>
                                   <span className="muted">
                                     {camp.start_date ?? "—"} → {camp.finish_date ?? "—"}
@@ -343,22 +341,43 @@ export function CustomersPage() {
                                     {camp.total_rows} lines · {camp.package_count} packages ·{" "}
                                     {camp.return_count} return{camp.return_count === 1 ? "" : "s"}
                                   </span>
-                                  <span className="download">
-                                    {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
-                                  </span>
-                                </a>
-                                {canChooseSaveLocation() && (
-                                  <button
-                                    type="button"
-                                    className="secondary"
-                                    disabled={exporting !== null || camp.package_count === 0}
-                                    onClick={() => saveCampaignAs(camp)}
+                                </>
+                              );
+                              return (
+                                <li key={camp.id}>
+                                  {c.id === user?.customerId ? (
+                                    <Link
+                                      className="campaign-choice"
+                                      to={`/returns?campaign=${camp.id}`}
+                                    >
+                                      {details}
+                                      <span className="download">Process returns →</span>
+                                    </Link>
+                                  ) : (
+                                    <div className="campaign-choice">{details}</div>
+                                  )}
+                                  <a
+                                    className="button secondary"
+                                    aria-disabled={exporting !== null || camp.package_count === 0}
+                                    href={adminCampaignExportUrl(camp.id)}
+                                    download
+                                    onClick={(e) => onCampaignChoiceClick(e, camp)}
                                   >
-                                    Save as…
-                                  </button>
-                                )}
-                              </li>
-                            ))}
+                                    {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
+                                  </a>
+                                  {canChooseSaveLocation() && (
+                                    <button
+                                      type="button"
+                                      className="secondary"
+                                      disabled={exporting !== null || camp.package_count === 0}
+                                      onClick={() => saveCampaignAs(camp)}
+                                    >
+                                      Save as…
+                                    </button>
+                                  )}
+                                </li>
+                              );
+                            })}
                           </ul>
                           <SaveLocationHint />
                         </>

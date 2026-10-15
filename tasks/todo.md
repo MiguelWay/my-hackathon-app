@@ -1180,3 +1180,34 @@ has just `Original ID | Resent as`; the browser session fetched the download (20
 `src/lib/campaignExport.ts`, `src/pages/{RecentReturnsPage,CustomersPage}.tsx`,
 `tests/{exportLayout,api/isolation}.test.ts`
 **Scope:** Medium
+
+## Customer → Campaigns → a campaign opens the returns screen for it
+
+**Description:** "the dependency is the following customer, click to see Campaigns, click to choose a
+campaign, at this point you see the request for returned package ID and funcionality and the Package
+Resend funcionality."
+
+**Progress:** **Done.** The campaign row on the Customers screen was one big download link; the row is
+now a link to `/returns?campaign=<id>` labelled *Process returns →*, and the download kept its own
+controls beside it (`Download .xlsx`, `Save as…`), so nothing that was there was taken away. The
+returns screen reads `?campaign=` and opens with that campaign already chosen, which also narrows the
+lookup to it: type the returned package ID, record the reason, and the resend form is right there.
+
+The link is offered only for the caller's **own company's** campaigns. A super-admin can see every
+customer's campaigns, but returns are scoped to their own `customer_id` (and a platform super-admin
+has none), so linking elsewhere would dead-end on "not attached to a company"; foreign campaigns keep
+the download controls and say why. If a `?campaign=` id is not one of the company's — a stale
+bookmark — nothing is narrowed and a muted line says so. `chosenCampaign` and its `.now` highlight went
+with the old single-link row; `Preparing…` on the download already shows which one is running.
+
+**Verification:** No server or API change, so no new tests: this is client routing. `npm test` —
+**184 tests** still pass · `npx tsc --noEmit` and `npm run build` clean · browser walkthrough as
+`owner@mycompany.test`: Customers → customer 8 → Campaigns shows *vuelta al cole · 2026-10-01 → — ·
+150 lines · 151 packages · 1 return · Process returns → · Download .xlsx · Save as…*; clicking *Process
+returns* lands on `/returns?campaign=6` with **vuelta al cole selected** and the package box focused;
+looking up `PortaP_39` shows the return details and the resend form (*Sent it again? Record the new
+package ID* + `Save resend`), nothing saved. Acme (another customer) renders the same rows without the
+process link and with the copy "Returns are recorded for your own company's campaigns."
+
+**Files:** `src/pages/{CustomersPage,ReturnsPage}.tsx`, `src/styles.css`
+**Scope:** Small

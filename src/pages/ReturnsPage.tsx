@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../auth/AuthContext";
 
@@ -65,6 +65,9 @@ function parseExtra(value: Match["extra_columns"]): Record<string, string> {
 export function ReturnsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  // The Customers screen sends the campaign it was asked about, so the operator lands on it.
+  const [searchParams] = useSearchParams();
+  const requestedCampaign = searchParams.get("campaign") ?? "";
   // A super-admin also runs the campaigns; anyone who processes returns records a resend.
   const isSuperAdmin = user?.role === "superadmin";
   const hasCompany = user?.customerId != null;
@@ -116,11 +119,17 @@ export function ReturnsPage() {
     if (!hasCompany || !isSuperAdmin) return;
     api
       .get<CampaignOption[]>("/campaigns")
-      .then(setCampaigns)
+      .then((list) => {
+        setCampaigns(list);
+        // Open on the campaign that was picked on the Customers screen, when it is one of ours.
+        if (list.some((c) => String(c.id) === requestedCampaign)) {
+          setSelectedCampaign(requestedCampaign);
+        }
+      })
       .catch((e: unknown) =>
         setError(e instanceof Error ? e.message : "Failed to load the campaign list")
       );
-  }, [hasCompany, isSuperAdmin]);
+  }, [hasCompany, isSuperAdmin, requestedCampaign]);
 
   async function search(e: FormEvent) {
     e.preventDefault();
@@ -254,6 +263,14 @@ export function ReturnsPage() {
           {busy ? "Working…" : "Find package"}
         </button>
       </form>
+
+      {requestedCampaign &&
+        campaigns.length > 0 &&
+        !campaigns.some((c) => String(c.id) === requestedCampaign) && (
+          <p className="muted">
+            That campaign is not one of your company&rsquo;s, so nothing was narrowed to it.
+          </p>
+        )}
 
       {error && <p className="error">{error}</p>}
       {notice && <p className="ok">{notice}</p>}
