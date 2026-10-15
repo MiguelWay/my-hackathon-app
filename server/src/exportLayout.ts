@@ -4,7 +4,23 @@
 // `campaign_uploads.columns` held the sender ID. The upload excluded exactly that column from
 // `extra_columns`, so it is the single header not present in any of the upload's rows.
 
-export const NEW_COLUMNS = ["Return Status", "Return Reason", "Resend Of"] as const;
+export const NEW_COLUMNS = ["Return Status", "Return Reason"] as const;
+
+/**
+ * The headings for the chain columns: the original sending ID, then one per resend. Empty when nothing
+ * in scope was sent again, so a campaign with no chains keeps the plain five columns.
+ *
+ * Worded to match the Resend chains report on screen (`src/pages/RecentReturnsPage.tsx`); keep the two
+ * in step. A different shape here is what the export used to have, with a single "Resend Of".
+ */
+export function chainColumns(maxResends: number): string[] {
+  if (maxResends === 0) return [];
+  const words = ["as", "again as", "a 3rd time as", "a 4th time as", "a 5th time as"];
+  return [
+    "Original ID",
+    ...Array.from({ length: maxResends }, (_, i) => `Resent ${words[i] ?? `${i + 1}th time as`}`),
+  ];
+}
 
 /** Header used for rows typed in by hand (a resend) when no uploaded header can be borrowed. */
 export const MANUAL_SENDER_HEADER = "Package ID";
@@ -75,8 +91,17 @@ export function cellFor(pkg: PackageLike, column: string, layout: ExportLayout):
   return parseExtraColumns(pkg.extra_columns)[column] ?? "";
 }
 
-/** sender_id of the attempt each resend replaced, keyed by package id (chains ordered by id). */
-export function resendOfMap(chainPackages: PackageLike[]): Record<number, string> {
+/** A chain of attempts: the sending ID it started with, then each one it went out as afterwards. */
+export interface Chain {
+  original: string;
+  resends: string[];
+}
+
+/**
+ * The chain each package belongs to, keyed by package id, so every member of a chain can print the
+ * same row of IDs. Chains of one are left out: a package that never went out again has none to report.
+ */
+export function chainsByPackage(chainPackages: PackageLike[]): Record<number, Chain> {
   const byRoot = new Map<number, PackageLike[]>();
   for (const p of chainPackages) {
     const root = p.chain_id ?? p.id;
@@ -84,10 +109,15 @@ export function resendOfMap(chainPackages: PackageLike[]): Record<number, string
     if (list) list.push(p);
     else byRoot.set(root, [p]);
   }
-  const map: Record<number, string> = {};
+  const map: Record<number, Chain> = {};
   for (const members of byRoot.values()) {
+    if (members.length < 2) continue;
     const ordered = [...members].sort((a, b) => a.id - b.id);
-    for (let i = 1; i < ordered.length; i++) map[ordered[i].id] = ordered[i - 1].sender_id;
+    const chain: Chain = {
+      original: ordered[0].sender_id,
+      resends: ordered.slice(1).map((p) => p.sender_id),
+    };
+    for (const p of ordered) map[p.id] = chain;
   }
   return map;
 }

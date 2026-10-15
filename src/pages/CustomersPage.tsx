@@ -188,7 +188,10 @@ export function CustomersPage() {
     setChosenCampaign(campaign.id);
     setExporting(campaign.id);
     try {
-      const filename = await downloadExport(adminCampaignExportUrl(campaign.id), campaign.id);
+      const filename = await downloadExport(
+        adminCampaignExportUrl(campaign.id),
+        exportFileName(campaign.id, campaign.name)
+      );
       setNotice(`Downloaded ${campaign.name} as ${filename}, in your browser's download folder.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
@@ -206,8 +209,7 @@ export function CustomersPage() {
     try {
       const result = await saveExportAs(
         adminCampaignExportUrl(campaign.id),
-        exportFileName(campaign.id, campaign.name),
-        campaign.id
+        exportFileName(campaign.id, campaign.name)
       );
       setNotice(saveNotice(result));
     } catch (err) {

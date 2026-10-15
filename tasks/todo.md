@@ -1145,3 +1145,38 @@ caller 401. Browser-verified at both widths (two columns for customer 8, four fo
 
 **Files:** `server/src/returns.ts`, `src/pages/RecentReturnsPage.tsx`, `tests/api/isolation.test.ts`
 **Scope:** Small
+
+## The chain report downloads, carries the campaign and reason, and the export gained the same columns
+
+**Description:** "yes as download, incluide campaign return reason, yes make change, yes to change in
+.xlsx."
+
+**Progress:** **Done, three parts.**
+1. **Download.** *Resend chains* now has `Download .xlsx` and `Save as…`, like the campaign card, and
+   the server sends `resend-chains.xlsx`. It is built from the same loader as the screen
+   (`server/src/chains.ts`), so the file and the table can never disagree; it is readable by a `user`,
+   since it holds nothing the report they already see does not.
+2. **Two more columns.** The report and the file both carry **Campaign** (where the original was sent)
+   and **Return Reason** (why it came back), after the linking columns.
+3. **The campaign .xlsx gained the chain columns.** The single `Resend Of` is gone — one column could
+   not describe a chain of four — replaced by `Original ID`, `Resent as`, `Resent again as`, … as wide
+   as the deepest chain the campaign touches, and every member of a chain carries the whole row of IDs
+   so any row names the original. A campaign with no resends keeps its old shape (no chain columns).
+   `resendOfMap` (which named the attempt each resend replaced) went with it; `chainsByPackage` and
+   `chainColumns` replace it, so the export and the report are worded the same.
+
+**Verification:** `npm test` — **184 tests**: the `resendOfMap` suite became `chainsByPackage` +
+`chainColumns`; the chain report tests assert the campaign and reason, the download's headers and its
+first row, and the empty case; and a test reads the campaign export back to prove its chain columns
+and that a resend row names the original. `npm run typecheck:api` and `npm run build` clean · live:
+Acme's report reads `PQ555000002ES → PQ777000123ES → PQ888000999ES → PQ999000111ES` with
+`April drop` / `dirección incorrecta`, and its `resend-chains.xlsx` matches cell for cell; campaign 1
+exports headers `… Return Status | Return Reason | Original ID | Resent as | Resent again as | Resent a
+3rd time as` with all four members carrying the chain and a lone package left blank, while campaign 6
+has just `Original ID | Resent as`; the browser session fetched the download (200,
+`resend-chains.xlsx`, 6,649 bytes) and the card renders the four columns and both controls.
+
+**Files:** `server/src/{chains.ts,exportLayout.ts,export.ts,returns.ts}`,
+`src/lib/campaignExport.ts`, `src/pages/{RecentReturnsPage,CustomersPage}.tsx`,
+`tests/{exportLayout,api/isolation}.test.ts`
+**Scope:** Medium

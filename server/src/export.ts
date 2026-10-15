@@ -2,14 +2,17 @@ import { Router } from "express";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket } from "mysql2";
 import ExcelJS from "exceljs";
+import type { Worksheet } from "exceljs";
 import { pool } from "./db";
+import { loadChains } from "./chains";
 import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
 import { optionalPositiveInt } from "./validate";
 import {
   buildExportLayout,
   cellFor,
+  chainsByPackage,
+  chainColumns,
   NEW_COLUMNS,
-  resendOfMap,
   type PackageLike,
   type UploadLike,
 } from "./exportLayout";
@@ -68,6 +71,30 @@ function fileSlug(name: string): string {
 
 /** The same slug for an uploaded list, without the .xlsx on the end (it is added back later). */
 const listSlug = (filename: string) => fileSlug(filename.replace(/\.xlsx?$/i, ""));
+
+/** The bold, tinted header row every sheet starts with. */
+function writeHeader(sheet: Worksheet, header: string[]): void {
+  sheet.addRow(header);
+  const row = sheet.getRow(1);
+  row.font = { bold: true };
+  row.eachCell({ includeEmpty: true }, (cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+  });
+}
+
+/** Column widths, sized from the data so the sheet is readable without manual resizing. */
+function sizeColumns(sheet: Worksheet, header: string[]): void {
+  const widths = header.map((h) => h.length);
+  sheet.eachRow({ includeEmpty: false }, (row) => {
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      const text = cell.value === null || cell.value === undefined ? "" : String(cell.value);
+      widths[colNumber - 1] = Math.max(widths[colNumber - 1] ?? 0, text.length);
+    });
+  });
+  widths.forEach((w, i) => {
+    sheet.getColumn(i + 1).width = Math.min(MAX_WIDTH, Math.max(10, w + 2));
+  });
+}
 
 /**
  * Builds one campaign's .xlsx and sends it.
@@ -143,7 +170,7 @@ export async function sendCampaignExport(
   const packages = rows.map(toPackageLike);
   const layout = buildExportLayout(uploads, packages);
 
-  // "Resend Of" needs the siblings of every chain touched by this campaign.
+  // The chain columns need the siblings of every chain touched by this campaign.
   const roots = [...new Set(packages.map((p) => p.chain_id ?? p.id))];
   const chainPackages: PackageLike[] = [];
   for (let i = 0; i < roots.length; i += ROOT_CHUNK) {
@@ -156,7 +183,18 @@ export async function sendCampaignExport(
     );
     chainPackages.push(...chainRows.map(toPackageLike));
   }
-  const resendOf = resendOfMap(chainPackages);
+  const chains = chainsByPackage(chainPackages);
+  // As wide as the deepest chain this campaign touches, so every row's row of IDs lines up.
+  const maxResends = Object.values(chains).reduce(
+    (deepest, c) => Math.max(deepest, c.resends.length),
+    0
+  );
+  const chainHeaders = chainColumns(maxResends);
+  const chainCellsFor = (pkg: PackageLike): string[] => {
+    const chain = chains[pkg.id];
+    if (!chain) return chainHeaders.map(() => "");
+    return [chain.original, ...Array.from({ length: maxResends }, (_, i) => chain.resends[i] ?? "")];
+  };
 
   // ---- build the workbook ----
   const workbook = new ExcelJS.Workbook();
@@ -164,13 +202,8 @@ export async function sendCampaignExport(
   workbook.created = new Date();
   const sheet = workbook.addWorksheet(sheetName(campaign.name));
 
-  const header = [...layout.columns, ...NEW_COLUMNS];
-  sheet.addRow(header);
-  const headerRow = sheet.getRow(1);
-  headerRow.font = { bold: true };
-  headerRow.eachCell({ includeEmpty: true }, (cell) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
-  });
+  const header = [...layout.columns, ...NEW_COLUMNS, ...chainHeaders];
+  writeHeader(sheet, header);
 
   for (const row of rows) {
     const pkg = toPackageLike(row);
@@ -179,7 +212,7 @@ export async function sendCampaignExport(
       ...layout.columns.map((c) => cellFor(pkg, c, layout)),
       returned ? "Returned" : "Sent",
       row.reason_label ? String(row.reason_label) : "",
-      resendOf[pkg.id] ?? "",
+      ...chainCellsFor(pkg),
     ]);
     if (returned) {
       added.eachCell({ includeEmpty: true }, (cell) => {
@@ -189,16 +222,7 @@ export async function sendCampaignExport(
   }
 
   // Column widths, sized from the data so the sheet is readable without manual resizing.
-  const widths = header.map((h) => h.length);
-  sheet.eachRow({ includeEmpty: false }, (row) => {
-    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-      const text = cell.value === null || cell.value === undefined ? "" : String(cell.value);
-      widths[colNumber - 1] = Math.max(widths[colNumber - 1] ?? 0, text.length);
-    });
-  });
-  widths.forEach((w, i) => {
-    sheet.getColumn(i + 1).width = Math.min(MAX_WIDTH, Math.max(10, w + 2));
-  });
+  sizeColumns(sheet, header);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const filename =
@@ -210,6 +234,49 @@ export async function sendCampaignExport(
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   );
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Length", String(buffer.byteLength));
+  res.end(Buffer.from(buffer));
+}
+
+/**
+ * Builds the company's chain report as a .xlsx.
+ *
+ * One row per chain: the original sending ID, then each package it went out as, then where the original
+ * was sent and why it came back. The same rows the Resend chains card shows, read off the same query, so
+ * what is downloaded can never disagree with what was on screen.
+ */
+export async function sendChainsExport(res: Response, customerId: number | null): Promise<void> {
+  const chains = await loadChains(customerId);
+  if (!chains.length) {
+    res.status(400).json({ error: "this company has no resends to report" });
+    return;
+  }
+
+  const maxResends = chains.reduce((deepest, c) => Math.max(deepest, c.resends.length), 0);
+  const header = [...chainColumns(maxResends), "Campaign", "Return Reason"];
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Package Returns";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Resend chains");
+  writeHeader(sheet, header);
+
+  for (const chain of chains) {
+    sheet.addRow([
+      chain.original_sender_id,
+      ...Array.from({ length: maxResends }, (_, i) => chain.resends[i] ?? ""),
+      chain.campaign_name,
+      chain.reason_label ?? "",
+    ]);
+  }
+  sizeColumns(sheet, header);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader("Content-Disposition", 'attachment; filename="resend-chains.xlsx"');
   res.setHeader("Content-Length", String(buffer.byteLength));
   res.end(Buffer.from(buffer));
 }

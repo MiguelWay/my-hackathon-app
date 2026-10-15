@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildExportLayout,
   cellFor,
+  chainsByPackage,
+  chainColumns,
   MANUAL_SENDER_HEADER,
   parseExtraColumns,
-  resendOfMap,
   senderHeaderFor,
   type PackageLike,
 } from "../server/src/exportLayout";
@@ -101,28 +102,49 @@ describe("cellFor", () => {
   });
 });
 
-describe("resendOfMap", () => {
-  it("links each resend to the attempt it replaced", () => {
-    const map = resendOfMap([
+describe("chainColumns", () => {
+  it("is empty when nothing was resent, so an export with no chains keeps its shape", () => {
+    expect(chainColumns(0)).toEqual([]);
+  });
+
+  it("names the original, then one heading per resend, in order", () => {
+    expect(chainColumns(1)).toEqual(["Original ID", "Resent as"]);
+    expect(chainColumns(3)).toEqual([
+      "Original ID",
+      "Resent as",
+      "Resent again as",
+      "Resent a 3rd time as",
+    ]);
+  });
+
+  it("falls back to a numbered heading past the words it has", () => {
+    expect(chainColumns(6)[6]).toBe("Resent 6th time as");
+  });
+});
+
+describe("chainsByPackage", () => {
+  it("gives every member of a chain the same row of sending IDs", () => {
+    const chains = chainsByPackage([
       { id: 3, chain_id: null, sender_id: "A", upload_id: 1, extra_columns: {} },
       { id: 8, chain_id: 3, sender_id: "B", upload_id: null, extra_columns: {} },
       { id: 9, chain_id: 3, sender_id: "C", upload_id: null, extra_columns: {} },
     ]);
-    expect(map).toEqual({ 8: "A", 9: "B" });
+    const expected = { original: "A", resends: ["B", "C"] };
+    expect(chains).toEqual({ 3: expected, 8: expected, 9: expected });
   });
 
-  it("leaves a chain of one alone", () => {
-    const map = resendOfMap([
-      { id: 1, chain_id: null, sender_id: "A", upload_id: 1, extra_columns: {} },
-    ]);
-    expect(map).toEqual({});
+  it("leaves a chain of one out: a package never sent again has none to report", () => {
+    expect(
+      chainsByPackage([{ id: 1, chain_id: null, sender_id: "A", upload_id: 1, extra_columns: {} }])
+    ).toEqual({});
   });
 
-  it("orders members by id regardless of input order", () => {
-    const map = resendOfMap([
+  it("orders the attempts by id regardless of input order", () => {
+    const chains = chainsByPackage([
       { id: 9, chain_id: 3, sender_id: "C", upload_id: null, extra_columns: {} },
       { id: 3, chain_id: null, sender_id: "A", upload_id: 1, extra_columns: {} },
+      { id: 8, chain_id: 3, sender_id: "B", upload_id: null, extra_columns: {} },
     ]);
-    expect(map).toEqual({ 9: "A" });
+    expect(chains[9]).toEqual({ original: "A", resends: ["B", "C"] });
   });
 });

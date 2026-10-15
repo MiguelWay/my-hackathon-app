@@ -3,6 +3,8 @@ import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { requireAuth, requireCompany, type AuthUser } from "./auth";
+import { loadChains } from "./chains";
+import { sendChainsExport } from "./export";
 import { normalizeSenderId } from "./senderId";
 import { chainRootId, parseResendBody } from "./resends";
 import { optionalPositiveInt } from "./validate";
@@ -190,44 +192,20 @@ returnsRouter.get(
 );
 
 // ---- every chain, laid out end to end: the original ID, then each resend ----
-// Only chains that were actually resent appear (a chain of one is just a package). Rows are handed
-// back already grouped, and in attempt order, so a screen can print them as columns.
+// Only chains that were actually resent appear (a chain of one is just a package). The same loader
+// backs the .xlsx below, so the download and the screen can never disagree.
 returnsRouter.get(
   "/chains",
   ah(async (_req, res) => {
-    const user = currentUser(res);
-    const [rows] = await pool.query<
-      (RowDataPacket & { id: number; sender_id: string; chain_id: number | null })[]
-    >(
-      `SELECT p.id, p.sender_id, p.chain_id
-         FROM packages p
-        WHERE p.customer_id = ?
-          AND COALESCE(p.chain_id, p.id) IN (
-            SELECT root FROM (
-              SELECT COALESCE(chain_id, id) AS root
-                FROM packages
-               WHERE customer_id = ?
-               GROUP BY root
-              HAVING COUNT(*) > 1
-            ) AS chained
-          )
-        ORDER BY COALESCE(p.chain_id, p.id), p.id`,
-      [user.customerId, user.customerId]
-    );
+    res.json(await loadChains(currentUser(res).customerId));
+  })
+);
 
-    // The first row of each group is the lowest id, so it is the original the rest were resent from.
-    const chains: { original_id: number; original_sender_id: string; resends: string[] }[] = [];
-    let current: (typeof chains)[number] | null = null;
-    for (const row of rows) {
-      const root = row.chain_id ?? row.id;
-      if (!current || current.original_id !== root) {
-        current = { original_id: root, original_sender_id: row.sender_id, resends: [] };
-        chains.push(current);
-      } else {
-        current.resends.push(row.sender_id);
-      }
-    }
-    res.json(chains);
+// The chain report as a file, for pruning the source database outside the app.
+returnsRouter.get(
+  "/chains/export",
+  ah(async (_req, res) => {
+    await sendChainsExport(res, currentUser(res).customerId);
   })
 );
 

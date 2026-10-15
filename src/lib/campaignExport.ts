@@ -42,6 +42,12 @@ export const campaignExportUrl = (campaignId: number): string =>
 export const adminCampaignExportUrl = (campaignId: number): string =>
   `${baseUrl}/admin/campaigns/${campaignId}/export`;
 
+/** The chain report of the caller's own company: the original ID, then every resend. */
+export const chainsExportUrl = (): string => `${baseUrl}/returns/chains/export`;
+
+/** The name the server gives the chain report, so the save dialog can suggest it before it is built. */
+export const CHAINS_EXPORT_FILENAME = "resend-chains.xlsx";
+
 /** The name the server gives the file, so the save dialog can suggest it before the file is built. */
 export function exportFileName(campaignId: number, campaignName: string): string {
   const slug =
@@ -54,7 +60,7 @@ export function exportFileName(campaignId: number, campaignName: string): string
   return `campaign-${campaignId}-${slug}.xlsx`;
 }
 
-async function fetchExport(url: string, campaignIdHint: number): Promise<{ blob: Blob; filename: string }> {
+async function fetchExport(url: string, fallbackName: string): Promise<{ blob: Blob; filename: string }> {
   const res = await fetch(url, { credentials: "include" });
   if (!res.ok) {
     let message = res.statusText;
@@ -70,7 +76,7 @@ async function fetchExport(url: string, campaignIdHint: number): Promise<{ blob:
   const named = /filename="([^"]+)"/.exec(disposition);
   return {
     blob: await res.blob(),
-    filename: named?.[1] ?? `campaign-${campaignIdHint}.xlsx`,
+    filename: named?.[1] ?? fallbackName,
   };
 }
 
@@ -79,8 +85,8 @@ async function fetchExport(url: string, campaignIdHint: number): Promise<{ blob:
  * dialog, so it works everywhere — including browsers (and automated windows) where a save dialog cannot
  * be shown.
  */
-export async function downloadExport(url: string, campaignIdHint = 0): Promise<string> {
-  const { blob, filename } = await fetchExport(url, campaignIdHint);
+export async function downloadExport(url: string, fallbackName = "export.xlsx"): Promise<string> {
+  const { blob, filename } = await fetchExport(url, fallbackName);
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = objectUrl;
@@ -119,11 +125,7 @@ export function saveNotice(result: SaveResult): string {
  * `viaDownload`: true when the dialog could not be shown at all, in which case the file was downloaded
  * the ordinary way instead — a refusal must never look like a failure.
  */
-export async function saveExportAs(
-  url: string,
-  suggestedName: string,
-  campaignIdHint = 0
-): Promise<SaveResult> {
+export async function saveExportAs(url: string, suggestedName: string): Promise<SaveResult> {
   const picker = savePicker();
   if (!picker) throw new Error("this browser cannot open a save dialog");
 
@@ -144,10 +146,10 @@ export async function saveExportAs(
     }
     // Anything else — including an abort that came back instantly, which means the browser never showed
     // a dialog (an automated window does this) — falls back to the ordinary download.
-    return { name: await downloadExport(url, campaignIdHint), viaDownload: true };
+    return { name: await downloadExport(url, suggestedName), viaDownload: true };
   }
 
-  const { blob } = await fetchExport(url, campaignIdHint);
+  const { blob } = await fetchExport(url, suggestedName);
   const writable = await handle.createWritable();
   await writable.write(blob);
   await writable.close();

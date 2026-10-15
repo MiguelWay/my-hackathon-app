@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
-import { campaignExportUrl, canChooseSaveLocation, downloadExport, exportFileName, saveExportAs, saveNotice } from "../lib/campaignExport";
+import {
+  CHAINS_EXPORT_FILENAME,
+  campaignExportUrl,
+  canChooseSaveLocation,
+  chainsExportUrl,
+  downloadExport,
+  exportFileName,
+  saveExportAs,
+  saveNotice,
+} from "../lib/campaignExport";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { useAuth } from "../auth/AuthContext";
 
@@ -55,11 +64,17 @@ function share(part: number, whole: number): string {
 interface ChainRow {
   original_id: number;
   original_sender_id: string;
+  campaign_name: string;
+  /** Why the store sent the original back, or null when no reason was recorded. */
+  reason_label: string | null;
   /** The sender IDs of the attempts after the original, in the order they were sent. */
   resends: string[];
 }
 
-/** The heading for the nth resend column: "Resent as", "Resent again as", "Resent a 3rd time as"… */
+/**
+ * The heading for the nth resend column: "Resent as", "Resent again as", "Resent a 3rd time as"…
+ * Worded to match the .xlsx (`chainColumns` in `server/src/exportLayout.ts`); keep the two in step.
+ */
 const RESEND_WORDS = ["as", "again as", "a 3rd time as", "a 4th time as", "a 5th time as"];
 function resendHeader(i: number): string {
   return `Resent ${RESEND_WORDS[i - 1] ?? `${i}th time as`}`;
@@ -89,6 +104,7 @@ export function RecentReturnsPage() {
   const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [chainsExporting, setChainsExporting] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -132,7 +148,10 @@ export function RecentReturnsPage() {
     setExportNotice(null);
     setExporting(true);
     try {
-      const filename = await downloadExport(campaignExportUrl(campaign.id), campaign.id);
+      const filename = await downloadExport(
+        campaignExportUrl(campaign.id),
+        exportFileName(campaign.id, campaign.name)
+      );
       setExportNotice(
         `Downloaded ${campaign.name} as ${filename}, in your browser's download folder.`
       );
@@ -156,14 +175,44 @@ export function RecentReturnsPage() {
     try {
       const result = await saveExportAs(
         campaignExportUrl(campaign.id),
-        exportFileName(campaign.id, campaign.name),
-        campaign.id
+        exportFileName(campaign.id, campaign.name)
       );
       setExportNotice(saveNotice(result));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Could not open a save dialog");
     } finally {
       setExporting(false);
+    }
+  }
+
+  /** The chain report: one row per chain, the same rows the table above shows. */
+  async function runChainsExport() {
+    setError(null);
+    setExportNotice(null);
+    setChainsExporting(true);
+    try {
+      const filename = await downloadExport(chainsExportUrl(), CHAINS_EXPORT_FILENAME);
+      setExportNotice(
+        `Downloaded the chain report as ${filename}, in your browser's download folder.`
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setChainsExporting(false);
+    }
+  }
+
+  async function runChainsSaveAs() {
+    setError(null);
+    setExportNotice(null);
+    setChainsExporting(true);
+    try {
+      const result = await saveExportAs(chainsExportUrl(), CHAINS_EXPORT_FILENAME);
+      setExportNotice(saveNotice(result));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not open a save dialog");
+    } finally {
+      setChainsExporting(false);
     }
   }
 
@@ -285,6 +334,8 @@ export function RecentReturnsPage() {
                   {resendHeaders.map((h, i) => (
                     <th key={i}>{h}</th>
                   ))}
+                  <th>Campaign</th>
+                  <th>Return Reason</th>
                 </tr>
               </thead>
               <tbody>
@@ -296,11 +347,40 @@ export function RecentReturnsPage() {
                         {c.resends[i] ?? <span className="muted">—</span>}
                       </td>
                     ))}
+                    <td>{c.campaign_name}</td>
+                    <td>
+                      {c.reason_label ?? <span className="muted">—</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <div className="btn-row">
+            <a
+              className={chainsExporting ? "button secondary disabled" : "button secondary"}
+              href={chainsExportUrl()}
+              download
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                void runChainsExport();
+              }}
+            >
+              {chainsExporting ? "Preparing…" : "Download .xlsx"}
+            </a>
+            {canChooseSaveLocation() && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={chainsExporting}
+                onClick={runChainsSaveAs}
+              >
+                Save as…
+              </button>
+            )}
+          </div>
+          <SaveLocationHint />
         </div>
       )}
 

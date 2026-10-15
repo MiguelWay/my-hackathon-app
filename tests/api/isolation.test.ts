@@ -284,6 +284,7 @@ describe("anonymous callers are rejected everywhere", () => {
     ["GET", "/returns/reasons"],
     ["GET", "/returns/summary"],
     ["GET", "/returns/chains"],
+    ["GET", "/returns/chains/export"],
     ["GET", "/returns/lookup?senderId=ANY"],
     ["POST", "/returns"],
     ["POST", "/returns/resend"],
@@ -655,6 +656,8 @@ describe("resend chains", () => {
   interface ChainRow {
     original_id: number;
     original_sender_id: string;
+    campaign_name: string;
+    reason_label: string | null;
     resends: string[];
   }
 
@@ -669,6 +672,9 @@ describe("resend chains", () => {
     expect(chain!.resends[0]).toBe(SENDER_A_RESEND);
     expect(chain!.resends).toContain(SENDER_A_SECOND_RESEND);
     expect(chain!.resends).not.toContain(SENDER_A_RETURNED);
+    // Where it was sent, and why it came back.
+    expect(chain!.campaign_name).toBe("Alpha March");
+    expect(chain!.reason_label).toBe("estacionada");
   });
 
   it("lists only chains that were actually resent, and only the caller's company", async () => {
@@ -685,6 +691,65 @@ describe("resend chains", () => {
     const res = await alphaUser.get<ChainRow[]>("/returns/chains");
     expect(res.status).toBe(200);
     expect(res.body.map((c) => c.original_sender_id)).toContain(SENDER_A_RETURNED);
+  });
+
+  it("downloads the same rows as a .xlsx", async () => {
+    const res = await alpha.raw("/returns/chains/export");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("spreadsheetml");
+    expect(res.headers.get("content-disposition")).toContain("resend-chains.xlsx");
+
+    const wb = XLSX.read(new Uint8Array(res.buffer), { type: "array" });
+    const matrix = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], {
+      header: 1,
+      raw: false,
+    });
+    // As many resend columns as the deepest chain needs, then where it went and why it came back.
+    expect(matrix[0]).toEqual([
+      "Original ID",
+      "Resent as",
+      "Resent again as",
+      "Campaign",
+      "Return Reason",
+    ]);
+    const row = matrix.find((r) => String(r[0]) === SENDER_A_RETURNED);
+    expect(row).toBeDefined();
+    expect(row!.slice(1)).toEqual([
+      SENDER_A_RESEND,
+      SENDER_A_SECOND_RESEND,
+      "Alpha March",
+      "estacionada",
+    ]);
+  });
+
+  it("says so when the company has no resends to report", async () => {
+    const res = await beta.get<{ error: string }>("/returns/chains/export");
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "this company has no resends to report" });
+  });
+
+  it("puts the same chain columns on the campaign export", async () => {
+    const res = await alpha.raw(`/campaigns/${alphaCampaign}/export`);
+    expect(res.status).toBe(200);
+
+    const wb = XLSX.read(new Uint8Array(res.buffer), { type: "array" });
+    const matrix = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], {
+      header: 1,
+      raw: false,
+    });
+    // The uploaded columns, the two report columns, then the chain — original first. The single
+    // "Resend Of" column is gone: one column could not show a chain of three.
+    expect(matrix[0].slice(-5)).toEqual([
+      "Return Status",
+      "Return Reason",
+      "Original ID",
+      "Resent as",
+      "Resent again as",
+    ]);
+    const row = matrix.find((r) => String(r[2]) === SENDER_A_RESEND);
+    expect(row).toBeDefined();
+    // Every member of the chain carries the whole row of IDs, so any row names the original.
+    expect(row!.slice(-3)).toEqual([SENDER_A_RETURNED, SENDER_A_RESEND, SENDER_A_SECOND_RESEND]);
   });
 });
 
