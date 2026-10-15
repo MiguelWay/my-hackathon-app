@@ -331,11 +331,11 @@ details.card[open] > summary {
   margin-bottom: 12px;
 }
 
-/* A titled section inside a card that opens on click, where a heading used to be. */
+/* A titled section inside a card that opens on click, under the card heading. */
 details.section > summary {
   cursor: pointer;
-  font-weight: 700;
-  font-size: 16px;
+  font-weight: 600;
+  font-size: 15px;
 }
 
 details.section[open] > summary {
