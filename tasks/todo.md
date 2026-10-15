@@ -863,3 +863,20 @@ folds on its own.
 
 **Files:** `src/pages/CampaignDetailPage.tsx`
 **Scope:** Small
+
+## The download selector came back out
+
+**Description:** "remove" — pointed at the `Download` selector on the campaign page.
+
+**Progress:** **Done.** The selector and its label are gone from the *Lists uploaded* accordion, which
+now holds the file lines and a single `Download .xlsx` button for the whole campaign. The API parameter
+`?uploadId=` and its three tests are kept: both export routes still accept it, so restoring the selector
+is a small change if it is wanted again (strip the parameter instead if not).
+
+**Verification:** `npm test` — **166 tests** · `npm run build` clean · browser-verified on *vuelta al
+cole*: the page has no `<select>`, the accordion reads `Lists uploaded · 1 list · 150 lines` with the file
+line and one button, and downloading gave `campaign-6-vuelta-al-cole.xlsx` with the notice
+`Exported 151 packages to …`.
+
+**Files:** `src/pages/CampaignDetailPage.tsx`, `src/lib/campaignExport.ts`
+**Scope:** Small
