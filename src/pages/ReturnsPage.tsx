@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../auth/AuthContext";
@@ -89,6 +89,17 @@ export function ReturnsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  /** Clears the current lookup and puts the cursor back in the search box, ready for the next box. */
+  function recordAnother() {
+    setTerm("");
+    setMatches(null);
+    setNotes({});
+    setResends({});
+    setError(null);
+    searchRef.current?.focus();
+  }
 
   const loadReference = useCallback(async () => {
     const [r, recentRows, camps] = await Promise.all([
@@ -210,6 +221,7 @@ export function ReturnsPage() {
         <label>
           Package ID
           <input
+            ref={searchRef}
             value={term}
             onChange={(e) => setTerm(e.target.value)}
             placeholder="e.g. PortaP_1"
@@ -345,6 +357,14 @@ export function ReturnsPage() {
           </div>
         );
       })}
+
+      {matches !== null && (
+        <div className="btn-row next-action">
+          <button type="button" onClick={recordAnother} disabled={busy}>
+            {matches.length > 0 ? "Record another package" : "Search again"}
+          </button>
+        </div>
+      )}
 
       <h2>Recently recorded</h2>
       {recent.length === 0 ? (

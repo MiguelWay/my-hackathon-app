@@ -317,3 +317,8 @@ ul.user-list li {
   padding: 4px 0;
   font-size: 13px;
 }
+
+/* The "do the next one" button, right under the result you just acted on. */
+.next-action {
+  margin: 0 0 24px;
+}
