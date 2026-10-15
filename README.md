@@ -6,7 +6,7 @@ resends, and export a clearly-flagged list so closed stores are not sent to agai
 **Stack:** React + Vite (SPA) · Node.js + Express (API) · MySQL / MariaDB. No Supabase.
 
 Docs: `SPECIFICATION.md` (spec) · `tasks/plan.md` + `tasks/todo.md` (plan) · `docs/intent/` (intent) ·
-`docs/deploy-plesk.md` (deployment).
+`docs/deploy-plesk.md` (deployment) · `SECURITY.md` (security review).
 
 ## Prerequisites
 - Node.js 20+ (tested with 24.21.0)
@@ -35,6 +35,17 @@ Docs: `SPECIFICATION.md` (spec) · `tasks/plan.md` + `tasks/todo.md` (plan) · `
 In production **one process serves both the API and the SPA**: JSON endpoints live under `/api`, and
 the built `dist/` is served from the same origin with an SPA deep-link fallback. See
 [`docs/deploy-plesk.md`](docs/deploy-plesk.md) for the full Plesk deployment guide.
+
+## Security
+See [`SECURITY.md`](SECURITY.md) for the threat model, what was fixed, what was checked and found
+safe, and the accepted risks. Two defaults worth knowing:
+
+- **Self-signup is off in production** (`ALLOW_SELF_SIGNUP`) — create customers with the platform
+  super-admin instead.
+- **Auth endpoints are rate limited** — 10 failed attempts per IP per 15 minutes.
+
+`npm test` resets a dedicated test database, so the API suites run one file at a time
+(`vitest.config.ts` → `fileParallelism: false`).
 
 ## Local dev database (standalone MySQL, no Homebrew)
 This machine runs a self-contained MySQL at `~/.local/mysql`:

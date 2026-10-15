@@ -151,8 +151,13 @@ that has already been applied** — add a new one instead.
 ## Security notes
 
 - `.env` lives outside `dist/` and is git-ignored; keep it `chmod 600`.
+- **Self-signup is disabled in production** unless you set `ALLOW_SELF_SIGNUP=true`. Create customers
+  with the platform super-admin (step 4).
+- Auth endpoints are rate limited (10 failed attempts per IP per 15 minutes). If you lock yourself out
+  while testing, wait for the window to pass or restart the app.
 - In production: passwords hashed with bcrypt (cost 12); sessions stored only as SHA-256 token hashes;
-  cookie is `httpOnly` + `SameSite=Lax` + `Secure`.
+  cookie is `httpOnly` + `SameSite=Lax` + `Secure`; security headers (strict CSP) on every response.
 - Per-customer isolation is enforced in every query and proved by `tests/api/isolation.test.ts`.
+- Full review, including the accepted dependency risks: [`../SECURITY.md`](../SECURITY.md).
 - Turn on Plesk's **Backup Manager** for the database.
 - The server never needs to be reachable from the internet directly — only the domain's HTTPS port.

@@ -106,7 +106,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closePool();
-  await server.close();
+  await server?.close();
 });
 
 describe("the app works for the owner (control group)", () => {

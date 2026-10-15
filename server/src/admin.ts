@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { requireAuth, requireSuperAdmin } from "./auth";
+import { boundedString, isValidEmail, MAX_NAME_LENGTH, passwordProblem } from "./validate";
 
 const ah =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler =>
@@ -32,9 +33,12 @@ adminRouter.post(
   "/customers",
   ah(async (req, res) => {
     const { name } = req.body ?? {};
-    if (!name || !String(name).trim()) return res.status(400).json({ error: "name is required" });
+    const customerName = boundedString(name, MAX_NAME_LENGTH);
+    if (!customerName) {
+      return res.status(400).json({ error: "name is required (max 255 characters)" });
+    }
     const [result] = await pool.query<ResultSetHeader>("INSERT INTO customers (name) VALUES (?)", [
-      String(name).trim(),
+      customerName,
     ]);
     const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT id, name, created_at FROM customers WHERE id = ?",
@@ -60,25 +64,25 @@ adminRouter.post(
   ah(async (req, res) => {
     const customerId = Number(req.params.id);
     const { email, password } = req.body ?? {};
-    if (!email || !password) return res.status(400).json({ error: "email and password are required" });
-    if (String(password).length < 8) {
-      return res.status(400).json({ error: "password must be at least 8 characters" });
-    }
+    if (!isValidEmail(email)) return res.status(400).json({ error: "a valid email is required" });
+    const pwProblem = passwordProblem(password);
+    if (pwProblem) return res.status(400).json({ error: pwProblem });
+    const adminEmail = String(email).trim();
     const [cust] = await pool.query<RowDataPacket[]>("SELECT id FROM customers WHERE id = ?", [
       customerId,
     ]);
     if (!cust[0]) return res.status(404).json({ error: "customer not found" });
 
     const [existing] = await pool.query<RowDataPacket[]>("SELECT id FROM users WHERE email = ?", [
-      email,
+      adminEmail,
     ]);
     if (existing[0]) return res.status(409).json({ error: "email already registered" });
 
     const hash = await bcrypt.hash(String(password), 12);
     const [result] = await pool.query<ResultSetHeader>(
       "INSERT INTO users (customer_id, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
-      [customerId, email, hash]
+      [customerId, adminEmail, hash]
     );
-    res.status(201).json({ id: result.insertId, email, role: "admin", customerId });
+    res.status(201).json({ id: result.insertId, email: adminEmail, role: "admin", customerId });
   })
 );

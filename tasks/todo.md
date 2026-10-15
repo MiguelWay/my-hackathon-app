@@ -357,3 +357,37 @@ are no credentials in the repo). The app is now production-shaped:
 
 ## Checkpoint: Complete
 - [ ] All success criteria in `SPECIFICATION.md` met · app live on Plesk · ready for review
+
+---
+
+## Security hardening (post-Task 12)
+
+**Description:** Threat-model and audit the app, then fix what is actually exploitable.
+
+**Progress:** **Done.** Full write-up in `SECURITY.md`.
+
+**Fixed:** security headers via helmet (strict CSP, `nosniff`, `frame-ancestors`, HSTS, no
+`X-Powered-By`) · brute-force protection on login/register (10 failed attempts per IP per 15 min, plus
+300 req/min across `/api`) · **open self-signup closed in production** (`ALLOW_SELF_SIGNUP`) · password
+length capped before bcrypt (CPU DoS) · constant-time login (no user enumeration by timing) · boundary
+length/format validation so bad input returns 400 instead of a database 500 · hardcoded test DB
+password removed.
+
+**Checked and found safe (with evidence):** spreadsheet formula injection in the export (ExcelJS
+writes `=`, `+`, `-`, `@` as shared strings, not formulas — raw XML verified) · SQL injection ·
+IDOR/access control (mutation-tested) · XSS · secrets in git history · session handling · error
+disclosure.
+
+**Accepted with reasons:** dev-only dependency advisories (vite/vitest/tinypool/esbuild), the
+react-router 6.x open redirect (no user-controlled destinations), exceljs→uuid (only `uuid.v4` is
+used), in-memory rate limiter (single process), stale session rows.
+
+**Verification:** `npm test` — **121 tests** (was 90), including a new `tests/api/security.test.ts` and
+`tests/api/loginRateLimit.test.ts`; API test files now run serially so they don't share-clobber the
+test database. Browser-verified that the strict CSP does not break the SPA: zero console errors on the
+production build, and the `.xlsx` export still downloads.
+
+**Files:** `SECURITY.md`, `server/src/{app,config,auth,admin,campaigns,validate,rateLimit,importValidation,resends}.ts`,
+`tests/{validate,rateLimit}.test.ts`, `tests/api/*`, `vitest.config.ts`, `.env.example`, `README.md`,
+`docs/deploy-plesk.md`
+**Scope:** Medium

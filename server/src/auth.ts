@@ -5,8 +5,19 @@ import crypto from "node:crypto";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { config } from "./config";
+import {
+  boundedString,
+  isValidEmail,
+  MAX_NAME_LENGTH,
+  MAX_PASSWORD_LENGTH,
+  passwordProblem,
+} from "./validate";
 
 const COOKIE = "session";
+
+// Compared against when the email is unknown, so a failed login costs the same time whether or not
+// the account exists (no user enumeration through response timing).
+const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 12);
 
 export type Role = "superadmin" | "admin" | "user";
 
@@ -61,23 +72,30 @@ export async function getUserFromToken(token: string | undefined): Promise<AuthU
 export const authRouter = Router();
 
 // Self-signup: creates a new customer and its first (admin) user.
+// Disabled in production by default, because otherwise anyone on the internet can create a tenant.
+// Set ALLOW_SELF_SIGNUP=true to open it up deliberately.
 authRouter.post(
   "/register",
   ah(async (req, res) => {
+    if (!config.allowSelfSignup) {
+      return res.status(403).json({ error: "self-signup is disabled" });
+    }
     const { customerName, email, password } = req.body ?? {};
-    if (!customerName || !email || !password) {
-      return res.status(400).json({ error: "customerName, email and password are required" });
+
+    const name = boundedString(customerName, MAX_NAME_LENGTH);
+    if (!name) {
+      return res.status(400).json({ error: "customerName is required (max 255 characters)" });
     }
-    if (String(password).length < 8) {
-      return res.status(400).json({ error: "password must be at least 8 characters" });
-    }
+    if (!isValidEmail(email)) return res.status(400).json({ error: "a valid email is required" });
+    const pwProblem = passwordProblem(password);
+    if (pwProblem) return res.status(400).json({ error: pwProblem });
 
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
       const [existing] = await conn.query<RowDataPacket[]>(
         "SELECT id FROM users WHERE email = ?",
-        [email]
+        [String(email).trim()]
       );
       if (existing.length) {
         await conn.rollback();
@@ -85,17 +103,22 @@ authRouter.post(
       }
       const [cust] = await conn.query<ResultSetHeader>(
         "INSERT INTO customers (name) VALUES (?)",
-        [customerName]
+        [name]
       );
       const passwordHash = await bcrypt.hash(String(password), 12);
       const [user] = await conn.query<ResultSetHeader>(
         "INSERT INTO users (customer_id, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
-        [cust.insertId, email, passwordHash]
+        [cust.insertId, String(email).trim(), passwordHash]
       );
       await conn.commit();
       const { token, expiresAt } = await createSession(user.insertId);
       res.cookie(COOKIE, token, { ...cookieOptions, expires: expiresAt });
-      res.status(201).json({ id: user.insertId, email, role: "admin", customerId: cust.insertId });
+      res.status(201).json({
+        id: user.insertId,
+        email: String(email).trim(),
+        role: "admin",
+        customerId: cust.insertId,
+      });
     } catch (err) {
       await conn.rollback();
       throw err;
@@ -109,9 +132,14 @@ authRouter.post(
   "/login",
   ah(async (req, res) => {
     const { email, password } = req.body ?? {};
-    if (!email || !password) {
-      return res.status(400).json({ error: "email and password are required" });
+    if (!isValidEmail(email)) {
+      return res.status(401).json({ error: "invalid email or password" });
     }
+    // Reject over-long passwords before hashing (see MAX_PASSWORD_LENGTH).
+    if (typeof password !== "string" || password.length > MAX_PASSWORD_LENGTH) {
+      return res.status(401).json({ error: "invalid email or password" });
+    }
+
     const [rows] = await pool.query<
       (RowDataPacket & {
         id: number;
@@ -120,15 +148,20 @@ authRouter.post(
         role: Role;
         is_active: number;
       })[]
-    >("SELECT id, customer_id, password_hash, role, is_active FROM users WHERE email = ?", [email]);
+    >("SELECT id, customer_id, password_hash, role, is_active FROM users WHERE email = ?", [
+      String(email).trim(),
+    ]);
 
     const u = rows[0];
-    if (!u || !u.is_active || !(await bcrypt.compare(String(password), u.password_hash))) {
+    // Always run a comparison, so timing does not reveal whether the account exists.
+    const passwordOk = await bcrypt.compare(password, u?.password_hash ?? DUMMY_HASH);
+    if (!u || !u.is_active || !passwordOk) {
+      console.warn(`[security] failed login from ${req.ip ?? "unknown"}`);
       return res.status(401).json({ error: "invalid email or password" });
     }
     const { token, expiresAt } = await createSession(u.id);
     res.cookie(COOKIE, token, { ...cookieOptions, expires: expiresAt });
-    res.json({ id: u.id, email, role: u.role, customerId: u.customer_id });
+    res.json({ id: u.id, email: String(email).trim(), role: u.role, customerId: u.customer_id });
   })
 );
 

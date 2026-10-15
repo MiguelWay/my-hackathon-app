@@ -3,6 +3,7 @@ import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { requireAuth, requireAdmin, type AuthUser } from "./auth";
+import { MAX_NAME_LENGTH, boundedString } from "./validate";
 
 const ah =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler =>
@@ -51,12 +52,13 @@ campaignsRouter.post(
   ah(async (req, res) => {
     const user = currentUser(res);
     const { name, startDate, finishDate } = req.body ?? {};
-    if (!name || !String(name).trim()) {
-      return res.status(400).json({ error: "name is required" });
+    const campaignName = boundedString(name, MAX_NAME_LENGTH);
+    if (!campaignName) {
+      return res.status(400).json({ error: "name is required (max 255 characters)" });
     }
     const [result] = await pool.query<ResultSetHeader>(
       "INSERT INTO campaigns (customer_id, name, start_date, finish_date) VALUES (?, ?, ?, ?)",
-      [user.customerId, String(name).trim(), startDate ?? null, finishDate ?? null]
+      [user.customerId, campaignName, startDate ?? null, finishDate ?? null]
     );
     const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT id, name, start_date, finish_date FROM campaigns WHERE id = ? AND customer_id = ?",

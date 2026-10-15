@@ -3,9 +3,11 @@ import path from "node:path";
 import express, { Router } from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import helmet from "helmet";
 import type { NextFunction, Request, Response } from "express";
 import { config } from "./config";
 import { pool } from "./db";
+import { rateLimit } from "./rateLimit";
 import { authRouter } from "./auth";
 import { campaignsRouter, customersRouter } from "./campaigns";
 import { packagesRouter } from "./packages";
@@ -26,6 +28,35 @@ if (config.isProduction) app.set("trust proxy", 1);
 
 app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
+
+// Security headers. The CSP is deliberately strict (no inline script/style): the SPA is a Vite build
+// with external assets only, so nothing needs loosening. `upgrade-insecure-requests` is left off
+// because the web server (Plesk) already redirects HTTP -> HTTPS, and enabling it would break a
+// plain-HTTP local run of the production build.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'"],
+        "style-src": ["'self'"],
+        "img-src": ["'self'", "data:"],
+        "connect-src": ["'self'"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": ["'self'"],
+        "frame-ancestors": ["'self'"],
+        "upgrade-insecure-requests": null,
+      },
+    },
+    // No ads/analytics on this app, and CORP would block nothing we need here.
+    crossOriginEmbedderPolicy: false,
+    // includeSubDomains is left off so this cannot break unrelated subdomains on the same domain.
+    hsts: { maxAge: 180 * 24 * 60 * 60, includeSubDomains: false, preload: false },
+  })
+);
+
 // `exposedHeaders` lets the SPA read the export's filename from Content-Disposition.
 app.use(
   cors({
@@ -49,6 +80,18 @@ app.get("/health", health);
 
 const api = Router();
 api.get("/health", health);
+
+// A general ceiling for every API call, plus a much stricter bucket for failed auth attempts.
+api.use(rateLimit({ name: "api", max: config.rateLimit.apiMax, windowMs: config.rateLimit.apiWindowMs }));
+const authLimiter = rateLimit({
+  name: "auth",
+  max: config.rateLimit.authMax,
+  windowMs: config.rateLimit.authWindowMs,
+  countOnlyFailures: true,
+});
+api.use("/auth/login", authLimiter);
+api.use("/auth/register", authLimiter);
+
 api.use("/auth", authRouter);
 api.use("/customers", customersRouter);
 api.use("/campaigns", campaignsRouter);

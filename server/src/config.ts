@@ -27,8 +27,18 @@ export const config = {
   // SERVE_SPA=false if a web server (e.g. Plesk's Apache) serves the static files instead.
   serveSpa: (process.env.SERVE_SPA ?? String(isProduction)) === "true",
   sessionTtlDays: num(["SESSION_TTL_DAYS"], 30),
+  // Self-signup creates a whole new tenant, so it is closed in production unless opened deliberately.
+  allowSelfSignup: (process.env.ALLOW_SELF_SIGNUP ?? String(!isProduction)) === "true",
   // Only needed if the SPA is served from a different origin than the API.
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
+  rateLimit: {
+    // General ceiling per IP across /api.
+    apiMax: num(["RATE_LIMIT_API_MAX"], 300),
+    apiWindowMs: num(["RATE_LIMIT_API_WINDOW_MS"], 60_000),
+    // Failed auth attempts per IP: ~10 per 15 minutes.
+    authMax: num(["RATE_LIMIT_AUTH_MAX"], 10),
+    authWindowMs: num(["RATE_LIMIT_AUTH_WINDOW_MS"], 15 * 60_000),
+  },
   db: {
     host: process.env.DB_HOST ?? "localhost",
     port: num(["DB_PORT"], 3306),

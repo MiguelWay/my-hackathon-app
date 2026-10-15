@@ -1,6 +1,8 @@
 // Validation + normalisation for a campaign-list import payload.
 // Pure (no DB, no Express) so the many failure branches can be unit-tested.
 
+import { MAX_SENDER_ID_LENGTH } from "./validate";
+
 export const MAX_ROWS = 20_000;
 
 export interface ParsedRow {
@@ -69,6 +71,18 @@ export function parseImportBody(body: unknown): ParseResult {
   if (blank.length) {
     const sample = blank.slice(0, 5).map((x) => x.sourceRow).join(", ");
     return fail(400, `sender ID is empty on row(s): ${sample}${blank.length > 5 ? ", …" : ""}`);
+  }
+
+  // Longer than the column: reject here rather than let MySQL raise a 500.
+  const tooLong = records.filter((rec) => rec.sender.length > MAX_SENDER_ID_LENGTH);
+  if (tooLong.length) {
+    const sample = tooLong.slice(0, 5).map((x) => x.sourceRow).join(", ");
+    return fail(
+      400,
+      `sender ID is longer than ${MAX_SENDER_ID_LENGTH} characters on row(s): ${sample}${
+        tooLong.length > 5 ? ", …" : ""
+      }`
+    );
   }
 
   // ---- no duplicate sender IDs inside this file (case-insensitive, like the DB) ----

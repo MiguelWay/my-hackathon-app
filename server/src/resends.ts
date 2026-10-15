@@ -1,5 +1,7 @@
 // Pure helpers for resend chains. Kept dependency-free so they can be unit-tested.
 
+import { MAX_SENDER_ID_LENGTH } from "./validate";
+
 /** A package's chain is identified by its first package (chain root). */
 export interface ChainNode {
   id: number;
@@ -38,6 +40,13 @@ export function parseResendBody(body: unknown): ResendParse {
 
   const newSenderId = String(b.newSenderId ?? "").trim();
   if (!newSenderId) return { ok: false, status: 400, error: "newSenderId is required" };
+  if (newSenderId.length > MAX_SENDER_ID_LENGTH) {
+    return {
+      ok: false,
+      status: 400,
+      error: `newSenderId must be at most ${MAX_SENDER_ID_LENGTH} characters`,
+    };
+  }
 
   const campaignId = positiveInt(b.campaignId);
   if (campaignId === null) return { ok: false, status: 400, error: "campaignId is required" };
