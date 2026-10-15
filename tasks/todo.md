@@ -880,3 +880,28 @@ line and one button, and downloading gave `campaign-6-vuelta-al-cole.xlsx` with 
 
 **Files:** `src/pages/CampaignDetailPage.tsx`, `src/lib/campaignExport.ts`
 **Scope:** Small
+
+## Downloads ask where to save
+
+**Description:** "When downloading allow person to select where to save the list."
+
+**Progress:** **Done, as far as a page can do it.** All three export buttons (campaign page, Return
+packages, Customers) share one helper, which now uses the File System Access API where the browser has
+it — Chrome and Edge show a real save dialog with folder and file name, still suggested as
+`campaign-<id>-<name>.xlsx`. Firefox and Safari have no such API, so there the file still goes to the
+browser's download folder; their own "always ask where to save files" setting is the lever. Cancelling
+the dialog is no longer reported as a success: the helper returns null and the screen says
+"Export cancelled." / "Download cancelled." instead. If the picker refuses because the user gesture
+expired while a big export was being built (`SecurityError`), the file falls back to the ordinary
+download rather than being lost.
+
+**Verification:** `npm test` — **166 tests** (the API is unchanged) · `npm run build` clean ·
+browser-verified with the picker stubbed in three ways on *vuelta al cole*: with the API present it is
+called with `suggestedName: campaign-6-vuelta-al-cole.xlsx` and the xlsx MIME type, a 27 KB blob is
+written to the handle it returns and the notice names the chosen file (0 browser downloads, so the
+picker was really used); throwing `AbortError` saves nothing and shows `Export cancelled.`; with the API
+deleted the ordinary download still fires with the same file name.
+
+**Files:** `src/lib/campaignExport.ts`,
+`src/pages/{CampaignDetailPage,RecentReturnsPage,CustomersPage}.tsx`
+**Scope:** Small

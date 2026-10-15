@@ -82,7 +82,9 @@ export function RecentReturnsPage() {
     setExporting(true);
     try {
       const filename = await downloadCampaignExport(campaign.id);
-      setExportNotice(`Downloaded ${campaign.name} as ${filename}.`);
+      setExportNotice(
+        filename ? `Downloaded ${campaign.name} as ${filename}.` : "Download cancelled."
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Export failed");
     } finally {

@@ -181,7 +181,9 @@ export function CustomersPage() {
     setExporting(campaign.id);
     try {
       const filename = await downloadCampaignExportForAdmin(campaign.id);
-      setNotice(`Downloaded ${campaign.name} as ${filename}.`);
+      setNotice(
+        filename ? `Downloaded ${campaign.name} as ${filename}.` : "Download cancelled."
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {

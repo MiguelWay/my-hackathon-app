@@ -76,7 +76,9 @@ export function CampaignDetailPage() {
     setExporting(true);
     try {
       const filename = await downloadCampaignExport(Number(id));
-      setNotice(`Exported ${packages.length} packages to ${filename}.`);
+      setNotice(
+        filename ? `Exported ${packages.length} packages to ${filename}.` : "Export cancelled."
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
