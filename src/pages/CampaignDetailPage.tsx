@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import { downloadCampaignExport } from "../lib/campaignExport";
-import { guessSenderColumn } from "../lib/senderColumn";
+import { CampaignListUpload } from "../components/CampaignListUpload";
 import { useAuth } from "../auth/AuthContext";
 
 interface Campaign {
@@ -30,13 +29,6 @@ interface PackageRow {
   created_at: string;
 }
 
-interface ImportResult {
-  uploadId: number;
-  imported: number;
-  columns: string[];
-  senderColumn: { index: number; name: string };
-}
-
 function parseExtra(value: PackageRow["extra_columns"]): Record<string, string> {
   if (typeof value === "string") {
     try {
@@ -57,15 +49,9 @@ export function CampaignDetailPage() {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [packages, setPackages] = useState<PackageRow[]>([]);
 
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [rows, setRows] = useState<string[][]>([]);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [senderIdx, setSenderIdx] = useState(-1);
-  const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     const [c, u, p] = await Promise.all([
@@ -83,68 +69,6 @@ export function CampaignDetailPage() {
       setError(e instanceof Error ? e.message : "Failed to load campaign")
     );
   }, [load]);
-
-  async function onFile(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setError(null);
-    setNotice(null);
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-        header: 1,
-        raw: false,
-        defval: "",
-      });
-      if (matrix.length < 2) throw new Error("That file has no data rows.");
-      const hdrs = (matrix[0] as unknown[]).map((h) => String(h));
-      const data = matrix
-        .slice(1)
-        .map((r) => hdrs.map((_, i) => String((r as unknown[])[i] ?? "")));
-      setHeaders(hdrs);
-      setRows(data);
-      setFileName(file.name);
-      setSenderIdx(guessSenderColumn(hdrs));
-    } catch (err) {
-      setHeaders([]);
-      setRows([]);
-      setFileName(null);
-      setError(err instanceof Error ? err.message : "Could not read the file");
-    }
-  }
-
-  async function confirm() {
-    if (senderIdx < 0) {
-      setError("Pick the package ID column.");
-      return;
-    }
-    setError(null);
-    setNotice(null);
-    setImporting(true);
-    try {
-      const result = await api.post<ImportResult>(`/campaigns/${id}/packages`, {
-        filename: fileName,
-        columns: headers,
-        senderColumn: senderIdx,
-        rows,
-      });
-      setNotice(
-        `Imported ${result.imported} packages · package ID column: "${result.senderColumn.name}" · ` +
-          `${result.columns.length} columns kept verbatim.`
-      );
-      setHeaders([]);
-      setRows([]);
-      setFileName(null);
-      if (inputRef.current) inputRef.current.value = "";
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed");
-    } finally {
-      setImporting(false);
-    }
-  }
 
   async function downloadExport() {
     setError(null);
@@ -188,72 +112,14 @@ export function CampaignDetailPage() {
       {!isSuperAdmin && <p className="muted">Only a super-admin can upload lists.</p>}
 
       {isSuperAdmin && (
-        <div className="card">
+        <>
           <h2>Upload campaign list (.xlsx)</h2>
-          <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} />
-          <p className="muted">
-            One campaign can hold several uploads; package IDs must be unique within the campaign.
-          </p>
-        </div>
+          <CampaignListUpload campaignId={Number(id)} onImported={load} />
+        </>
       )}
 
       {error && <p className="error">{error}</p>}
       {notice && <p className="ok">{notice}</p>}
-
-      {headers.length > 0 && (
-        <>
-          <div className="card inline">
-            <label>
-              Choose package ID column
-              <select value={senderIdx} onChange={(e) => setSenderIdx(Number(e.target.value))}>
-                {senderIdx < 0 && <option value={-1}>— select a column —</option>}
-                {headers.map((h, i) => (
-                  <option key={i} value={i}>
-                    {h || `(column ${i + 1})`}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <span className="muted">{rows.length} rows</span>
-            <button onClick={confirm} disabled={importing}>
-              {importing ? "Importing…" : "Confirm mapping & import"}
-            </button>
-          </div>
-
-          {senderIdx < 0 && (
-            <p className="muted">
-              Couldn&rsquo;t tell which column holds the package ID — choose it above. The preview
-              below shows the first rows so you can spot the right one.
-            </p>
-          )}
-
-          <h2>Preview (first 10 rows)</h2>
-          <div className="scroll">
-            <table className="grid">
-              <thead>
-                <tr>
-                  {headers.map((h, i) => (
-                    <th key={i} className={i === senderIdx ? "hl" : ""}>
-                      {h || `col ${i + 1}`}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(0, 10).map((r, ri) => (
-                  <tr key={ri}>
-                    {r.map((c, ci) => (
-                      <td key={ci} className={ci === senderIdx ? "hl" : ""}>
-                        {c}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
 
       <h2>Stored packages ({packages.length})</h2>
       <div className="card inline">

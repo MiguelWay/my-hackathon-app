@@ -535,3 +535,20 @@ describe("a platform super-admin works across customers", () => {
     expect((await alphaUser.get(`/admin/campaigns/${alphaCampaign}/export`)).status).toBe(403);
   });
 });
+
+// The Campaigns screen: how many lists each campaign holds and how many lines they carry.
+describe("campaign list counts", () => {
+  it("reports the uploaded lists and their total lines per campaign", async () => {
+    const list = await alpha.get<
+      { name: string; upload_count: number; total_rows: number }[]
+    >("/campaigns");
+    expect(list.status).toBe(200);
+
+    const of = (name: string) => list.body.find((c) => c.name === name)!;
+    // beforeAll imported one three-line list into Alpha March; Alpha Reprise got one line.
+    expect(of("Alpha March")).toMatchObject({ upload_count: 1, total_rows: 3 });
+    expect(of("Alpha Reprise")).toMatchObject({ upload_count: 1, total_rows: 1 });
+    // A campaign with nothing uploaded still lists, with zeroes rather than nulls.
+    expect(of("Alpha Other")).toMatchObject({ upload_count: 0, total_rows: 0 });
+  });
+});

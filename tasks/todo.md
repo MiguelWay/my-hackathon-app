@@ -590,3 +590,31 @@ panel lists April drop (5 packages, 4 returns) and March drop (503, 42); downloa
 **Files:** `server/src/{admin,export}.ts`, `src/pages/CustomersPage.tsx`,
 `src/lib/campaignExport.ts`, `tests/api/isolation.test.ts`
 **Scope:** Medium
+
+## Campaigns: create one, or add a list to one that exists
+
+**Description:** The Campaigns screen should separate the two things done there — creating a campaign,
+and adding a list (the uploaded .xlsx) to a campaign that already exists — and show, per campaign,
+every list uploaded and how many lines in total.
+
+**Progress:** **Done.** Three headed sections: **New campaign** (unchanged form), **Add a list to an
+existing campaign** (a campaign dropdown defaulting to the newest, plus the upload, mapping and
+preview flow), and **All campaigns** — a table with `Lists` and `Lines` columns and a `Lists` button
+per row opening that campaign's uploads (file, lines, uploaded). `GET /campaigns` now returns
+`upload_count` and `total_rows`; the sum is `CAST(... AS UNSIGNED)` so it stays a number instead of a
+DECIMAL string. The upload flow (SheetJS parse, sender-column guess, mapping confirm, 10-row preview)
+moved into `src/components/CampaignListUpload.tsx`, now shared with the campaign screen, which lost
+its duplicate copy of it.
+
+**Verification:** `npm test` — **152 tests**, including a new one asserting `upload_count`/`total_rows`
+per campaign (and zeroes rather than nulls for a campaign with nothing uploaded). `npm run
+typecheck:api` and `npm run build` clean. Browser-verified: as `owner@mycompany.test` the sections read
+New campaign / Add a list to an existing campaign / All campaigns, and *vuelta al cole* shows 1 list ·
+150 lines with `Lists` opening `EtqVueltaC.xlsx · 150 lines`; as `user@acme.test` only All campaigns
+renders and there is no file input; as `admin@acme.test` a two-line list uploaded into *April drop*,
+auto-detected `ID de envío` as the package ID column, and the table went from 2 lists / 5 lines to
+3 / 7 (scratch rows deleted afterwards).
+
+**Files:** `src/pages/CampaignsPage.tsx`, `src/components/CampaignListUpload.tsx`,
+`src/pages/CampaignDetailPage.tsx`, `server/src/campaigns.ts`, `tests/api/isolation.test.ts`
+**Scope:** Medium

@@ -38,8 +38,14 @@ campaignsRouter.get(
   ah(async (_req, res) => {
     const user = currentUser(res);
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, name, start_date, finish_date, created_at
-         FROM campaigns WHERE customer_id = ? ORDER BY id DESC`,
+      `SELECT c.id, c.name, c.start_date, c.finish_date, c.created_at,
+              COUNT(u.id) AS upload_count,
+              CAST(COALESCE(SUM(u.row_count), 0) AS UNSIGNED) AS total_rows
+         FROM campaigns c
+         LEFT JOIN campaign_uploads u ON u.campaign_id = c.id
+        WHERE c.customer_id = ?
+        GROUP BY c.id, c.name, c.start_date, c.finish_date, c.created_at
+        ORDER BY c.id DESC`,
       [user.customerId]
     );
     res.json(rows);
