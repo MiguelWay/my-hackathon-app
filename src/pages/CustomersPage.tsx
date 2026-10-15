@@ -60,6 +60,8 @@ export function CustomersPage() {
   const [exporting, setExporting] = useState<number | null>(null);
   // The expanded campaign list, which can open below the fold.
   const expandRef = useRef<HTMLTableRowElement | null>(null);
+  // The users panel, which opens below the customers table.
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     setItems(await api.get<Customer[]>("/admin/customers"));
@@ -190,11 +192,11 @@ export function CustomersPage() {
   const openCustomer = items.find((c) => c.id === panel?.customerId);
   const activeUsers = users.filter((u) => u.is_active === 1).length;
 
-  // A list opened near the bottom of the window must not stay out of sight.
+  // Whatever just opened can be below the fold on a short window: bring it into view.
   useEffect(() => {
-    if (panel?.kind === "campaigns") {
-      expandRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }
+    if (!panel) return;
+    const opened = panel.kind === "users" ? panelRef.current : expandRef.current;
+    opened?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [panel]);
 
   return (
@@ -320,7 +322,7 @@ export function CustomersPage() {
       )}
 
       {panel?.kind === "users" && (
-        <div className="card">
+        <div className="card" ref={panelRef}>
           <h2>{openCustomer?.name}</h2>
 
           <details className="section">

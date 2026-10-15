@@ -754,3 +754,23 @@ files (`envios-abril.xlsx`, `new.xlsx`).
 **Files:** `src/pages/CampaignsPage.tsx`, `src/components/CampaignListUpload.tsx`, `src/styles.css`,
 `server/src/campaigns.ts`, `tests/api/isolation.test.ts`
 **Scope:** Medium
+
+## Scrolling: the page is the only scroller, and it shows
+
+**Description:** "Make sure scrolling is enabled because I can't see all 3 sections."
+
+**Progress:** **Done.** The document was already the only scroller — re-checked: no `overflow: hidden` on
+`html`/`body`, no fixed heights, no sticky or fixed bars — so three things were made explicit.
+`html { overflow-y: scroll }` keeps the scroll bar visible on macOS instead of appearing only while
+scrolling; `.content` gained bottom padding (`24px 18px 64px`) so the last section is never flush against
+the window edge; and opening a panel now scrolls it into view, because the users panel opens below the
+customers table and on a short window used to appear just out of sight.
+
+**Verification:** `npm test` — **163 tests** · `npm run build` clean · measured in a 1200×520 window
+(about half a laptop screen): `overflow-y: scroll` on `<html>`, no nested scroll containers besides the
+page itself, 748 px of content in a 578 px viewport, clicking *Users* on the first customer auto-scrolled
+0 → 292 px so the panel and its title are in view, and scrolling to the bottom (564 px) put the third
+part — **Current users** with both accounts — fully on screen.
+
+**Files:** `src/styles.css`, `src/pages/CustomersPage.tsx`
+**Scope:** Small
