@@ -92,21 +92,44 @@ export async function downloadExport(url: string, campaignIdHint = 0): Promise<s
   return filename;
 }
 
+/** What a save attempt did, so the screen can say it exactly. */
+export interface SaveResult {
+  /** The name the file was saved under, or null when the user closed the dialog. */
+  name: string | null;
+  /** True when the browser would not show a dialog, so the file was downloaded the ordinary way. */
+  viaDownload: boolean;
+}
+
+/** The sentence every screen shows after a save attempt, so they all word it the same way. */
+export function saveNotice(result: SaveResult): string {
+  if (result.viaDownload) {
+    return (
+      `This browser did not open a save dialog, so ${result.name} went to its download folder. ` +
+      `Right-click the button and pick "Download linked file as…" to choose the folder.`
+    );
+  }
+  if (result.name === null) return "Save cancelled.";
+  return `Saved ${result.name} to the folder you chose.`;
+}
+
 /**
- * Asks the browser's save dialog where to put the export, then writes it there. Returns the chosen name,
- * or null when the user closed the dialog. Throws when the browser has no save dialog — callers should
- * only offer this where `canChooseSaveLocation()` is true.
+ * Asks the browser's save dialog where to put the export, then writes it there.
+ *
+ * Returns `name`: the name it was saved under, or null when the user closed the dialog, and
+ * `viaDownload`: true when the dialog could not be shown at all, in which case the file was downloaded
+ * the ordinary way instead — a refusal must never look like a failure.
  */
 export async function saveExportAs(
   url: string,
   suggestedName: string,
   campaignIdHint = 0
-): Promise<string | null> {
+): Promise<SaveResult> {
   const picker = savePicker();
   if (!picker) throw new Error("this browser cannot open a save dialog");
 
   // Asked first, while the click that started this is still fresh: the request can take a moment, and a
   // dialog opened too late is refused.
+  const asked = Date.now();
   let handle: SaveHandle;
   try {
     handle = await picker({
@@ -114,13 +137,19 @@ export async function saveExportAs(
       types: [{ description: "Excel workbook", accept: { [XLSX_MIME]: [".xlsx"] } }],
     });
   } catch (err) {
-    if ((err as { name?: string }).name === "AbortError") return null;
-    throw err;
+    const name = (err as { name?: string }).name;
+    // A dialog the user closed: respect that, and save nothing.
+    if (name === "AbortError" && Date.now() - asked > 250) {
+      return { name: null, viaDownload: false };
+    }
+    // Anything else — including an abort that came back instantly, which means the browser never showed
+    // a dialog (an automated window does this) — falls back to the ordinary download.
+    return { name: await downloadExport(url, campaignIdHint), viaDownload: true };
   }
 
   const { blob } = await fetchExport(url, campaignIdHint);
   const writable = await handle.createWritable();
   await writable.write(blob);
   await writable.close();
-  return handle.name;
+  return { name: handle.name, viaDownload: false };
 }

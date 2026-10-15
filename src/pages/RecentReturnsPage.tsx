@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
-import { campaignExportUrl, canChooseSaveLocation, downloadExport, exportFileName, saveExportAs } from "../lib/campaignExport";
+import { campaignExportUrl, canChooseSaveLocation, downloadExport, exportFileName, saveExportAs, saveNotice } from "../lib/campaignExport";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { useAuth } from "../auth/AuthContext";
 
@@ -83,7 +83,9 @@ export function RecentReturnsPage() {
     setExporting(true);
     try {
       const filename = await downloadExport(campaignExportUrl(campaign.id), campaign.id);
-      setExportNotice(`Downloaded ${campaign.name} as ${filename}.`);
+      setExportNotice(
+        `Downloaded ${campaign.name} as ${filename}, in your browser's download folder.`
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Export failed");
     } finally {
@@ -102,12 +104,12 @@ export function RecentReturnsPage() {
     setExportNotice(null);
     setExporting(true);
     try {
-      const name = await saveExportAs(
+      const result = await saveExportAs(
         campaignExportUrl(campaign.id),
         exportFileName(campaign.id, campaign.name),
         campaign.id
       );
-      setExportNotice(name ? `Saved ${name} to the folder you chose.` : "Save cancelled.");
+      setExportNotice(saveNotice(result));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Could not open a save dialog");
     } finally {

@@ -6,6 +6,7 @@ import {
   downloadExport,
   exportFileName,
   saveExportAs,
+  saveNotice,
 } from "../lib/campaignExport";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { PasswordInput } from "../components/PasswordInput";
@@ -188,7 +189,7 @@ export function CustomersPage() {
     setExporting(campaign.id);
     try {
       const filename = await downloadExport(adminCampaignExportUrl(campaign.id), campaign.id);
-      setNotice(`Downloaded ${campaign.name} as ${filename}.`);
+      setNotice(`Downloaded ${campaign.name} as ${filename}, in your browser's download folder.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -203,12 +204,12 @@ export function CustomersPage() {
     setChosenCampaign(campaign.id);
     setExporting(campaign.id);
     try {
-      const name = await saveExportAs(
+      const result = await saveExportAs(
         adminCampaignExportUrl(campaign.id),
         exportFileName(campaign.id, campaign.name),
         campaign.id
       );
-      setNotice(name ? `Saved ${name} to the folder you chose.` : "Save cancelled.");
+      setNotice(saveNotice(result));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open a save dialog");
     } finally {

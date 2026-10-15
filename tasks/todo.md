@@ -956,3 +956,27 @@ wrote 27,538 bytes to the handle ("Saved Chosen/… to the folder you chose."); 
 **Files:** `src/lib/campaignExport.ts`,
 `src/pages/{CampaignDetailPage,RecentReturnsPage,CustomersPage}.tsx`, `src/styles.css`
 **Scope:** Medium
+
+## Save as… cannot dead-end, and downloads say where they went
+
+**Description:** "Save as… does not work."
+
+**Progress:** **Explained and made harmless.** Measured in the window the tests run in: clicking `Save
+as…` came back as `AbortError` in **0.5 ms** — no dialog was ever shown, because Chrome refuses to open
+native dialogs while it is being driven by the automation tool. That is an environment limit, not a page
+bug: in a browser window that is not automated, Chrome and Edge open the dialog normally. To stop it ever
+looking like a failure, `saveExportAs` now returns a `SaveResult`: the dialog being refused *instantly*
+(a person cannot close a dialog in under 250 ms) falls back to the ordinary download and says so, while a
+dialog genuinely closed by the user still returns null. `saveNotice()` words all three outcomes the same
+way on every screen, and the plain download now says where the file went ("… in your browser's download
+folder").
+
+**Verification:** `npm test` — **166 tests** · `npm run build` clean · all four paths checked on the
+production build in the real (automated) Chrome: the refused dialog downloaded
+`campaign-6-vuelta-al-cole.xlsx` and explained itself; a dialog that opens gave "Saved … to the folder you
+chose."; one closed after 400 ms gave "Save cancelled." with nothing downloaded; the plain download gave
+"Exported 151 packages to …, in your browser's download folder."
+
+**Files:** `src/lib/campaignExport.ts`,
+`src/pages/{CampaignDetailPage,RecentReturnsPage,CustomersPage}.tsx`
+**Scope:** Small

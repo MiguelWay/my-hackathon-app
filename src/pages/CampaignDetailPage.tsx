@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { campaignExportUrl, canChooseSaveLocation, downloadExport, exportFileName, saveExportAs } from "../lib/campaignExport";
+import { campaignExportUrl, canChooseSaveLocation, downloadExport, exportFileName, saveExportAs, saveNotice } from "../lib/campaignExport";
 import { CampaignListUpload } from "../components/CampaignListUpload";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { useAuth } from "../auth/AuthContext";
@@ -78,7 +78,9 @@ export function CampaignDetailPage() {
     setExporting(true);
     try {
       const filename = await downloadExport(campaignExportUrl(Number(id)), Number(id));
-      setNotice(`Exported ${packages.length} packages to ${filename}.`);
+      setNotice(
+        `Exported ${packages.length} packages to ${filename}, in your browser's download folder.`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -92,12 +94,12 @@ export function CampaignDetailPage() {
     setNotice(null);
     setExporting(true);
     try {
-      const name = await saveExportAs(
+      const result = await saveExportAs(
         campaignExportUrl(Number(id)),
         exportFileName(Number(id), campaign?.name ?? `Campaign ${id}`),
         Number(id)
       );
-      setNotice(name ? `Saved ${name} to the folder you chose.` : "Save cancelled.");
+      setNotice(saveNotice(result));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open a save dialog");
     } finally {
