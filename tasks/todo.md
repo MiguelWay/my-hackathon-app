@@ -618,3 +618,35 @@ auto-detected `ID de envío` as the package ID column, and the table went from 2
 **Files:** `src/pages/CampaignsPage.tsx`, `src/components/CampaignListUpload.tsx`,
 `src/pages/CampaignDetailPage.tsx`, `server/src/campaigns.ts`, `tests/api/isolation.test.ts`
 **Scope:** Medium
+
+## Account lifecycle on the Customers screen
+
+**Description:** A report that the `Users` button on Customers "does not work" — it needed to show all
+active users and allow adding, deactivating and deleting an account.
+
+**Progress:** **Done.** The button works (checked live before changing anything: it opens the panel and
+lists the accounts); what was missing was the lifecycle. The accounts panel is now a table — email,
+role, status (`active` / `disabled`), added — with `Deactivate`/`Activate` and a two-step `Delete`
+(`Yes, delete <email>` / `Cancel`). Adding an account keeps the panel open, so the new row is visible.
+Backend: `PATCH /admin/users/:id {active}` and `DELETE /admin/users/:id`, both on the
+`requireSuperAdmin` router; `GET /admin/customers/:id/users` now returns `is_active`, and the customer
+list gained `active_user_count` (shown as "3 · 2 active"). `users.is_active` already existed and both
+login and every authenticated request already honoured it, so deactivating only had to set the flag
+and drop the open sessions. Guards: you cannot deactivate or delete your own account, and the last
+active platform super-admin (the one with no customer of its own) cannot be deactivated or deleted,
+since otherwise nobody could manage customers again. Returns reference whoever recorded them, so
+deleting such an account is refused with 409 `this account recorded returns; deactivate it instead of
+deleting it`; sessions are removed with the account through `ON DELETE CASCADE`.
+
+**Verification:** `npm test` — **162 tests**, ten new: the account list with `is_active`, deactivation
+ending a live session and blocking the login (reactivation restoring it), deletion, the 409 for an
+account that recorded returns, the self-guards, the last-platform-admin guard, `active` type
+validation, 404s, and 403 for a `user`; both admin routes were added to the anonymous-401 table.
+`npm run typecheck:api` and `npm run build` clean. Browser-verified as `root@platform.test`: a
+throwaway account for Beta Stores was created, deactivated (status `disabled`, login 401),
+reactivated, deleted (login 401); deleting `user@acme.test`, which recorded returns, was refused with
+that message and the account stayed.
+
+**Files:** `server/src/admin.ts`, `src/pages/CustomersPage.tsx`, `src/lib/api.ts`,
+`tests/api/{isolation.test.ts,helpers.ts}`
+**Scope:** Medium

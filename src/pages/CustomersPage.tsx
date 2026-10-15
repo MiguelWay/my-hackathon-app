@@ -8,12 +8,14 @@ interface Customer {
   name: string;
   created_at: string;
   user_count: number;
+  active_user_count: number;
 }
 
 interface CustomerUser {
   id: number;
   email: string;
   role: "superadmin" | "user";
+  is_active: number;
   created_at: string;
 }
 
@@ -48,6 +50,8 @@ export function CustomersPage() {
   const [form, setForm] = useState<NewUserForm>(emptyForm());
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<CustomerUser[]>([]);
+  // The account whose delete has been armed, so deleting is never one careless click.
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [campaigns, setCampaigns] = useState<CustomerCampaign[]>([]);
   const [exporting, setExporting] = useState<number | null>(null);
 
@@ -86,11 +90,51 @@ export function CustomersPage() {
       });
       setNotice(`Created ${created.role === "superadmin" ? "super-admin" : "user"} ${created.email}.`);
       setForm(emptyForm());
-      setPanel(null);
-      setUsers([]);
+      // Keep the panel open, so the account just added shows up in the list below it.
+      await refreshUsers();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create the account");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Reloads the accounts of the customer whose panel is open. */
+  async function refreshUsers() {
+    if (panel?.kind !== "users") return;
+    setUsers(await api.get<CustomerUser[]>(`/admin/customers/${panel.customerId}/users`));
+  }
+
+  async function setUserActive(user: CustomerUser, active: boolean) {
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      await api.patch(`/admin/users/${user.id}`, { active });
+      setNotice(`${active ? "Activated" : "Deactivated"} ${user.email}.`);
+      setConfirmDelete(null);
+      await refreshUsers();
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change that account");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteUser(user: CustomerUser) {
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      await api.delete(`/admin/users/${user.id}`);
+      setNotice(`Deleted ${user.email}.`);
+      setConfirmDelete(null);
+      await refreshUsers();
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete that account");
     } finally {
       setBusy(false);
     }
@@ -136,6 +180,7 @@ export function CustomersPage() {
   }
 
   const openCustomer = items.find((c) => c.id === panel?.customerId);
+  const activeUsers = users.filter((u) => u.is_active === 1).length;
 
   return (
     <div>
@@ -173,7 +218,12 @@ export function CustomersPage() {
               <tr key={c.id}>
                 <td>{c.id}</td>
                 <td>{c.name}</td>
-                <td>{c.user_count}</td>
+                <td>
+                  {c.user_count}
+                  {c.active_user_count !== c.user_count && (
+                    <span className="muted"> · {c.active_user_count} active</span>
+                  )}
+                </td>
                 <td>
                   <div className="btn-row">
                     <button
@@ -204,14 +254,87 @@ export function CustomersPage() {
         <div className="card">
           <h2>{openCustomer?.name}: accounts</h2>
 
-          {users.length > 0 && (
-            <ul className="user-list">
-              {users.map((u) => (
-                <li key={u.id}>
-                  <span className={`badge role-${u.role}`}>{u.role}</span> {u.email}
-                </li>
-              ))}
-            </ul>
+          {users.length === 0 ? (
+            <p className="muted">No accounts yet.</p>
+          ) : (
+            <>
+              <div className="scroll">
+                <table className="grid">
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Added</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id}>
+                        <td>{u.email}</td>
+                        <td>
+                          <span className={`badge role-${u.role}`}>{u.role}</span>
+                        </td>
+                        <td>
+                          {u.is_active === 1 ? (
+                            "active"
+                          ) : (
+                            <span className="chip">disabled</span>
+                          )}
+                        </td>
+                        <td className="muted">{u.created_at}</td>
+                        <td>
+                          <div className="btn-row">
+                            <button
+                              type="button"
+                              className="secondary"
+                              disabled={busy}
+                              onClick={() => setUserActive(u, u.is_active !== 1)}
+                            >
+                              {u.is_active === 1 ? "Deactivate" : "Activate"}
+                            </button>
+                            {confirmDelete === u.id ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => deleteUser(u)}
+                                >
+                                  Yes, delete {u.email}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  disabled={busy}
+                                  onClick={() => setConfirmDelete(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                className="secondary"
+                                disabled={busy}
+                                onClick={() => setConfirmDelete(u.id)}
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted">
+                {activeUsers} active · {users.length - activeUsers} disabled. A disabled account cannot
+                log in and its open sessions end at once. An account that recorded returns can only be
+                disabled, never deleted.
+              </p>
+            </>
           )}
 
           <form className="customer-row" onSubmit={addUser}>

@@ -58,6 +58,7 @@ let alphaCustomerId = 0;
 let alphaReturnedPackageId = 0;
 let betaCampaign = 0;
 let betaPackageId = 0;
+let rootUserId = 0;
 
 beforeAll(async () => {
   await resetDatabase();
@@ -73,7 +74,8 @@ beforeAll(async () => {
   const b = await beta.register("Beta Co", "beta-admin@test.local", "password123");
   alphaCustomerId = a.customerId;
   await seedUser(a.customerId, "alpha-user@test.local", "password123", "user");
-  await seedUser(null, "root@test.local", "password123", "superadmin");
+  // The one account with no customer of its own, so it is the platform's only super-admin.
+  rootUserId = await seedUser(null, "root@test.local", "password123", "superadmin");
   await alphaUser.login("alpha-user@test.local", "password123");
   await superadmin.login("root@test.local", "password123");
 
@@ -285,6 +287,8 @@ describe("anonymous callers are rejected everywhere", () => {
     ["GET", "/admin/customers"],
     ["GET", "/admin/customers/1/campaigns"],
     ["GET", "/admin/campaigns/1/export"],
+    ["PATCH", "/admin/users/1"],
+    ["DELETE", "/admin/users/1"],
   ];
 
   it.each(protectedCalls)("%s %s → 401", async (method, path) => {
@@ -550,5 +554,109 @@ describe("campaign list counts", () => {
     expect(of("Alpha Reprise")).toMatchObject({ upload_count: 1, total_rows: 1 });
     // A campaign with nothing uploaded still lists, with zeroes rather than nulls.
     expect(of("Alpha Other")).toMatchObject({ upload_count: 0, total_rows: 0 });
+  });
+});
+
+// The Customers screen: the accounts of a customer, and what can be done to them.
+describe("managing accounts", () => {
+  const madeEmail = "managed@test.local";
+
+  const accountId = async (email: string): Promise<number> => {
+    const list = await alpha.get<{ id: number; email: string }[]>(
+      `/admin/customers/${alphaCustomerId}/users`
+    );
+    const found = list.body.find((u) => u.email === email);
+    if (!found) throw new Error(`no account for ${email}`);
+    return found.id;
+  };
+
+  it("lists accounts with whether they are active", async () => {
+    const created = await alpha.post<{ id: number }>(`/admin/customers/${alphaCustomerId}/users`, {
+      email: madeEmail,
+      password: "password123",
+      role: "user",
+    });
+    expect(created.status).toBe(201);
+
+    const list = await alpha.get<{ email: string; is_active: number }[]>(
+      `/admin/customers/${alphaCustomerId}/users`
+    );
+    expect(list.body.find((u) => u.email === madeEmail)?.is_active).toBe(1);
+    expect(list.body.some((u) => u.email === "alpha-admin@test.local")).toBe(true);
+  });
+
+  it("deactivating an account ends its session and blocks the login", async () => {
+    const id = await accountId(madeEmail);
+    const victim = newClient(server.baseUrl);
+    await victim.login(madeEmail, "password123");
+    expect((await victim.get("/campaigns")).status).toBe(200);
+
+    const off = await alpha.patch<{ is_active: number }>(`/admin/users/${id}`, { active: false });
+    expect(off.status).toBe(200);
+    expect(off.body.is_active).toBe(0);
+
+    // The session it already had is gone, and it cannot log in again.
+    expect((await victim.get("/campaigns")).status).toBe(401);
+    expect(
+      (await victim.post("/auth/login", { email: madeEmail, password: "password123" })).status
+    ).toBe(401);
+
+    const on = await alpha.patch<{ is_active: number }>(`/admin/users/${id}`, { active: true });
+    expect(on.status).toBe(200);
+    await victim.login(madeEmail, "password123");
+    expect((await victim.get("/campaigns")).status).toBe(200);
+  });
+
+  it("deleting an account removes it, and its sessions with it", async () => {
+    const id = await accountId(madeEmail);
+    const victim = newClient(server.baseUrl);
+    await victim.login(madeEmail, "password123");
+
+    const gone = await alpha.delete(`/admin/users/${id}`);
+    expect(gone.status).toBe(200);
+    expect((await victim.get("/campaigns")).status).toBe(401);
+
+    const list = await alpha.get<{ email: string }[]>(`/admin/customers/${alphaCustomerId}/users`);
+    expect(list.body.some((u) => u.email === madeEmail)).toBe(false);
+  });
+
+  it("refuses to delete an account that recorded returns", async () => {
+    // It recorded a return earlier in this file, so returns.recorded_by points at it.
+    const id = await accountId("alpha-user@test.local");
+    const res = await alpha.delete<{ error: string }>(`/admin/users/${id}`);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("deactivate it instead");
+
+    const after = await alpha.get<{ id: number; is_active: number }[]>(
+      `/admin/customers/${alphaCustomerId}/users`
+    );
+    expect(after.body.find((u) => u.id === id)?.is_active).toBe(1);
+  });
+
+  it("refuses to touch your own account", async () => {
+    const me = await accountId("alpha-admin@test.local");
+    expect((await alpha.patch(`/admin/users/${me}`, { active: false })).status).toBe(400);
+    expect((await alpha.delete(`/admin/users/${me}`)).status).toBe(400);
+  });
+
+  it("keeps the last active platform super-admin", async () => {
+    // root@test.local is the only account with no customer of its own.
+    const res = await alpha.patch<{ error: string }>(`/admin/users/${rootUserId}`, {
+      active: false,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("platform super-admin");
+    expect((await alpha.delete(`/admin/users/${rootUserId}`)).status).toBe(400);
+  });
+
+  it("wants a real boolean and a real account", async () => {
+    expect((await alpha.patch(`/admin/users/${rootUserId}`, { active: "yes" })).status).toBe(400);
+    expect((await alpha.patch("/admin/users/999999", { active: false })).status).toBe(404);
+    expect((await alpha.delete("/admin/users/999999")).status).toBe(404);
+  });
+
+  it("lets nobody with a `user` role near accounts", async () => {
+    expect((await alphaUser.patch(`/admin/users/${rootUserId}`, { active: false })).status).toBe(403);
+    expect((await alphaUser.delete(`/admin/users/${rootUserId}`)).status).toBe(403);
   });
 });

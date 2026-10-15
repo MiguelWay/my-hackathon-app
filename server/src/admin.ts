@@ -3,7 +3,7 @@ import type { RequestHandler, Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
-import { requireAuth, requireSuperAdmin } from "./auth";
+import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
 import { sendCampaignExport } from "./export";
 import { boundedString, isValidEmail, MAX_NAME_LENGTH, passwordProblem } from "./validate";
 
@@ -23,7 +23,9 @@ adminRouter.get(
   ah(async (_req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT c.id, c.name, c.created_at,
-              (SELECT COUNT(*) FROM users u WHERE u.customer_id = c.id) AS user_count
+              (SELECT COUNT(*) FROM users u WHERE u.customer_id = c.id) AS user_count,
+              (SELECT COUNT(*) FROM users u WHERE u.customer_id = c.id AND u.is_active = 1)
+                AS active_user_count
          FROM customers c ORDER BY c.id DESC`
     );
     res.json(rows);
@@ -53,7 +55,8 @@ adminRouter.get(
   "/customers/:id/users",
   ah(async (req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT id, email, role, created_at FROM users WHERE customer_id = ? ORDER BY role, id",
+      `SELECT id, email, role, is_active, created_at
+         FROM users WHERE customer_id = ? ORDER BY is_active DESC, id`,
       [req.params.id]
     );
     res.json(rows);
@@ -90,6 +93,100 @@ adminRouter.get(
       return res.status(400).json({ error: "invalid campaign id" });
     }
     await sendCampaignExport(res, campaignId, null);
+  })
+);
+
+/** An account, as far as the guards below care. */
+interface AccountRow extends RowDataPacket {
+  id: number;
+  customer_id: number | null;
+  email: string;
+  role: string;
+  is_active: number;
+}
+
+async function findAccount(id: string): Promise<AccountRow | null> {
+  const [rows] = await pool.query<AccountRow[]>(
+    "SELECT id, customer_id, email, role, is_active FROM users WHERE id = ?",
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Only a platform super-admin (no customer of its own) can reach these screens, so the last active
+ * one has to survive: without it nobody could create customers or fix accounts again.
+ */
+async function isLastPlatformAdmin(user: AccountRow): Promise<boolean> {
+  if (user.customer_id !== null || user.role !== "superadmin" || user.is_active !== 1) return false;
+  const [rows] = await pool.query<(RowDataPacket & { others: number })[]>(
+    `SELECT COUNT(*) AS others FROM users
+      WHERE customer_id IS NULL AND role = 'superadmin' AND is_active = 1 AND id <> ?`,
+    [user.id]
+  );
+  return Number(rows[0]?.others ?? 0) === 0;
+}
+
+/** The reasons an account may not be deactivated or deleted; null when it may. */
+async function problemWith(
+  user: AccountRow,
+  callerId: number,
+  action: "deactivate" | "delete"
+): Promise<string | null> {
+  if (user.id === callerId) return `you cannot ${action} your own account`;
+  if (await isLastPlatformAdmin(user)) {
+    return `${action} would leave nobody able to manage customers: this is the last active platform super-admin`;
+  }
+  return null;
+}
+
+// Activate or deactivate one account. A deactivated account cannot log in, and its open sessions end
+// immediately, because every authenticated request checks users.is_active.
+adminRouter.patch(
+  "/users/:id",
+  ah(async (req, res) => {
+    const caller = res.locals.user as AuthUser;
+    const user = await findAccount(String(req.params.id));
+    if (!user) return res.status(404).json({ error: "user not found" });
+
+    const { active } = req.body ?? {};
+    if (typeof active !== "boolean") {
+      return res.status(400).json({ error: "active must be true or false" });
+    }
+    if (!active) {
+      const problem = await problemWith(user, caller.id, "deactivate");
+      if (problem) return res.status(400).json({ error: problem });
+    }
+
+    await pool.query("UPDATE users SET is_active = ? WHERE id = ?", [active ? 1 : 0, user.id]);
+    if (!active) await pool.query("DELETE FROM sessions WHERE user_id = ?", [user.id]);
+    res.json({ id: user.id, email: user.email, role: user.role, is_active: active ? 1 : 0 });
+  })
+);
+
+// Delete an account for good. Returns keep a reference to whoever recorded them, so an account that
+// recorded returns can only be deactivated.
+adminRouter.delete(
+  "/users/:id",
+  ah(async (req, res) => {
+    const caller = res.locals.user as AuthUser;
+    const user = await findAccount(String(req.params.id));
+    if (!user) return res.status(404).json({ error: "user not found" });
+
+    const problem = await problemWith(user, caller.id, "delete");
+    if (problem) return res.status(400).json({ error: problem });
+
+    try {
+      await pool.query("DELETE FROM users WHERE id = ?", [user.id]);
+    } catch (err) {
+      if ((err as { code?: string }).code === "ER_ROW_IS_REFERENCED_2") {
+        return res.status(409).json({
+          error: "this account recorded returns; deactivate it instead of deleting it",
+        });
+      }
+      throw err;
+    }
+    res.json({ ok: true, id: user.id, email: user.email });
   })
 );
 

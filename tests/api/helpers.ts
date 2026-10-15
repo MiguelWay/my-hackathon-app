@@ -121,6 +121,7 @@ export class Client {
     this.request<T>("POST", path, body);
   readonly patch = <T = unknown>(path: string, body?: unknown) =>
     this.request<T>("PATCH", path, body);
+  readonly delete = <T = unknown>(path: string) => this.request<T>("DELETE", path);
 
   async register(customerName: string, email: string, password: string) {
     const res = await this.post<{ id: number; customerId: number; role: string }>(
