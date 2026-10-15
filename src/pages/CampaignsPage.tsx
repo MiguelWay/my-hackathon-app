@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { CampaignListUpload } from "../components/CampaignListUpload";
@@ -15,6 +15,7 @@ interface Campaign {
 
 interface Upload {
   id: number;
+  campaign_id: number;
   filename: string | null;
   row_count: number;
   created_at: string;
@@ -25,17 +26,21 @@ export function CampaignsPage() {
   // A super-admin runs the campaigns; a `user` only processes returns.
   const isSuperAdmin = user?.role === "superadmin";
   const [items, setItems] = useState<Campaign[]>([]);
+  const [uploads, setUploads] = useState<Upload[]>([]);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [finishDate, setFinishDate] = useState("");
   const [error, setError] = useState<string | null>(null);
-  // The campaign a list is being added to, and the one whose uploaded lists are open below.
+  // The campaign a list is being added to.
   const [target, setTarget] = useState("");
-  const [openLists, setOpenLists] = useState<number | null>(null);
-  const [uploads, setUploads] = useState<Upload[]>([]);
 
   async function load() {
-    setItems(await api.get<Campaign[]>("/campaigns"));
+    const [campaigns, lists] = await Promise.all([
+      api.get<Campaign[]>("/campaigns"),
+      api.get<Upload[]>("/campaigns/uploads"),
+    ]);
+    setItems(campaigns);
+    setUploads(lists);
   }
 
   useEffect(() => {
@@ -65,40 +70,27 @@ export function CampaignsPage() {
     }
   }
 
-  async function toggleLists(campaignId: number) {
-    if (openLists === campaignId) {
-      setOpenLists(null);
-      setUploads([]);
-      return;
-    }
-    setOpenLists(campaignId);
-    setError(null);
-    try {
-      setUploads(await api.get<Upload[]>(`/campaigns/${campaignId}/uploads`));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load the uploaded lists");
-    }
-  }
-
-  /** After an import: refresh the counts, and the open panel when it is that campaign's. */
-  async function afterImport(campaignId: number) {
+  /** After an import: refresh the counts and the uploaded lists. */
+  async function afterImport() {
     try {
       await load();
-      if (openLists === campaignId) {
-        setUploads(await api.get<Upload[]>(`/campaigns/${campaignId}/uploads`));
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to refresh the campaigns");
     }
   }
 
-  const openCampaign = items.find((c) => c.id === openLists);
-  const openLines = uploads.reduce((sum, u) => sum + u.row_count, 0);
+  const listsByCampaign = useMemo(() => {
+    const map = new Map<number, Upload[]>();
+    for (const u of uploads) {
+      const list = map.get(u.campaign_id);
+      if (list) list.push(u);
+      else map.set(u.campaign_id, [u]);
+    }
+    return map;
+  }, [uploads]);
 
   return (
     <div>
-      <h1>Campaigns</h1>
-
       {!isSuperAdmin && (
         <p className="muted">Only a super-admin can create campaigns and upload lists.</p>
       )}
@@ -106,40 +98,42 @@ export function CampaignsPage() {
       {error && <p className="error">{error}</p>}
 
       {isSuperAdmin && (
-        <form className="card inline" onSubmit={create}>
-          <h2>New campaign</h2>
+        <details className="card">
+          <summary>New campaign</summary>
+          <form className="customer-row" onSubmit={create}>
+            <label>
+              Name
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </label>
+            <label>
+              Start date
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Finish date
+              <input
+                type="date"
+                value={finishDate}
+                onChange={(e) => setFinishDate(e.target.value)}
+                required
+              />
+            </label>
+            <button>Create</button>
+          </form>
           <p className="muted">
             Start and finish dates are required: a campaign without a window cannot be reported on.
           </p>
-          <label>
-            Name
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </label>
-          <label>
-            Start date
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Finish date
-            <input
-              type="date"
-              value={finishDate}
-              onChange={(e) => setFinishDate(e.target.value)}
-              required
-            />
-          </label>
-          <button>Create</button>
-        </form>
+        </details>
       )}
 
       {isSuperAdmin && (
-        <div className="card">
-          <h2>Add a list to an existing campaign</h2>
+        <details className="card">
+          <summary>Add a list to an existing campaign</summary>
           {items.length === 0 ? (
             <p className="muted">Create a campaign first — every list belongs to one.</p>
           ) : (
@@ -163,95 +157,50 @@ export function CampaignsPage() {
                 <CampaignListUpload
                   key={target}
                   campaignId={Number(target)}
-                  onImported={() => afterImport(Number(target))}
+                  onImported={afterImport}
                 />
               )}
             </>
           )}
-        </div>
+        </details>
       )}
 
-      <h2>All campaigns</h2>
-      <table className="grid">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Start</th>
-            <th>Finish</th>
-            <th>Lists</th>
-            <th>Lines</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((c) => (
-            <tr key={c.id}>
-              <td>{c.id}</td>
-              <td>
-                <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
-              </td>
-              <td>{c.start_date ?? "—"}</td>
-              <td>{c.finish_date ?? "—"}</td>
-              <td>{c.upload_count}</td>
-              <td>{c.total_rows}</td>
-              <td>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={c.upload_count === 0}
-                  onClick={() => toggleLists(c.id)}
-                >
-                  {openLists === c.id ? "Close" : "Lists"}
-                </button>
-              </td>
-            </tr>
-          ))}
-          {items.length === 0 && (
-            <tr>
-              <td colSpan={7} className="muted">
-                No campaigns yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-
-      {openLists !== null && (
-        <div className="card">
-          <h2>{openCampaign?.name}: uploaded lists</h2>
-          {uploads.length === 0 ? (
-            <p className="muted">No lists uploaded to this campaign yet.</p>
-          ) : (
-            <>
-              <div className="scroll">
-                <table className="grid">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>File</th>
-                      <th>Lines</th>
-                      <th>Uploaded</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {uploads.map((u) => (
-                      <tr key={u.id}>
-                        <td>{u.id}</td>
-                        <td>{u.filename ?? "unknown file"}</td>
-                        <td>{u.row_count}</td>
-                        <td>{u.created_at}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      {items.length === 0 ? (
+        <p className="muted">No campaigns yet.</p>
+      ) : (
+        items.map((c) => {
+          const lists = listsByCampaign.get(c.id) ?? [];
+          return (
+            <section className="campaign-block" key={c.id}>
+              <div className="campaign-head">
+                <Link className="campaign-title" to={`/campaigns/${c.id}`}>
+                  {c.name}
+                </Link>
+                <span className="muted">
+                  {c.start_date ?? "—"} → {c.finish_date ?? "—"}
+                </span>
+                <span className="muted">
+                  {c.upload_count} list{c.upload_count === 1 ? "" : "s"} · {c.total_rows} line
+                  {c.total_rows === 1 ? "" : "s"}
+                </span>
               </div>
-              <p className="muted">
-                {uploads.length} list{uploads.length === 1 ? "" : "s"} · {openLines} lines.
-              </p>
-            </>
-          )}
-        </div>
+
+              {lists.length === 0 ? (
+                <p className="muted">No lists uploaded yet.</p>
+              ) : (
+                <ul className="upload-list">
+                  {lists.map((u) => (
+                    <li key={u.id}>
+                      <span className="file">{u.filename ?? "unknown file"}</span>
+                      <span>{u.row_count} lines</span>
+                      <span className="muted">uploaded {u.created_at}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          );
+        })
       )}
     </div>
   );

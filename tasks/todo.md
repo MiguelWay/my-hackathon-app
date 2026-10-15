@@ -724,3 +724,30 @@ tall the page scrolled itself from 0 to 183 px when the list opened), and the co
 **Files:** `src/pages/CustomersPage.tsx`, `src/styles.css`, `server/src/admin.ts`,
 `tests/api/isolation.test.ts`
 **Scope:** Small
+
+## Campaigns: collapsed tools, and every list under its campaign
+
+**Description:** "Remove the title Campaigns. Redo the view: new campaign and add list to existing
+campaign collapsed, and when clicked they open to show the functionality. I want all campaigns to show
+a list of all databases uploaded — I must be able to see easily for each campaign a list of all
+uploaded lists."
+
+**Progress:** **Done.** The page has no `h1`. The two tools are `<details class="card">` bars
+("New campaign", "Add a list to an existing campaign") that start collapsed and open on click. Below
+them, every campaign is a block: its name (linking to the campaign), the date window, `N lists · M
+lines`, and then **every uploaded file** — name, lines, uploaded — always visible, no click needed.
+`GET /campaigns/uploads` returns the company's uploads keyed by campaign, so the screen needs one
+request instead of one per campaign; it is declared before `/:id`, which would otherwise swallow
+"uploads". `CampaignListUpload` no longer wraps itself in a card, so it sits inside a `<details>` bar
+without nesting.
+
+**Verification:** `npm test` — **163 tests**, with a new case for `/campaigns/uploads` (only the
+company's own uploads, each carrying its campaign) · `npm run typecheck:api` and `npm run build` clean ·
+browser-verified: no `h1`; both bars start collapsed and open to the dates form and to the campaign
+select plus file input; *vuelta al cole* shows `1 list · 150 lines` with `EtqVueltaC.xlsx · 150 lines ·
+uploaded 2026-10-15 12:29:49`; a `user` sees no bars at all; and Acme's *April drop* shows both of its
+files (`envios-abril.xlsx`, `new.xlsx`).
+
+**Files:** `src/pages/CampaignsPage.tsx`, `src/components/CampaignListUpload.tsx`, `src/styles.css`,
+`server/src/campaigns.ts`, `tests/api/isolation.test.ts`
+**Scope:** Medium

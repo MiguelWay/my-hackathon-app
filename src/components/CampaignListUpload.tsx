@@ -98,7 +98,7 @@ export function CampaignListUpload({
 
   return (
     <>
-      <div className="card">
+      <div className="upload-input">
         <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} />
         <p className="muted">
           One campaign can hold several lists; package IDs must be unique within the campaign.

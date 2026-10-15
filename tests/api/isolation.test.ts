@@ -564,6 +564,20 @@ describe("campaign list counts", () => {
     // A campaign with nothing uploaded still lists, with zeroes rather than nulls.
     expect(of("Alpha Other")).toMatchObject({ upload_count: 0, total_rows: 0 });
   });
+
+  it("lists every uploaded list of the company, with its campaign", async () => {
+    const res = await alpha.get<
+      { campaign_id: number; filename: string; row_count: number }[]
+    >("/campaigns/uploads");
+    expect(res.status).toBe(200);
+    expect(res.body.map((u) => u.filename).sort()).toEqual(["alpha.xlsx", "reprise.xlsx"]);
+    expect(res.body.find((u) => u.filename === "alpha.xlsx")).toMatchObject({
+      campaign_id: alphaCampaign,
+      row_count: 3,
+    });
+    // Never another company's uploads.
+    expect(res.body.some((u) => u.filename === "beta.xlsx")).toBe(false);
+  });
 });
 
 // The Customers screen: the accounts of a customer, and what can be done to them.

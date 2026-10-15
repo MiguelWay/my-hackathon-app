@@ -52,6 +52,24 @@ campaignsRouter.get(
   })
 );
 
+// Every list uploaded for the caller's company, so the campaigns screen can show them all without
+// one request per campaign. Declared before "/:id", which would otherwise swallow "uploads".
+campaignsRouter.get(
+  "/uploads",
+  ah(async (_req, res) => {
+    const user = currentUser(res);
+    if (user.customerId === null) return res.json([]);
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, campaign_id, filename, row_count, created_at
+         FROM campaign_uploads
+        WHERE customer_id = ?
+        ORDER BY campaign_id DESC, id`,
+      [user.customerId]
+    );
+    res.json(rows);
+  })
+);
+
 campaignsRouter.post(
   "/",
   requireSuperAdmin,
