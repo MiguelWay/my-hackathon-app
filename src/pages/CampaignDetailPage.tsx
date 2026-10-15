@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import * as XLSX from "xlsx";
-import { api, baseUrl } from "../lib/api";
+import { api } from "../lib/api";
+import { downloadCampaignExport } from "../lib/campaignExport";
 import { guessSenderColumn } from "../lib/senderColumn";
 import { useAuth } from "../auth/AuthContext";
 
@@ -150,28 +151,8 @@ export function CampaignDetailPage() {
     setNotice(null);
     setExporting(true);
     try {
-      const res = await fetch(`${baseUrl}/campaigns/${id}/export`, { credentials: "include" });
-      if (!res.ok) {
-        let message = res.statusText;
-        try {
-          const body: unknown = await res.json();
-          if (body && typeof body === "object" && "error" in body) message = String(body.error);
-        } catch {
-          /* not JSON */
-        }
-        throw new Error(message);
-      }
-      const disposition = res.headers.get("Content-Disposition") ?? "";
-      const named = /filename="([^"]+)"/.exec(disposition);
-      const url = URL.createObjectURL(await res.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = named?.[1] ?? `campaign-${id}.xlsx`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setNotice(`Exported ${packages.length} packages.`);
+      const filename = await downloadCampaignExport(Number(id));
+      setNotice(`Exported ${packages.length} packages to ${filename}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {

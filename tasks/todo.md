@@ -513,3 +513,23 @@ renders each link in turn.
 **Files:** `src/pages/{ReturnsPage,RecentReturnsPage}.tsx`, `src/components/Layout.tsx`,
 `server/src/returns.ts`, `tests/api/isolation.test.ts`
 **Scope:** Small
+
+## Export straight from Recently recorded
+
+**Description:** A super-admin should be able to download the flagged `.xlsx` without opening the
+campaign first — the request was a download button on "Recently recorded", or export functionality
+in the top menu.
+
+**Progress:** **Done**, as the download button. The page lists the distinct campaigns of the returns
+it is showing, each with a `Download <campaign>` button, and the success notice names the file. The
+button is shown to super-admins only (they are the ones who run campaigns); the API would allow a
+`user` to export too. The download itself moved to `src/lib/campaignExport.ts` and is shared with the
+campaign screen, so there is one implementation of it.
+
+**Verification:** `npm test` — **141 tests** · `npm run typecheck:api` and `npm run build` clean ·
+browser-verified on the production build as `admin@acme.test`: the card offers "Download March drop"
+and "Download April drop", and clicking the first downloaded `campaign-1-march-drop.xlsx` (`file`:
+Microsoft Excel 2007+, 22 KB) and showed the notice.
+
+**Files:** `src/lib/campaignExport.ts`, `src/pages/{RecentReturnsPage,CampaignDetailPage}.tsx`
+**Scope:** Small
