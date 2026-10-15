@@ -650,3 +650,25 @@ that message and the account stayed.
 **Files:** `server/src/admin.ts`, `src/pages/CustomersPage.tsx`, `src/lib/api.ts`,
 `tests/api/{isolation.test.ts,helpers.ts}`
 **Scope:** Medium
+
+## A customer's campaigns open under its own row
+
+**Description:** "When clicking on campaigns it should open up a list below the customer name. I must
+be able to select by pinching [clicking] on the individual campaign."
+
+**Progress:** **Done.** The campaigns are no longer a card under the whole table: they open as an extra
+`tr.expand` directly beneath that customer's row (a `Fragment` per customer), and each campaign is one
+full-width click target carrying its name, dates, `packages · returns` and a `Download .xlsx` label,
+which downloads its flagged sheet. The one clicked stays highlighted (`aria-pressed` plus a blue left
+edge) so it is obvious which was taken. A `null` campaigns state shows "Loading…" instead of briefly
+claiming the customer has no campaigns. `Users` still opens as a card below the table, because that was
+not part of this request.
+
+**Verification:** `npm test` — 162 tests (unchanged; markup only) · `npm run build` clean ·
+browser-verified on the production build: the expanded row is the next sibling of the *Acme Retail* row
+and inside the customers table; the list shows *April drop* (5 packages · 4 returns) and *March drop*
+(503 · 42); clicking *April drop* downloaded `campaign-3-april-drop.xlsx` and left the row highlighted;
+`Close` removed the row and left the table at six rows.
+
+**Files:** `src/pages/CustomersPage.tsx`, `src/styles.css`
+**Scope:** Small

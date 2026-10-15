@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { downloadCampaignExportForAdmin } from "../lib/campaignExport";
 import { PasswordInput } from "../components/PasswordInput";
@@ -52,7 +52,9 @@ export function CustomersPage() {
   const [users, setUsers] = useState<CustomerUser[]>([]);
   // The account whose delete has been armed, so deleting is never one careless click.
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
-  const [campaigns, setCampaigns] = useState<CustomerCampaign[]>([]);
+  const [campaigns, setCampaigns] = useState<CustomerCampaign[] | null>(null);
+  // The campaign clicked in the expanded list, so the operator can see which one they took.
+  const [chosenCampaign, setChosenCampaign] = useState<number | null>(null);
   const [exporting, setExporting] = useState<number | null>(null);
 
   const load = useCallback(async () => {
@@ -144,7 +146,7 @@ export function CustomersPage() {
     if (panel?.customerId === customerId && panel.kind === kind) {
       setPanel(null);
       setUsers([]);
-      setCampaigns([]);
+      setCampaigns(null);
       setForm(emptyForm());
       return;
     }
@@ -153,7 +155,8 @@ export function CustomersPage() {
     setError(null);
     setNotice(null);
     setUsers([]);
-    setCampaigns([]);
+    setCampaigns(null);
+    setChosenCampaign(null);
     try {
       if (kind === "users") {
         setUsers(await api.get<CustomerUser[]>(`/admin/customers/${customerId}/users`));
@@ -168,6 +171,7 @@ export function CustomersPage() {
   async function downloadCampaign(campaign: CustomerCampaign) {
     setError(null);
     setNotice(null);
+    setChosenCampaign(campaign.id);
     setExporting(campaign.id);
     try {
       const filename = await downloadCampaignExportForAdmin(campaign.id);
@@ -215,36 +219,85 @@ export function CustomersPage() {
           </thead>
           <tbody>
             {items.map((c) => (
-              <tr key={c.id}>
-                <td>{c.id}</td>
-                <td>{c.name}</td>
-                <td>
-                  {c.user_count}
-                  {c.active_user_count !== c.user_count && (
-                    <span className="muted"> · {c.active_user_count} active</span>
-                  )}
-                </td>
-                <td>
-                  <div className="btn-row">
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => togglePanel(c.id, "users")}
-                    >
-                      {panel?.customerId === c.id && panel.kind === "users" ? "Close" : "Users"}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => togglePanel(c.id, "campaigns")}
-                    >
-                      {panel?.customerId === c.id && panel.kind === "campaigns"
-                        ? "Close"
-                        : "Campaigns"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
+              <Fragment key={c.id}>
+                <tr>
+                  <td>{c.id}</td>
+                  <td>{c.name}</td>
+                  <td>
+                    {c.user_count}
+                    {c.active_user_count !== c.user_count && (
+                      <span className="muted"> · {c.active_user_count} active</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="btn-row">
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => togglePanel(c.id, "users")}
+                      >
+                        {panel?.customerId === c.id && panel.kind === "users" ? "Close" : "Users"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => togglePanel(c.id, "campaigns")}
+                      >
+                        {panel?.customerId === c.id && panel.kind === "campaigns"
+                          ? "Close"
+                          : "Campaigns"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                {panel?.customerId === c.id && panel.kind === "campaigns" && (
+                  <tr className="expand">
+                    <td colSpan={4}>
+                      {campaigns === null ? (
+                        <p className="muted">Loading…</p>
+                      ) : campaigns.length === 0 ? (
+                        <p className="muted">This customer has no campaigns yet.</p>
+                      ) : (
+                        <>
+                          <p className="muted">
+                            Click a campaign to download its flagged .xlsx: the uploaded columns plus
+                            the return status, the reason and the resend of each package.
+                          </p>
+                          <ul className="campaign-list">
+                            {campaigns.map((camp) => (
+                              <li key={camp.id}>
+                                <button
+                                  type="button"
+                                  className={
+                                    chosenCampaign === camp.id
+                                      ? "campaign-choice now"
+                                      : "campaign-choice"
+                                  }
+                                  aria-pressed={chosenCampaign === camp.id}
+                                  disabled={exporting !== null || camp.package_count === 0}
+                                  onClick={() => downloadCampaign(camp)}
+                                >
+                                  <span className="campaign-name">{camp.name}</span>
+                                  <span className="muted">
+                                    {camp.start_date ?? "—"} → {camp.finish_date ?? "—"}
+                                  </span>
+                                  <span className="muted">
+                                    {camp.package_count} packages · {camp.return_count} returns
+                                  </span>
+                                  <span className="download">
+                                    {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -374,58 +427,6 @@ export function CustomersPage() {
           <p className="muted">
             Passwords must be 8–100 characters. Emails are unique across the whole platform.
           </p>
-        </div>
-      )}
-
-      {panel?.kind === "campaigns" && (
-        <div className="card">
-          <h2>{openCustomer?.name}: campaigns</h2>
-          <p className="muted">
-            Every campaign this customer has. The download is the flagged .xlsx: the uploaded columns
-            plus the return status, the reason and the resend of each package.
-          </p>
-
-          {campaigns.length === 0 ? (
-            <p className="muted">This customer has no campaigns yet.</p>
-          ) : (
-            <div className="scroll">
-              <table className="grid">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Campaign</th>
-                    <th>Start</th>
-                    <th>Finish</th>
-                    <th>Packages</th>
-                    <th>Returns</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {campaigns.map((c) => (
-                    <tr key={c.id}>
-                      <td>{c.id}</td>
-                      <td>{c.name}</td>
-                      <td>{c.start_date ?? "—"}</td>
-                      <td>{c.finish_date ?? "—"}</td>
-                      <td>{c.package_count}</td>
-                      <td>{c.return_count}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="secondary"
-                          disabled={exporting !== null || c.package_count === 0}
-                          onClick={() => downloadCampaign(c)}
-                        >
-                          {exporting === c.id ? "Preparing…" : "Download .xlsx"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       )}
     </div>
