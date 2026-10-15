@@ -39,6 +39,48 @@ describe("guessSenderColumn", () => {
     expect(guessSenderColumn(["Fecha", "Envío ID"])).toBe(1);
   });
 
+  // Regression: a real Correos label sheet ("EtqVueltaC.xlsx") whose sender IDs live in "Ref. 1".
+  // The old hint list only knew "sender"/"envío"/"id" and returned -1 for it.
+  describe("a real Spanish label sheet", () => {
+    const realHeaders = [
+      "Ref. 1",
+      "Ref. 2",
+      "Ref. 3",
+      "Nombre establecimiento",
+      "Dirección",
+      "Ciudad",
+      "Código postal",
+      "Provincia",
+      "ATT.",
+      "Telefono",
+      "Email",
+      "Observaciones",
+      "Largo",
+      "Ancho",
+      "Alto",
+      "Peso",
+    ];
+
+    it("picks 'Ref. 1' and not the other Ref. columns", () => {
+      expect(guessSenderColumn(realHeaders)).toBe(0);
+    });
+
+    it("is not confused by the other columns in that sheet", () => {
+      // None of these should ever be chosen over a Ref. column.
+      for (const noise of ["Dirección", "Provincia", "Observaciones", "Peso"]) {
+        expect(guessSenderColumn([noise, ...realHeaders])).toBe(1);
+      }
+    });
+  });
+
+  it("understands the shorthands Spanish carriers use", () => {
+    expect(guessSenderColumn(["Fecha", "Nº de envío"])).toBe(1);
+    expect(guessSenderColumn(["Fecha", "No de envio"])).toBe(1);
+    expect(guessSenderColumn(["Albaran", "Cliente"])).toBe(0);
+    expect(guessSenderColumn(["Nombre", "Nº seguimiento"])).toBe(1);
+    expect(guessSenderColumn(["Referencia", "Ciudad"])).toBe(0);
+  });
+
   it("returns -1 when nothing looks like a sender ID", () => {
     expect(guessSenderColumn(["Fecha", "Ciudad", "Notas"])).toBe(-1);
   });

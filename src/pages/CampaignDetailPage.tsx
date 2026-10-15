@@ -239,6 +239,13 @@ export function CampaignDetailPage() {
             </button>
           </div>
 
+          {senderIdx < 0 && (
+            <p className="muted">
+              Couldn&rsquo;t tell which column holds the sender ID — choose it above. The preview
+              below shows the first rows so you can spot the right one.
+            </p>
+          )}
+
           <h2>Preview (first 10 rows)</h2>
           <div className="scroll">
             <table className="grid">
