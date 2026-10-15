@@ -42,6 +42,16 @@ export function passwordProblem(value: unknown): string | null {
   return null;
 }
 
+/**
+ * An optional positive integer from a query string or query parameter: `undefined` when it is absent
+ * or empty, `null` when it is present but not a positive whole number.
+ */
+export function optionalPositiveInt(value: unknown): number | undefined | null {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**

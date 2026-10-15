@@ -816,3 +816,28 @@ from there gave `Imported 2 lines · package ID column: "ID de envío"` and the 
 
 **Files:** `src/pages/CampaignsPage.tsx`, `src/pages/CampaignDetailPage.tsx`
 **Scope:** Small
+
+## Choose which list to download
+
+**Description:** "Add a selector to decide where to download the list."
+
+**Progress:** **Done.** The campaign screen's export row has a `Download` selector: **Whole campaign (N
+packages)** by default, or any one of that campaign's uploaded lists by name and line count. The sheet
+is the same flagged export either way; a list only limits it to the rows that came from that file, which
+leaves out the resends because they have no file line. `GET /campaigns/:id/export?uploadId=` and
+`/admin/campaigns/:id/export?uploadId=` accept it: the id is validated (400 when it is not a positive
+number) and must belong to that campaign and company (404 `list not found`), and the file is named after
+the list (`campaign-6-etqvueltac.xlsx`) rather than the campaign. The shared `optionalPositiveInt` moved
+into `validate.ts`, so the returns lookup and both export routes parse query ids the same way.
+
+**Verification:** `npm test` — **166 tests**, three new: the filtered export is read back with SheetJS and
+holds exactly the three uploaded lines and no resend rows, a list from another campaign gives 404, and
+`uploadId=abc` gives 400 (a `Client.raw()` helper was added so a test can read a binary body).
+`npm run typecheck:api` and `npm run build` clean · browser-verified on *vuelta al cole*: the selector
+reads `Whole campaign (151 packages)` and `EtqVueltaC.xlsx (150 lines)`; one click made exactly one
+request, saving `campaign-6-vuelta-al-cole.xlsx` and `campaign-6-etqvueltac.xlsx`, which parse to **151**
+and **150** data rows with 19 columns each.
+
+**Files:** `server/src/{export,admin,returns,validate}.ts`, `src/lib/campaignExport.ts`,
+`src/pages/CampaignDetailPage.tsx`, `tests/api/{helpers,isolation.test.ts}`
+**Scope:** Medium

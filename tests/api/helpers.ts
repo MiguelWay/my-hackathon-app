@@ -123,6 +123,14 @@ export class Client {
     this.request<T>("PATCH", path, body);
   readonly delete = <T = unknown>(path: string) => this.request<T>("DELETE", path);
 
+  /** Fetches a binary resource with the session cookie, without parsing it as JSON. */
+  async raw(path: string): Promise<{ status: number; buffer: ArrayBuffer; headers: Headers }> {
+    const res = await fetch(`${this.baseUrl}/api${path}`, {
+      headers: this.cookie ? { cookie: this.cookie } : {},
+    });
+    return { status: res.status, buffer: await res.arrayBuffer(), headers: res.headers };
+  }
+
   async register(customerName: string, email: string, password: string) {
     const res = await this.post<{ id: number; customerId: number; role: string }>(
       "/auth/register",

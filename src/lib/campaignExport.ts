@@ -31,10 +31,14 @@ async function fetchExport(path: string, campaignId: number): Promise<string> {
 
 /**
  * Downloads one campaign's flagged .xlsx — every uploaded column, plus the return status, the
- * reason and the resend of each package — for a campaign of the caller's own company.
+ * reason and the resend of each package — for a campaign of the caller's own company. Passing
+ * `uploadId` narrows it to the rows of one uploaded list.
  */
-export const downloadCampaignExport = (campaignId: number): Promise<string> =>
-  fetchExport(`/campaigns/${campaignId}/export`, campaignId);
+export const downloadCampaignExport = (campaignId: number, uploadId?: number): Promise<string> =>
+  fetchExport(
+    `/campaigns/${campaignId}/export${uploadId === undefined ? "" : `?uploadId=${uploadId}`}`,
+    campaignId
+  );
 
 /** The same file for a campaign of ANY customer, for the platform super-admin's Customers screen. */
 export const downloadCampaignExportForAdmin = (campaignId: number): Promise<string> =>

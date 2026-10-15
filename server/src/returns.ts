@@ -5,6 +5,7 @@ import { pool } from "./db";
 import { requireAuth, requireCompany, requireSuperAdmin, type AuthUser } from "./auth";
 import { normalizeSenderId } from "./senderId";
 import { chainRootId, parseResendBody } from "./resends";
+import { optionalPositiveInt } from "./validate";
 
 // Mounted at /returns. A store operator types a sender ID, sees the package, and picks a reason.
 // Every query is scoped by customer_id.
@@ -17,13 +18,6 @@ const ah =
 const currentUser = (res: Response) => res.locals.user as AuthUser;
 
 const RECENT_LIMIT = 100;
-
-/** An optional positive integer from a query string: `undefined` when absent, `null` when invalid. */
-function optionalId(value: unknown): number | undefined | null {
-  if (value === undefined || value === null || value === "") return undefined;
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
 
 /** Every package in the same chain as one of `roots`, grouped by chain root. */
 async function chainsFor(customerId: number | null, roots: number[]) {
@@ -122,7 +116,7 @@ returnsRouter.get(
 
     // A lookup can be narrowed to one campaign: with the same package ID used in more than one of
     // the company's campaigns, the caller has to say which one they are holding.
-    const campaignId = optionalId(req.query.campaignId);
+    const campaignId = optionalPositiveInt(req.query.campaignId);
     if (campaignId === null) {
       return res.status(400).json({ error: "campaignId must be a positive number" });
     }

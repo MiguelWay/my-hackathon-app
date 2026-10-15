@@ -4,6 +4,7 @@ import type { RowDataPacket } from "mysql2";
 import ExcelJS from "exceljs";
 import { pool } from "./db";
 import { requireAuth, type AuthUser } from "./auth";
+import { optionalPositiveInt } from "./validate";
 import {
   buildExportLayout,
   cellFor,
@@ -65,17 +66,24 @@ function fileSlug(name: string): string {
   return ascii || "campaign";
 }
 
+/** The same slug for an uploaded list, without the .xlsx on the end (it is added back later). */
+const listSlug = (filename: string) => fileSlug(filename.replace(/\.xlsx?$/i, ""));
+
 /**
  * Builds one campaign's .xlsx and sends it.
  *
  * `scopeToCustomer` is the company the caller may look in: the tenant route passes the caller's own
  * company, while the platform route passes null because a super-admin may export any campaign. Every
  * query after that uses the campaign's real owner, so one sheet can never mix two companies.
+ *
+ * `uploadId`, when given, limits the sheet to the rows of one uploaded list — the way to get a single
+ * list back, without the resends that no file line produced.
  */
 export async function sendCampaignExport(
   res: Response,
   campaignId: number,
-  scopeToCustomer: number | null
+  scopeToCustomer: number | null,
+  uploadId?: number
 ): Promise<void> {
   const [campaigns] = await pool.query<
     (RowDataPacket & { id: number; name: string; customer_id: number })[]
@@ -92,15 +100,31 @@ export async function sendCampaignExport(
   }
   const customerId = campaign.customer_id;
 
+  // A list can only be exported through the campaign it was uploaded to.
+  let listFilename: string | null = null;
+  if (uploadId !== undefined) {
+    const [lists] = await pool.query<(RowDataPacket & { filename: string | null })[]>(
+      "SELECT filename FROM campaign_uploads WHERE id = ? AND campaign_id = ? AND customer_id = ?",
+      [uploadId, campaignId, customerId]
+    );
+    if (!lists[0]) {
+      res.status(404).json({ error: "list not found" });
+      return;
+    }
+    listFilename = lists[0].filename;
+  }
+
   const [rows] = await pool.query<PackageRow[]>(
     `SELECT p.id, p.upload_id, p.sender_id, p.extra_columns, p.chain_id,
             r.id AS return_id, rr.label AS reason_label
        FROM packages p
        LEFT JOIN returns r ON r.package_id = p.id
        LEFT JOIN return_reasons rr ON rr.id = r.reason_id
-      WHERE p.campaign_id = ? AND p.customer_id = ?
+      WHERE p.campaign_id = ? AND p.customer_id = ?${uploadId === undefined ? "" : " AND p.upload_id = ?"}
       ORDER BY p.id`,
-    [campaignId, customerId]
+    uploadId === undefined
+      ? [campaignId, customerId]
+      : [campaignId, customerId, uploadId]
   );
   if (!rows.length) {
     res.status(400).json({ error: "this campaign has no packages to export" });
@@ -177,7 +201,10 @@ export async function sendCampaignExport(
   });
 
   const buffer = await workbook.xlsx.writeBuffer();
-  const filename = `campaign-${campaignId}-${fileSlug(campaign.name)}.xlsx`;
+  const filename =
+    listFilename === null
+      ? `campaign-${campaignId}-${fileSlug(campaign.name)}.xlsx`
+      : `campaign-${campaignId}-${listSlug(listFilename)}.xlsx`;
   res.setHeader(
     "Content-Type",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -202,6 +229,10 @@ exportRouter.get(
     const user = currentUser(res);
     if (user.customerId === null) return res.status(404).json({ error: "campaign not found" });
 
-    await sendCampaignExport(res, campaignId, user.customerId);
+    const uploadId = optionalPositiveInt(req.query.uploadId);
+    if (uploadId === null) {
+      return res.status(400).json({ error: "uploadId must be a positive number" });
+    }
+    await sendCampaignExport(res, campaignId, user.customerId, uploadId);
   })
 );

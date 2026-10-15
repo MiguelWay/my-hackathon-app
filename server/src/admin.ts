@@ -5,7 +5,7 @@ import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
 import { sendCampaignExport } from "./export";
-import { boundedString, isValidEmail, MAX_NAME_LENGTH, passwordProblem } from "./validate";
+import { boundedString, isValidEmail, MAX_NAME_LENGTH, optionalPositiveInt, passwordProblem } from "./validate";
 
 const ah =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler =>
@@ -84,7 +84,8 @@ adminRouter.get(
 );
 
 // One campaign's flagged .xlsx, for ANY customer: the tenant route (/campaigns/:id/export) stays
-// scoped to the caller's own company, and this is the platform-wide equivalent.
+// scoped to the caller's own company, and this is the platform-wide equivalent. `?uploadId=` limits it
+// to the rows of a single uploaded list.
 adminRouter.get(
   "/campaigns/:id/export",
   ah(async (req, res) => {
@@ -92,7 +93,11 @@ adminRouter.get(
     if (!Number.isInteger(campaignId) || campaignId <= 0) {
       return res.status(400).json({ error: "invalid campaign id" });
     }
-    await sendCampaignExport(res, campaignId, null);
+    const uploadId = optionalPositiveInt(req.query.uploadId);
+    if (uploadId === null) {
+      return res.status(400).json({ error: "uploadId must be a positive number" });
+    }
+    await sendCampaignExport(res, campaignId, null, uploadId);
   })
 );
 

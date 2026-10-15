@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as XLSX from "xlsx";
 import {
   closePool,
   newClient,
@@ -577,6 +578,51 @@ describe("campaign list counts", () => {
     });
     // Never another company's uploads.
     expect(res.body.some((u) => u.filename === "beta.xlsx")).toBe(false);
+  });
+});
+
+// The Download selector on a campaign: the whole campaign, or the rows of one uploaded list.
+describe("exporting one uploaded list", () => {
+  it("exports only the rows that came from that list", async () => {
+    const lists = await alpha.get<{ id: number; filename: string; row_count: number }[]>(
+      `/campaigns/${alphaCampaign}/uploads`
+    );
+    const list = lists.body[0];
+    expect(list.row_count).toBe(3);
+
+    const res = await alpha.raw(`/campaigns/${alphaCampaign}/export?uploadId=${list.id}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("spreadsheetml");
+    // Named after the list it came from, not the campaign.
+    expect(res.headers.get("content-disposition")).toContain("alpha");
+
+    const wb = XLSX.read(new Uint8Array(res.buffer), { type: "array" });
+    const matrix = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], {
+      header: 1,
+      raw: false,
+    });
+    // A header row plus the three uploaded lines: the two resends are not in any list.
+    expect(matrix).toHaveLength(4);
+    expect(matrix.slice(1).map((r) => String(r[2])).sort()).toEqual(
+      [SENDER_A, SENDER_A_RETURNED, SENDER_A_THIRD].sort()
+    );
+  });
+
+  it("will not export a list that belongs to another campaign", async () => {
+    const betaLists = await beta.get<{ id: number }[]>(`/campaigns/${betaCampaign}/uploads`);
+    const foreign = await alpha.get<{ error: string }>(
+      `/campaigns/${alphaCampaign}/export?uploadId=${betaLists.body[0].id}`
+    );
+    expect(foreign.status).toBe(404);
+    expect(foreign.body).toEqual({ error: "list not found" });
+  });
+
+  it("wants an uploadId that is a positive number", async () => {
+    const bad = await alpha.get<{ error: string }>(
+      `/campaigns/${alphaCampaign}/export?uploadId=abc`
+    );
+    expect(bad.status).toBe(400);
+    expect(bad.body).toEqual({ error: "uploadId must be a positive number" });
   });
 });
 

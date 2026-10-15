@@ -50,6 +50,8 @@ export function CampaignDetailPage() {
   const [packages, setPackages] = useState<PackageRow[]>([]);
 
   const [exporting, setExporting] = useState(false);
+  // "" downloads the whole campaign; an upload id downloads just that list.
+  const [exportScope, setExportScope] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -75,8 +77,11 @@ export function CampaignDetailPage() {
     setNotice(null);
     setExporting(true);
     try {
-      const filename = await downloadCampaignExport(Number(id));
-      setNotice(`Exported ${packages.length} packages to ${filename}.`);
+      const filename = await downloadCampaignExport(
+        Number(id),
+        exportScope === "" ? undefined : Number(exportScope)
+      );
+      setNotice(`Exported ${exportScope === "" ? "the campaign" : "that list"} to ${filename}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -124,10 +129,22 @@ export function CampaignDetailPage() {
       <h2>Stored packages ({packages.length})</h2>
       <div className="card inline">
         <span className="muted">
-          {uploads.length} upload{uploads.length === 1 ? "" : "s"} · {totalRows} row
-          {totalRows === 1 ? "" : "s"} parsed
-          {uploads.length > 0 && ` · latest: ${uploads[0].filename ?? "unknown file"}`}
+          {uploads.length} list{uploads.length === 1 ? "" : "s"} · {totalRows} line
+          {totalRows === 1 ? "" : "s"}
         </span>
+        {uploads.length > 0 && (
+          <label>
+            Download
+            <select value={exportScope} onChange={(e) => setExportScope(e.target.value)}>
+              <option value="">Whole campaign ({packages.length} packages)</option>
+              {uploads.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.filename ?? "unknown file"} ({u.row_count} lines)
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           type="button"
           className="secondary"
