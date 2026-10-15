@@ -119,7 +119,7 @@ export function ReturnsPage() {
     e.preventDefault();
     const senderId = term.trim();
     if (!senderId) {
-      setError("Type a sender ID first.");
+      setError("Type a package ID first.");
       return;
     }
     setError(null);
@@ -159,7 +159,7 @@ export function ReturnsPage() {
   async function saveResend(match: Match) {
     const form = resends[match.id];
     if (!form || !form.senderId.trim()) {
-      setError("Type the new sender ID.");
+      setError("Type the new package ID.");
       return;
     }
     if (!form.campaignId) {
@@ -203,16 +203,16 @@ export function ReturnsPage() {
     <div>
       <h1>Process returns</h1>
       <p className="muted">
-        Type the sender ID printed on the returned package. A package can be returned once.
+        Type the package ID printed on the returned package. A package can be returned once.
       </p>
 
       <form className="card inline" onSubmit={search}>
         <label>
-          Sender ID
+          Package ID
           <input
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            placeholder="e.g. PQ987654321ES"
+            placeholder="e.g. PortaP_1"
             autoFocus
           />
         </label>
@@ -225,7 +225,7 @@ export function ReturnsPage() {
       {notice && <p className="ok">{notice}</p>}
 
       {matches !== null && matches.length === 0 && (
-        <p className="muted">No package with that sender ID in your account.</p>
+        <p className="muted">No package with that ID in your account.</p>
       )}
 
       {matches?.map((m) => {
@@ -301,16 +301,16 @@ export function ReturnsPage() {
 
             {returned && isSuperAdmin && (
               <div className="resend">
-                <p className="muted">Sent it again? Record the new sender ID.</p>
+                <p className="muted">Sent it again? Record the new package ID.</p>
                 <div className="btn-row">
                   <label>
-                    New sender ID
+                    New package ID
                     <input
                       value={form.senderId}
                       onChange={(e) =>
                         setResends((r) => ({ ...r, [m.id]: { ...form, senderId: e.target.value } }))
                       }
-                      placeholder="e.g. PQ777000123ES"
+                      placeholder="e.g. PortaP_151"
                     />
                   </label>
                   <label>
@@ -354,7 +354,7 @@ export function ReturnsPage() {
           <table className="grid">
             <thead>
               <tr>
-                <th>Sender ID</th>
+                <th>Package ID</th>
                 <th>Campaign</th>
                 <th>Reason</th>
                 <th>When</th>

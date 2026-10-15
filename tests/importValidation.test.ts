@@ -87,15 +87,19 @@ describe("parseImportBody", () => {
     });
   });
 
-  it("rejects blank sender IDs and reports the sheet rows", () => {
+  it("rejects blank package IDs and reports the sheet rows", () => {
     const res = parseImportBody({ ...valid, rows: [["a", "PQ1"], ["b", "   "], ["c", ""]] });
-    expect(res).toMatchObject({ ok: false, status: 400, error: "sender ID is empty on row(s): 3, 4" });
+    expect(res).toMatchObject({
+      ok: false,
+      status: 400,
+      error: "package ID is empty on row(s): 3, 4",
+    });
   });
 
-  it("rejects duplicate sender IDs within the file, case-insensitively", () => {
+  it("rejects duplicate package IDs within the file, case-insensitively", () => {
     const res = parseImportBody({ ...valid, rows: [["a", "PQ1"], ["b", "pq1"]] });
     expect(res).toMatchObject({ ok: false, status: 400 });
-    if (!res.ok) expect(res.error).toContain("duplicate sender IDs in this file");
+    if (!res.ok) expect(res.error).toContain("duplicate package IDs in this file");
   });
 
   it("rejects more rows than the limit", () => {

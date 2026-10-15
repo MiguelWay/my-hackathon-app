@@ -142,7 +142,7 @@ packagesRouter.post(
       if ((err as { code?: string }).code === "ER_DUP_ENTRY") {
         return res
           .status(409)
-          .json({ error: "a sender ID in this file already exists in this campaign" });
+          .json({ error: "a package ID in this file already exists in this campaign" });
       }
       throw err;
     } finally {

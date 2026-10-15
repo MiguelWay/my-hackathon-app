@@ -70,7 +70,7 @@ export function parseImportBody(body: unknown): ParseResult {
   const blank = records.filter((rec) => !rec.sender);
   if (blank.length) {
     const sample = blank.slice(0, 5).map((x) => x.sourceRow).join(", ");
-    return fail(400, `sender ID is empty on row(s): ${sample}${blank.length > 5 ? ", …" : ""}`);
+    return fail(400, `package ID is empty on row(s): ${sample}${blank.length > 5 ? ", …" : ""}`);
   }
 
   // Longer than the column: reject here rather than let MySQL raise a 500.
@@ -79,13 +79,13 @@ export function parseImportBody(body: unknown): ParseResult {
     const sample = tooLong.slice(0, 5).map((x) => x.sourceRow).join(", ");
     return fail(
       400,
-      `sender ID is longer than ${MAX_SENDER_ID_LENGTH} characters on row(s): ${sample}${
+      `package ID is longer than ${MAX_SENDER_ID_LENGTH} characters on row(s): ${sample}${
         tooLong.length > 5 ? ", …" : ""
       }`
     );
   }
 
-  // ---- no duplicate sender IDs inside this file (case-insensitive, like the DB) ----
+  // ---- no duplicate package IDs inside this file (case-insensitive, like the DB) ----
   const seen = new Set<string>();
   const dupes: string[] = [];
   for (const rec of records) {
@@ -99,7 +99,7 @@ export function parseImportBody(body: unknown): ParseResult {
   if (dupes.length) {
     return fail(
       400,
-      `duplicate sender IDs in this file: ${dupes.slice(0, 5).join(", ")}${
+      `duplicate package IDs in this file: ${dupes.slice(0, 5).join(", ")}${
         dupes.length > 5 ? ", …" : ""
       }`
     );

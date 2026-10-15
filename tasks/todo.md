@@ -360,6 +360,35 @@ are no credentials in the repo). The app is now production-shaped:
 
 ---
 
+## UI wording: "package ID" instead of "sender ID"
+
+**Requested:** change the *Sender-ID column* label to *Choose package ID column*.
+
+**Progress:** **Done, applied consistently** — changing one label alone would have left the app
+saying "package ID" in one place and "sender ID" in six others, including the error messages.
+
+All user-facing copy now says **package ID**: the upload label, the pick-a-column prompt, the
+import notice, the "Stored packages" column header, the whole Process returns screen, and the
+validation messages from the API (`package ID is empty on row(s): 2`, `duplicate package IDs in
+this file`, `no package with that ID`, ...). The exported spreadsheet's fallback header for
+hand-typed rows is now `Package ID` too.
+
+The example placeholders were also wrong for this business — they suggested `PQ987654321ES` style
+IDs, while a real sheet uses `PortaP_1`. They now read `e.g. PortaP_1` / `e.g. PortaP_151`.
+
+**Deliberately unchanged:** the database column (`sender_id`), the API parameter (`senderId`) and
+the internal helper names. `sender_id` is unique per campaign, so a better name would be
+`package_ref` — worth doing only alongside a migration, not as a copy change.
+
+**Verification:** `npm test` (135) · typecheck:api · build · grepped for leftover user-facing
+"sender" copy · live check of the new API messages.
+
+**Files:** `src/pages/{CampaignDetailPage,ReturnsPage}.tsx`, `server/src/importValidation.ts`,
+`server/src/{returns,resends,packages,exportLayout}.ts`, `tests/{importValidation,resends}.test.ts`
+**Scope:** Small
+
+---
+
 ## Campaign dates are mandatory
 
 **Requested:** "end date is mandatory. thus no campaign can be created without start and end date."

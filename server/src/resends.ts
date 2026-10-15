@@ -39,12 +39,12 @@ export function parseResendBody(body: unknown): ResendParse {
   if (packageId === null) return { ok: false, status: 400, error: "packageId is required" };
 
   const newSenderId = String(b.newSenderId ?? "").trim();
-  if (!newSenderId) return { ok: false, status: 400, error: "newSenderId is required" };
+  if (!newSenderId) return { ok: false, status: 400, error: "new package ID is required" };
   if (newSenderId.length > MAX_SENDER_ID_LENGTH) {
     return {
       ok: false,
       status: 400,
-      error: `newSenderId must be at most ${MAX_SENDER_ID_LENGTH} characters`,
+      error: `new package ID must be at most ${MAX_SENDER_ID_LENGTH} characters`,
     };
   }
 

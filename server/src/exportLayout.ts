@@ -7,7 +7,7 @@
 export const NEW_COLUMNS = ["Return Status", "Return Reason", "Resend Of"] as const;
 
 /** Header used for rows typed in by hand (a resend) when no uploaded header can be borrowed. */
-export const MANUAL_SENDER_HEADER = "Sender ID";
+export const MANUAL_SENDER_HEADER = "Package ID";
 
 export interface UploadLike {
   id: number;

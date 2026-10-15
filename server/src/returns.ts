@@ -152,7 +152,7 @@ returnsRouter.post(
       [user.customerId, campaignId, newSenderId]
     );
     if (dupe[0]) {
-      return res.status(409).json({ error: "that sender ID is already used in that campaign" });
+      return res.status(409).json({ error: "that package ID is already used in that campaign" });
     }
 
     const root = chainRootId(orig[0]);
@@ -203,10 +203,10 @@ returnsRouter.post(
         "SELECT id FROM packages WHERE customer_id = ? AND sender_id = ?",
         [user.customerId, sid]
       );
-      if (!found[0]) return res.status(404).json({ error: "no package with that sender ID" });
+      if (!found[0]) return res.status(404).json({ error: "no package with that ID" });
       if (found.length > 1) {
         return res.status(409).json({
-          error: "that sender ID exists in more than one campaign; pick the package from the list",
+          error: "that ID exists in more than one campaign; pick the package from the list",
         });
       }
       pkgId = found[0].id;

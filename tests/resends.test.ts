@@ -45,11 +45,11 @@ describe("parseResendBody", () => {
     expect(parseResendBody({ ...valid, packageId: 0 })).toMatchObject({ ok: false });
   });
 
-  it("requires a new sender ID", () => {
+  it("requires a new package ID", () => {
     expect(parseResendBody({ ...valid, newSenderId: "   " })).toMatchObject({
       ok: false,
       status: 400,
-      error: "newSenderId is required",
+      error: "new package ID is required",
     });
   });
 

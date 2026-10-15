@@ -116,7 +116,7 @@ export function CampaignDetailPage() {
 
   async function confirm() {
     if (senderIdx < 0) {
-      setError("Pick the sender-ID column.");
+      setError("Pick the package ID column.");
       return;
     }
     setError(null);
@@ -130,7 +130,7 @@ export function CampaignDetailPage() {
         rows,
       });
       setNotice(
-        `Imported ${result.imported} packages · sender-ID column: "${result.senderColumn.name}" · ` +
+        `Imported ${result.imported} packages · package ID column: "${result.senderColumn.name}" · ` +
           `${result.columns.length} columns kept verbatim.`
       );
       setHeaders([]);
@@ -211,7 +211,7 @@ export function CampaignDetailPage() {
           <h2>Upload campaign list (.xlsx)</h2>
           <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} />
           <p className="muted">
-            One campaign can hold several uploads; sender IDs must be unique within the campaign.
+            One campaign can hold several uploads; package IDs must be unique within the campaign.
           </p>
         </div>
       )}
@@ -223,9 +223,9 @@ export function CampaignDetailPage() {
         <>
           <div className="card inline">
             <label>
-              Sender-ID column
+              Choose package ID column
               <select value={senderIdx} onChange={(e) => setSenderIdx(Number(e.target.value))}>
-                {senderIdx < 0 && <option value={-1}>— choose the sender-ID column —</option>}
+                {senderIdx < 0 && <option value={-1}>— select a column —</option>}
                 {headers.map((h, i) => (
                   <option key={i} value={i}>
                     {h || `(column ${i + 1})`}
@@ -241,7 +241,7 @@ export function CampaignDetailPage() {
 
           {senderIdx < 0 && (
             <p className="muted">
-              Couldn&rsquo;t tell which column holds the sender ID — choose it above. The preview
+              Couldn&rsquo;t tell which column holds the package ID — choose it above. The preview
               below shows the first rows so you can spot the right one.
             </p>
           )}
@@ -298,8 +298,8 @@ export function CampaignDetailPage() {
           <table className="grid">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Sender ID</th>
+                <th>#</th>
+                <th>Package ID</th>
                 {extraKeys.map((k) => (
                   <th key={k}>{k}</th>
                 ))}
