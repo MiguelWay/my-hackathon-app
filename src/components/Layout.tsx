@@ -14,7 +14,6 @@ export function Layout({ children }: { children: ReactNode }) {
           {user?.role === "superadmin" && <Link to="/superadmin/customers">Customers</Link>}
           {user && <Link to="/">Campaigns</Link>}
           {user && <Link to="/returns/recent">Returned Packages</Link>}
-          {user && <Link to="/returns">Packages returns</Link>}
         </nav>
         <div className="spacer" />
         {user && (

@@ -492,8 +492,8 @@ page must show when a package was sent again and as which package ID.
 
 **Progress:** **Done.**
 
-- Nav is `Customers | Campaigns | Returned Packages | Packages returns` (Customers only for a
-  super-admin).
+- Nav is `Customers | Campaigns | Returned Packages` (Customers only for a super-admin); the returns
+  screen is reached from the link inside Returned Packages.
 - "Return packages" (originally "Recently recorded") is its own page (`/returns/recent`), not a block
   on the returns screen.
 - The resend form has no campaign picker: the server derives the campaign from the original package
@@ -1029,11 +1029,12 @@ typecheck:api` and `npm run build` clean · browser-verified: the *vuelta al col
 **Description:** "change title return packages to Returned Packages."
 
 **Progress:** **Done.** The heading, the top-menu item and the link from the returns screen now read
-`Returned Packages`. The processing screen keeps its own name, `Packages returns`.
+`Returned Packages`, and `Packages returns` left the top menu — it is reached from the link inside
+Returned Packages. The processing screen keeps its own name, `Packages returns`.
 
 **Verification:** `npm run build` clean · browser-verified: the heading is `Returned Packages`, the nav
-reads `Customers · Campaigns · Returned Packages · Packages returns`, and the link at the bottom of
-`Packages returns` says `Returned Packages`.
+reads `Customers · Campaigns · Returned Packages`, and the `Packages returns` link inside Returned
+Packages still points at `/returns` and lands on that screen.
 
 **Files:** `src/components/Layout.tsx`, `src/pages/{RecentReturnsPage,ReturnsPage}.tsx`
 **Scope:** Small
