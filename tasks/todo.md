@@ -841,3 +841,25 @@ and **150** data rows with 19 columns each.
 **Files:** `server/src/{export,admin,returns,validate}.ts`, `src/lib/campaignExport.ts`,
 `src/pages/CampaignDetailPage.tsx`, `tests/api/{helpers,isolation.test.ts}`
 **Scope:** Medium
+
+## The campaign page: two lists, two accordions
+
+**Description:** "This is now totally confusing. One thing is the total lists uploaded for each campaign
+and the second is the results list. Put the total uploaded list and the button to download the list in
+one accordion. Put the campaign results list in a separate accordion tab."
+
+**Progress:** **Done.** The campaign page is now three separate bars: *Add a list to this campaign*
+(closed — the upload form), **Lists uploaded · N lists · M lines** (open — one line per file with its
+lines and upload time, then the `Download` selector and the button together), and **Campaign results ·
+N packages** (open — the package table). The old `Stored packages` heading, with the file summary, the
+selector and the table all crammed under it, is gone.
+
+**Verification:** `npm test` — **166 tests** (unchanged; markup only) · `npm run build` clean ·
+browser-verified on *vuelta al cole*: the bars read `Add a list to this campaign`,
+`Lists uploaded · 1 list · 150 lines` and `Campaign results · 151 packages`; the first holds the file line
+(`EtqVueltaC.xlsx · 150 lines · uploaded 2026-10-15 12:29:49`) and the download control, the second the
+151-row table; downloading from the first still saved `campaign-6-vuelta-al-cole.xlsx`; and each bar
+folds on its own.
+
+**Files:** `src/pages/CampaignDetailPage.tsx`
+**Scope:** Small

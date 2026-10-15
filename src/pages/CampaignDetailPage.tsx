@@ -126,66 +126,86 @@ export function CampaignDetailPage() {
       {error && <p className="error">{error}</p>}
       {notice && <p className="ok">{notice}</p>}
 
-      <h2>Stored packages ({packages.length})</h2>
-      <div className="card inline">
-        <span className="muted">
-          {uploads.length} list{uploads.length === 1 ? "" : "s"} · {totalRows} line
+      <details className="card" open>
+        <summary>
+          Lists uploaded · {uploads.length} list{uploads.length === 1 ? "" : "s"} · {totalRows} line
           {totalRows === 1 ? "" : "s"}
-        </span>
-        {uploads.length > 0 && (
-          <label>
-            Download
-            <select value={exportScope} onChange={(e) => setExportScope(e.target.value)}>
-              <option value="">Whole campaign ({packages.length} packages)</option>
-              {uploads.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.filename ?? "unknown file"} ({u.row_count} lines)
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <button
-          type="button"
-          className="secondary"
-          onClick={downloadExport}
-          disabled={exporting || packages.length === 0}
-        >
-          {exporting ? "Preparing…" : "Download .xlsx"}
-        </button>
-      </div>
+        </summary>
 
-      {packages.length === 0 ? (
-        <p className="muted">Nothing uploaded yet.</p>
-      ) : (
-        <div className="scroll">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Package ID</th>
-                {extraKeys.map((k) => (
-                  <th key={k}>{k}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {packages.map((p) => {
-                const extra = parseExtra(p.extra_columns);
-                return (
-                  <tr key={p.id}>
-                    <td>{p.id}</td>
-                    <td>{p.sender_id}</td>
-                    {extraKeys.map((k) => (
-                      <td key={k}>{extra[k] ?? ""}</td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {uploads.length === 0 ? (
+          <p className="muted">No lists uploaded yet.</p>
+        ) : (
+          <>
+            <ul className="upload-list">
+              {uploads.map((u) => (
+                <li key={u.id}>
+                  <span className="file">{u.filename ?? "unknown file"}</span>
+                  <span>{u.row_count} lines</span>
+                  <span className="muted">uploaded {u.created_at}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="btn-row">
+              <label>
+                Download
+                <select value={exportScope} onChange={(e) => setExportScope(e.target.value)}>
+                  <option value="">Whole campaign ({packages.length} packages)</option>
+                  {uploads.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.filename ?? "unknown file"} ({u.row_count} lines)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="secondary"
+                onClick={downloadExport}
+                disabled={exporting || packages.length === 0}
+              >
+                {exporting ? "Preparing…" : "Download .xlsx"}
+              </button>
+            </div>
+          </>
+        )}
+      </details>
+
+      <details className="card" open>
+        <summary>Campaign results · {packages.length} packages</summary>
+
+        {packages.length === 0 ? (
+          <p className="muted">Nothing uploaded yet.</p>
+        ) : (
+          <div className="scroll">
+            <table className="grid">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Package ID</th>
+                  {extraKeys.map((k) => (
+                    <th key={k}>{k}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {packages.map((p) => {
+                  const extra = parseExtra(p.extra_columns);
+                  return (
+                    <tr key={p.id}>
+                      <td>{p.id}</td>
+                      <td>{p.sender_id}</td>
+                      {extraKeys.map((k) => (
+                        <td key={k}>{extra[k] ?? ""}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </details>
     </div>
   );
 }
