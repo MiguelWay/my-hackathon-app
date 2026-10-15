@@ -519,7 +519,9 @@ ul.campaign-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  ul.campaign-list li {
+}
+
+ul.campaign-list li {
   display: flex;
   align-items: center;
   gap: 6px;
