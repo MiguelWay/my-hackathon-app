@@ -1257,3 +1257,31 @@ the caller's own company for a `user`.
 **Files:** `server/src/{returns.ts,auth.ts}`, `src/pages/{ReturnsPage,CustomersPage}.tsx`,
 `src/styles.css`, `tests/api/isolation.test.ts`, `SPECIFICATION.md`, `SECURITY.md`, `tasks/plan.md`
 **Scope:** Large
+
+## The drill-down: customer on the left, campaign under it, package on the right
+
+**Description:** "I want to see on the customer on the left, I clic and see campaigns, I click on a
+campaign and I now see the package return functionality."
+
+**Progress:** **Done.** *Packages returns* is now a drill-down instead of two dropdowns. The left rail
+lists **Customers**; picking one lists **Campaigns** under it (with *All campaigns* first); the pane on
+the right is the package-return functionality — the ID box, the match, the reason buttons and the
+resend form — and it appears as soon as a customer is picked, with the box focused on every campaign
+click. Moving customer clears the campaign, the typed ID and any result, so nothing from the last one
+is left on screen. `?customer=` + `?campaign=` still preselect both, so the Customers screen's *Process
+returns →* link opens the rail already on that customer and campaign. Copy fixed with the model:
+"…not one of your company's…" became "…not this customer's…", and the empty-match line no longer says
+"in your account".
+
+**Verification:** `npm test` — **192 tests** still pass (this is a client-only change).
+`npx tsc --noEmit` and `npm run build` clean, with no CSS warning. Browser as `user@acme.test`:
+`/returns` lists all six customers; clicking *Plátano 150 paquetes* swaps the campaign list to
+*vuelta al cole*; clicking it focuses the ID box; looking up `PortaP_39` shows the chain, the return
+details and the resend form. Screenshot: `.playwright-mcp/drilldown.png`.
+
+**Still open:** the reports (*Returned Packages* counters, list, chains, download) are still scoped to
+the account's own company, and so is the Campaigns screen — the same rail could drive them, or they
+could stay a super-admin tool. Say which.
+
+**Files:** `src/pages/ReturnsPage.tsx`, `src/styles.css`
+**Scope:** Medium

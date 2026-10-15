@@ -104,6 +104,26 @@ export function ReturnsPage() {
     searchRef.current?.focus();
   }
 
+  /** Moving to another customer drops everything that belonged to the last one. */
+  function chooseCustomer(id: string) {
+    setSelectedCustomer(id);
+    setSelectedCampaign("");
+    setTerm("");
+    setMatches(null);
+    setNotes({});
+    setResends({});
+    setError(null);
+    setNotice(null);
+  }
+
+  function chooseCampaign(id: string) {
+    setSelectedCampaign(id);
+    setMatches(null);
+    setError(null);
+    setNotice(null);
+    searchRef.current?.focus();
+  }
+
   const loadReference = useCallback(async () => {
     setReasons(await api.get<Reason[]>("/returns/reasons"));
   }, []);
@@ -258,194 +278,208 @@ export function ReturnsPage() {
     <div>
       <h1>Packages returns</h1>
       <p className="muted">
-        Pick the customer the package belongs to, then type the package ID printed on it. A package can
-        be returned once.
+        Pick the customer, then the campaign, then type the package ID printed on the returned package.
+        A package can be returned once.
       </p>
 
-      <form className="card inline" onSubmit={search}>
-        <label>
-          Customer
-          <select
-            value={selectedCustomer}
-            onChange={(e) => {
-              setSelectedCustomer(e.target.value);
-              // The results on screen belong to the customer we are leaving.
-              setMatches(null);
-              setError(null);
-              setNotice(null);
-            }}
-          >
-            {selectedCustomer === "" && <option value="">Pick a customer…</option>}
+      <div className="workspace">
+        <aside className="rail">
+          <h2>Customers</h2>
+          <ul className="picker">
             {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {campaigns.length > 0 && (
-          <label>
-            Campaign
-            <select
-              value={selectedCampaign}
-              onChange={(e) => {
-                setSelectedCampaign(e.target.value);
-                // The results on screen belong to the campaign we are leaving.
-                setMatches(null);
-                setError(null);
-                setNotice(null);
-                searchRef.current?.focus();
-              }}
-            >
-              <option value="">All campaigns</option>
-              {campaigns.map((c) => (
-                <option key={c.id} value={c.id}>
+              <li key={c.id}>
+                <button
+                  type="button"
+                  className={String(c.id) === selectedCustomer ? "picker-item now" : "picker-item"}
+                  onClick={() => chooseCustomer(String(c.id))}
+                >
                   {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label>
-          Package ID
-          <input
-            ref={searchRef}
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            placeholder="e.g. PortaP_1"
-            autoFocus
-          />
-        </label>
-        <button type="submit" disabled={busy}>
-          {busy ? "Working…" : "Find package"}
-        </button>
-      </form>
+                </button>
+              </li>
+            ))}
+          </ul>
 
-      {requestedCampaign &&
-        campaigns.length > 0 &&
-        !campaigns.some((c) => String(c.id) === requestedCampaign) && (
-          <p className="muted">
-            That campaign is not one of your company&rsquo;s, so nothing was narrowed to it.
-          </p>
-        )}
-
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="ok">{notice}</p>}
-
-      {matches !== null && matches.length === 0 && (
-        <p className="muted">
-          No package with that ID{selectedName ? ` in ${selectedName}` : " in your account"}.
-        </p>
-      )}
-
-      {matches?.map((m) => {
-        const extra = parseExtra(m.extra_columns);
-        const returned = m.return_id !== null;
-        const form = resends[m.id] ?? { senderId: "", campaignId: "" };
-        return (
-          <div className="card" key={m.id}>
-            <div className="match-head">
-              <strong>{m.sender_id}</strong>
-              <span className="muted">campaign: {m.campaign_name}</span>
-              {m.created_via === "resend" && <span className="badge">resend</span>}
-              {returned && m.closed_store === 1 && <span className="chip">closed store</span>}
-            </div>
-
-            {m.chain.length > 1 && (
-              <ol className="chain">
-                {m.chain.map((n, i) => (
-                  <li key={n.id} className={n.id === m.id ? "now" : ""}>
-                    <span className="k">Attempt {i + 1}</span>
-                    <span>{n.sender_id}</span>
-                    <span className="muted">{n.campaign_name}</span>
-                    <span className="muted">
-                      {n.returned_at
-                        ? `returned ${n.returned_at} · ${n.reason_label}`
-                        : "not returned yet"}
-                    </span>
+          {selectedCustomer !== "" && (
+            <>
+              <h2>Campaigns</h2>
+              <ul className="picker">
+                <li>
+                  <button
+                    type="button"
+                    className={selectedCampaign === "" ? "picker-item now" : "picker-item"}
+                    onClick={() => chooseCampaign("")}
+                  >
+                    All campaigns
+                  </button>
+                </li>
+                {campaigns.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      className={
+                        String(c.id) === selectedCampaign ? "picker-item now" : "picker-item"
+                      }
+                      onClick={() => chooseCampaign(String(c.id))}
+                    >
+                      {c.name}
+                    </button>
                   </li>
                 ))}
-              </ol>
-            )}
+              </ul>
+            </>
+          )}
+        </aside>
 
-            <div className="kv">
-              {Object.entries(extra).map(([k, v]) => (
-                <div key={k}>
-                  <span className="k">{k}</span>
-                  <span>{v}</span>
-                </div>
-              ))}
-            </div>
-
-            {returned ? (
-              <p className="ok">
-                Returned {m.returned_at} · {m.reason_label}
-                {m.return_note ? ` · ${m.return_note}` : ""}
-              </p>
-            ) : (
-              <>
+        <section className="pane">
+          {selectedCustomer === "" ? (
+            <p className="muted">Pick a customer on the left to start.</p>
+          ) : (
+            <>
+              <form className="card inline" onSubmit={search}>
                 <label>
-                  Note (optional)
+                  Package ID
                   <input
-                    value={notes[m.id] ?? ""}
-                    onChange={(e) => setNotes((n) => ({ ...n, [m.id]: e.target.value }))}
-                    placeholder="e.g. second visit"
+                    ref={searchRef}
+                    value={term}
+                    onChange={(e) => setTerm(e.target.value)}
+                    placeholder="e.g. PortaP_1"
+                    autoFocus
                   />
                 </label>
-                <p className="muted">Reason</p>
-                <div className="btn-row">
-                  {reasons.map((r) => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      className="secondary"
-                      disabled={busy}
-                      onClick={() => record(m, r)}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+                <button type="submit" disabled={busy}>
+                  {busy ? "Working…" : "Find package"}
+                </button>
+              </form>
 
-            {returned && (
-              <div className="resend">
+              {requestedCampaign &&
+                campaigns.length > 0 &&
+                !campaigns.some((c) => String(c.id) === requestedCampaign) && (
+                  <p className="muted">
+                    That campaign is not this customer&rsquo;s, so nothing was narrowed to it.
+                  </p>
+                )}
+
+              {error && <p className="error">{error}</p>}
+              {notice && <p className="ok">{notice}</p>}
+
+              {matches !== null && matches.length === 0 && (
                 <p className="muted">
-                  Sent it again? Record the new package ID — it stays in this campaign.
+                  No package with that ID{selectedName ? ` in ${selectedName}` : " for this customer"}.
                 </p>
-                <div className="btn-row">
-                  <label>
-                    New package ID
-                    <input
-                      value={form.senderId}
-                      onChange={(e) =>
-                        setResends((r) => ({ ...r, [m.id]: { ...form, senderId: e.target.value } }))
-                      }
-                      placeholder="e.g. PortaP_151"
-                    />
-                  </label>
-                  <button type="button" disabled={busy} onClick={() => saveResend(m)}>
-                    Save resend
+              )}
+
+              {matches?.map((m) => {
+                const extra = parseExtra(m.extra_columns);
+                const returned = m.return_id !== null;
+                const form = resends[m.id] ?? { senderId: "", campaignId: "" };
+                return (
+                  <div className="card" key={m.id}>
+                    <div className="match-head">
+                      <strong>{m.sender_id}</strong>
+                      <span className="muted">campaign: {m.campaign_name}</span>
+                      {m.created_via === "resend" && <span className="badge">resend</span>}
+                      {returned && m.closed_store === 1 && <span className="chip">closed store</span>}
+                    </div>
+
+                    {m.chain.length > 1 && (
+                      <ol className="chain">
+                        {m.chain.map((n, i) => (
+                          <li key={n.id} className={n.id === m.id ? "now" : ""}>
+                            <span className="k">Attempt {i + 1}</span>
+                            <span>{n.sender_id}</span>
+                            <span className="muted">{n.campaign_name}</span>
+                            <span className="muted">
+                              {n.returned_at
+                                ? `returned ${n.returned_at} · ${n.reason_label}`
+                                : "not returned yet"}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+
+                    <div className="kv">
+                      {Object.entries(extra).map(([k, v]) => (
+                        <div key={k}>
+                          <span className="k">{k}</span>
+                          <span>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {returned ? (
+                      <p className="ok">
+                        Returned {m.returned_at} · {m.reason_label}
+                        {m.return_note ? ` · ${m.return_note}` : ""}
+                      </p>
+                    ) : (
+                      <>
+                        <label>
+                          Note (optional)
+                          <input
+                            value={notes[m.id] ?? ""}
+                            onChange={(e) => setNotes((n) => ({ ...n, [m.id]: e.target.value }))}
+                            placeholder="e.g. second visit"
+                          />
+                        </label>
+                        <p className="muted">Reason</p>
+                        <div className="btn-row">
+                          {reasons.map((r) => (
+                            <button
+                              key={r.id}
+                              type="button"
+                              className="secondary"
+                              disabled={busy}
+                              onClick={() => record(m, r)}
+                            >
+                              {r.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {returned && (
+                      <div className="resend">
+                        <p className="muted">
+                          Sent it again? Record the new package ID — it stays in this campaign.
+                        </p>
+                        <div className="btn-row">
+                          <label>
+                            New package ID
+                            <input
+                              value={form.senderId}
+                              onChange={(e) =>
+                                setResends((r) => ({ ...r, [m.id]: { ...form, senderId: e.target.value } }))
+                              }
+                              placeholder="e.g. PortaP_151"
+                            />
+                          </label>
+                          <button type="button" disabled={busy} onClick={() => saveResend(m)}>
+                            Save resend
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {matches !== null && (
+                <div className="btn-row next-action">
+                  <button type="button" onClick={recordAnother} disabled={busy}>
+                    {matches.length > 0 ? "Record another package" : "Search again"}
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
+              )}
 
-      {matches !== null && (
-        <div className="btn-row next-action">
-          <button type="button" onClick={recordAnother} disabled={busy}>
-            {matches.length > 0 ? "Record another package" : "Search again"}
-          </button>
-        </div>
-      )}
-
-      <p className="muted">
-        Recorded returns are listed on <Link to="/returns/recent">Returned Packages</Link>.
-      </p>
+              <p className="muted">
+                Recorded returns are listed on <Link to="/returns/recent">Returned Packages</Link>.
+              </p>
+            </>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
