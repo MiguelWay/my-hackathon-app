@@ -112,10 +112,10 @@ export function CampaignDetailPage() {
       {!isSuperAdmin && <p className="muted">Only a super-admin can upload lists.</p>}
 
       {isSuperAdmin && (
-        <>
-          <h2>Upload campaign list (.xlsx)</h2>
+        <details className="card">
+          <summary>Add a list to this campaign</summary>
           <CampaignListUpload campaignId={Number(id)} onImported={load} />
-        </>
+        </details>
       )}
 
       {error && <p className="error">{error}</p>}

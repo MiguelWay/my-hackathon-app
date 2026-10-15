@@ -794,3 +794,25 @@ padding around the form, the triangle reports `rotate(90deg)` when open, and bot
 
 **Files:** `src/pages/CustomersPage.tsx`, `src/styles.css`
 **Scope:** Small
+
+## Adding a list moved onto the campaign, off the home page
+
+**Description:** "Eliminate add a new list from home page, maintain within the campaign page. Maintain
+accordion. Maintain on homepage the list of campaigns and lists added to each campaign."
+
+**Progress:** **Done.** The *Add a list to an existing campaign* bar is gone from the campaigns home
+page (with its campaign dropdown, the `target` state and the after-import refresh); the home page now
+holds one tool — *New campaign* — followed by the campaign blocks, which still list every uploaded file
+with its lines and upload time. Uploading lives on the campaign itself as *Add a list to this campaign*,
+an accordion in the same style, wrapping the unchanged `CampaignListUpload` flow (parse, sender-column
+guess, mapping confirm, preview).
+
+**Verification:** `npm test` — **163 tests** · `npm run build` clean · browser-verified: the home page
+has exactly one `details.card` (*New campaign*) and its blocks still read
+`April drop · 2 lists · 5 lines` with both files, and `vuelta al cole · 1 list · 150 lines`; a campaign
+page has one bar, *Add a list to this campaign*, which opens to the file input (2 lines read); importing
+from there gave `Imported 2 lines · package ID column: "ID de envío"` and the home page block became
+`April drop · 3 lists · 7 lines` including the new `auto-list.xlsx` (scratch rows deleted afterwards).
+
+**Files:** `src/pages/CampaignsPage.tsx`, `src/pages/CampaignDetailPage.tsx`
+**Scope:** Small

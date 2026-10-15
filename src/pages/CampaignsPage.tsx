@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import { CampaignListUpload } from "../components/CampaignListUpload";
 import { useAuth } from "../auth/AuthContext";
 
 interface Campaign {
@@ -31,8 +30,6 @@ export function CampaignsPage() {
   const [startDate, setStartDate] = useState("");
   const [finishDate, setFinishDate] = useState("");
   const [error, setError] = useState<string | null>(null);
-  // The campaign a list is being added to.
-  const [target, setTarget] = useState("");
 
   async function load() {
     const [campaigns, lists] = await Promise.all([
@@ -46,11 +43,6 @@ export function CampaignsPage() {
   useEffect(() => {
     load().catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
   }, []);
-
-  // Start on the newest campaign: the one you are most likely adding a list to.
-  useEffect(() => {
-    if (!target && items.length > 0) setTarget(String(items[0].id));
-  }, [items, target]);
 
   async function create(e: FormEvent) {
     e.preventDefault();
@@ -71,14 +63,6 @@ export function CampaignsPage() {
   }
 
   /** After an import: refresh the counts and the uploaded lists. */
-  async function afterImport() {
-    try {
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to refresh the campaigns");
-    }
-  }
-
   const listsByCampaign = useMemo(() => {
     const map = new Map<number, Upload[]>();
     for (const u of uploads) {
@@ -128,40 +112,6 @@ export function CampaignsPage() {
           <p className="muted">
             Start and finish dates are required: a campaign without a window cannot be reported on.
           </p>
-        </details>
-      )}
-
-      {isSuperAdmin && (
-        <details className="card">
-          <summary>Add a list to an existing campaign</summary>
-          {items.length === 0 ? (
-            <p className="muted">Create a campaign first — every list belongs to one.</p>
-          ) : (
-            <>
-              <div className="customer-row">
-                <label>
-                  Campaign
-                  <select value={target} onChange={(e) => setTarget(e.target.value)}>
-                    {items.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} · {c.total_rows} lines
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <span className="muted">
-                  The list joins that campaign; package IDs must be unique within it.
-                </span>
-              </div>
-              {target !== "" && (
-                <CampaignListUpload
-                  key={target}
-                  campaignId={Number(target)}
-                  onImported={afterImport}
-                />
-              )}
-            </>
-          )}
         </details>
       )}
 
