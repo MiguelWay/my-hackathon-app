@@ -305,90 +305,7 @@ export function CustomersPage() {
 
       {panel?.kind === "users" && (
         <div className="card">
-          <h2>{openCustomer?.name}: accounts</h2>
-
-          {users.length === 0 ? (
-            <p className="muted">No accounts yet.</p>
-          ) : (
-            <>
-              <div className="scroll">
-                <table className="grid">
-                  <thead>
-                    <tr>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th>Status</th>
-                      <th>Added</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((u) => (
-                      <tr key={u.id}>
-                        <td>{u.email}</td>
-                        <td>
-                          <span className={`badge role-${u.role}`}>{u.role}</span>
-                        </td>
-                        <td>
-                          {u.is_active === 1 ? (
-                            "active"
-                          ) : (
-                            <span className="chip">disabled</span>
-                          )}
-                        </td>
-                        <td className="muted">{u.created_at}</td>
-                        <td>
-                          <div className="btn-row">
-                            <button
-                              type="button"
-                              className="secondary"
-                              disabled={busy}
-                              onClick={() => setUserActive(u, u.is_active !== 1)}
-                            >
-                              {u.is_active === 1 ? "Deactivate" : "Activate"}
-                            </button>
-                            {confirmDelete === u.id ? (
-                              <>
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => deleteUser(u)}
-                                >
-                                  Yes, delete {u.email}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="secondary"
-                                  disabled={busy}
-                                  onClick={() => setConfirmDelete(null)}
-                                >
-                                  Cancel
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                className="secondary"
-                                disabled={busy}
-                                onClick={() => setConfirmDelete(u.id)}
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="muted">
-                {activeUsers} active · {users.length - activeUsers} disabled. A disabled account cannot
-                log in and its open sessions end at once. An account that recorded returns can only be
-                disabled, never deleted.
-              </p>
-            </>
-          )}
+          <h2>{openCustomer?.name}: current users</h2>
 
           <form className="customer-row" onSubmit={addUser}>
             <label>
@@ -422,11 +339,89 @@ export function CustomersPage() {
                 <option value="user">user — processes returns only</option>
               </select>
             </label>
-            <button disabled={busy}>{busy ? "…" : "Add account"}</button>
+            <button disabled={busy}>{busy ? "…" : "Add user"}</button>
           </form>
           <p className="muted">
-            Passwords must be 8–100 characters. Emails are unique across the whole platform.
+            Passwords must be 8–100 characters. Emails are unique across the whole platform, and a new
+            account can log in straight away.
           </p>
+
+          {users.length === 0 ? (
+            <p className="muted">No users yet.</p>
+          ) : (
+            <>
+              <table className="grid">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Added</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id}>
+                      <td>{u.email}</td>
+                      <td>
+                        <span className={`badge role-${u.role}`}>{u.role}</span>
+                      </td>
+                      <td>
+                        {u.is_active === 1 ? (
+                          "active"
+                        ) : (
+                          <span className="chip">disabled</span>
+                        )}
+                      </td>
+                      <td className="muted">{u.created_at.slice(0, 10)}</td>
+                      <td>
+                        <div className="btn-row">
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={busy}
+                            onClick={() => setUserActive(u, u.is_active !== 1)}
+                          >
+                            {u.is_active === 1 ? "Deactivate" : "Activate"}
+                          </button>
+                          {confirmDelete === u.id ? (
+                            <>
+                              <button type="button" disabled={busy} onClick={() => deleteUser(u)}>
+                                Confirm delete
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary"
+                                disabled={busy}
+                                onClick={() => setConfirmDelete(null)}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="secondary"
+                              disabled={busy}
+                              onClick={() => setConfirmDelete(u.id)}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="muted">
+                {activeUsers} active · {users.length - activeUsers} disabled. A disabled user cannot log
+                in and its open sessions end at once. A user that recorded returns can only be disabled,
+                never deleted.
+              </p>
+            </>
+          )}
         </div>
       )}
     </div>

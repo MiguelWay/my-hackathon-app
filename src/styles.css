@@ -255,8 +255,10 @@ select {
   white-space: nowrap;
 }
 
+/* Wide content pans sideways without ever trapping a vertical scroll gesture. */
 .scroll {
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .hl {

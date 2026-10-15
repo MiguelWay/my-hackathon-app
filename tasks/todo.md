@@ -672,3 +672,26 @@ and inside the customers table; the list shows *April drop* (5 packages · 4 ret
 
 **Files:** `src/pages/CustomersPage.tsx`, `src/styles.css`
 **Scope:** Small
+
+## Current users: form first, and no scroll trap
+
+**Description:** "Put add new user above accounts, change the name from accounts to current users. Make
+sure that scroll is active because I can't scroll between the two sections."
+
+**Progress:** **Done.** The panel is titled `<customer>: current users`; the add-user form (Email,
+Password, Role, `Add user`) sits directly under the heading with its hint, the users table follows, and
+the active/disabled summary closes the card. `Added` now shows the date only, and the delete
+confirmation is a compact `Confirm delete` / `Cancel` pair (the row already says who), so nothing wraps
+awkwardly. The table is no longer wrapped in `.scroll` inside the panel, and `.scroll` itself became
+`overflow-x: auto; overflow-y: hidden` — `overflow-x: auto` alone silently computes `overflow-y` to
+`auto`, which turned every wide table into a nested vertical scroll container; that is the likely
+reason a trackpad gesture got stuck between the two sections.
+
+**Verification:** `npm test` — **162 tests** · `npm run build` clean · browser-verified on the
+production build: the heading reads `Beta Stores: current users`; the form precedes the table in the
+DOM; the table is not inside a `.scroll` wrapper; the page scrolls (1093 vs 900) with **zero** nested
+vertical scroll containers and the closing paragraph reachable; and the rewritten add/delete flow still
+works (a throwaway account was added, appeared in the list, then deleted).
+
+**Files:** `src/pages/CustomersPage.tsx`, `src/styles.css`
+**Scope:** Small
