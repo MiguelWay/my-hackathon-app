@@ -326,25 +326,85 @@ ul.user-list li {
   font-size: 13px;
 }
 
-/* Collapsed tools at the top of the campaigns screen: click a bar to open it. */
-details.card > summary {
+/* Click-to-open bars: the tools at the top of a screen are `details.card`, sections inside a card are
+   `details.section`. Both are a tinted header row with a triangle that turns as it opens. */
+details.card > summary,
+details.section > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 15px;
+  color: var(--text);
+  background: #f2f6fd;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+details.card > summary::-webkit-details-marker,
+details.section > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.card > summary::before,
+details.section > summary::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 7px solid var(--accent);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  transition: transform 150ms ease;
+}
+
+details.card[open] > summary::before,
+details.section[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+/* A tool that fills the card it lives in, so its header can sit edge to edge. */
+details.card > summary {
+  margin: -16px -16px 0;
+  padding: 16px;
+  font-size: 17px;
+  border-radius: 8px;
+}
+
+/* Closed, the bar is the whole card, so no card padding is left showing around it. */
+details.card:not([open]) {
+  padding: 0;
+}
+
+details.card:not([open]) > summary {
+  margin: 0;
+}
+
+details.card > summary:hover {
+  background: #e6eefc;
 }
 
 details.card[open] > summary {
-  margin-bottom: 12px;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
 }
 
-/* A titled section inside a card that opens on click, under the card heading. */
+/* A titled section inside a card, under the card heading. */
 details.section > summary {
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 15px;
+  margin-bottom: 8px;
+  padding: 13px 14px;
+  font-size: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+details.section > summary:hover {
+  border-color: var(--accent);
 }
 
 details.section[open] > summary {
+  border-radius: 6px 6px 0 0;
   margin-bottom: 12px;
 }
 

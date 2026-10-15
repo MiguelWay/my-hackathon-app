@@ -782,11 +782,15 @@ user sections.
 
 **Progress:** **Done.** *New customer* is a `details.card` bar, collapsed on load, opening to the same
 Name field and Create button. Every tool in the app — new customer, new campaign, add a list, new users
-— is now a collapsed bar that opens on click, with the lists themselves always visible.
+— is now a collapsed bar that opens on click, with the lists themselves always visible. The bars were
+then made bigger and nicer: 52 px card headers at 17 px and 46 px in-card sections at 16 px, a tinted
+header that fills its card, a hover tint, and a triangle drawn in CSS that turns a quarter as the bar
+opens.
 
-**Verification:** `npm test` — **163 tests** · `npm run build` clean · browser-verified: collapsed on
-load, opening shows the Name field and the Create button while the customer table stays visible (six
-rows), and clicking again collapses it.
+**Verification:** `npm test` — **163 tests** · `npm run build` clean · browser-verified: a closed bar
+fills its card exactly (52 px bar in a 53 px card, the 1 px being the border), the open card regains its
+padding around the form, the triangle reports `rotate(90deg)` when open, and both campaign bars measure
+52 px.
 
-**Files:** `src/pages/CustomersPage.tsx`
+**Files:** `src/pages/CustomersPage.tsx`, `src/styles.css`
 **Scope:** Small
