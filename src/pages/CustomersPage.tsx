@@ -321,7 +321,7 @@ export function CustomersPage() {
 
       {panel?.kind === "users" && (
         <div className="card">
-          <h2>{openCustomer?.name}: current users</h2>
+          <h2>{openCustomer?.name}: new users</h2>
 
           <form className="customer-row" onSubmit={addUser}>
             <label>
