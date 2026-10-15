@@ -135,7 +135,7 @@ export function RecentReturnsPage() {
   if (!hasCompany) {
     return (
       <div>
-        <h1>Return packages</h1>
+        <h1>Returned Packages</h1>
         <p className="muted">
           This account is not attached to a company, so it has no returns to show.
         </p>
@@ -145,7 +145,7 @@ export function RecentReturnsPage() {
 
   return (
     <div>
-      <h1>Return packages</h1>
+      <h1>Returned Packages</h1>
       <p className="muted">
         Your company&rsquo;s most recent returns, newest first. <Link to="/returns">Packages returns</Link>
       </p>

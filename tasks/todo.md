@@ -492,7 +492,7 @@ page must show when a package was sent again and as which package ID.
 
 **Progress:** **Done.**
 
-- Nav is `Customers | Campaigns | Return packages | Packages returns` (Customers only for a
+- Nav is `Customers | Campaigns | Returned Packages | Packages returns` (Customers only for a
   super-admin).
 - "Return packages" (originally "Recently recorded") is its own page (`/returns/recent`), not a block
   on the returns screen.
@@ -1022,4 +1022,18 @@ typecheck:api` and `npm run build` clean · browser-verified: the *vuelta al col
 
 **Files:** `server/src/returns.ts`, `src/pages/RecentReturnsPage.tsx`, `src/styles.css`,
 `tests/api/isolation.test.ts`
+**Scope:** Small
+
+## Title wording
+
+**Description:** "change title return packages to Returned Packages."
+
+**Progress:** **Done.** The heading, the top-menu item and the link from the returns screen now read
+`Returned Packages`. The processing screen keeps its own name, `Packages returns`.
+
+**Verification:** `npm run build` clean · browser-verified: the heading is `Returned Packages`, the nav
+reads `Customers · Campaigns · Returned Packages · Packages returns`, and the link at the bottom of
+`Packages returns` says `Returned Packages`.
+
+**Files:** `src/components/Layout.tsx`, `src/pages/{RecentReturnsPage,ReturnsPage}.tsx`
 **Scope:** Small
