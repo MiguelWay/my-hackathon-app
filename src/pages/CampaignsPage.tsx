@@ -10,6 +10,9 @@ interface Campaign {
   finish_date: string | null;
   upload_count: number;
   total_rows: number;
+  /** Only on the platform list: the company the campaign belongs to. */
+  customer_id?: number;
+  customer_name?: string;
 }
 
 interface Upload {
@@ -20,12 +23,23 @@ interface Upload {
   created_at: string;
 }
 
+interface CustomerRef {
+  id: number;
+  name: string;
+}
+
 export function CampaignsPage() {
-  const { user } = useAuth();
-  // A super-admin runs the campaigns; a `user` only processes returns.
-  const isSuperAdmin = user?.role === "superadmin";
+  const { user, isAdmin: isSuperAdmin } = useAuth();
+  // A super-admin runs the campaigns; a `user` only processes returns. While a super-admin is in the
+  // user view the admin controls are hidden, so this page behaves as it does for a `user`.
+  // A platform super-admin has no company of its own, so it has to say whose campaign this is; every
+  // other super-admin can only ever write into its own company, so its selector is fixed.
+  const picksCompany = isSuperAdmin && user?.customerId == null;
+
   const [items, setItems] = useState<Campaign[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
+  const [customers, setCustomers] = useState<CustomerRef[]>([]);
+  const [customerId, setCustomerId] = useState("");
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [finishDate, setFinishDate] = useState("");
@@ -33,8 +47,8 @@ export function CampaignsPage() {
 
   async function load() {
     const [campaigns, lists] = await Promise.all([
-      api.get<Campaign[]>("/campaigns"),
-      api.get<Upload[]>("/campaigns/uploads"),
+      api.get<Campaign[]>(picksCompany ? "/admin/campaigns" : "/campaigns"),
+      api.get<Upload[]>(picksCompany ? "/admin/campaigns/uploads" : "/campaigns/uploads"),
     ]);
     setItems(campaigns);
     setUploads(lists);
@@ -42,7 +56,17 @@ export function CampaignsPage() {
 
   useEffect(() => {
     load().catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
-  }, []);
+  }, [picksCompany]);
+
+  // The company selector's options. A company super-admin can read the same admin list, so the one
+  // company it is allowed to use is always available to name.
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    api
+      .get<CustomerRef[]>("/admin/customers")
+      .then(setCustomers)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load customers"));
+  }, [isSuperAdmin]);
 
   async function create(e: FormEvent) {
     e.preventDefault();
@@ -52,6 +76,9 @@ export function CampaignsPage() {
         name,
         startDate: startDate || null,
         finishDate: finishDate || null,
+        // Only a platform super-admin names the company; anyone else must leave it out, so a campaign
+        // can never be planted in a company the caller does not belong to.
+        ...(picksCompany ? { customerId: Number(customerId) } : {}),
       });
       setName("");
       setStartDate("");
@@ -73,8 +100,12 @@ export function CampaignsPage() {
     return map;
   }, [uploads]);
 
+  const ownCompany = customers.find((c) => c.id === user?.customerId);
+
   return (
     <div>
+      <h1>Campaigns</h1>
+
       {!isSuperAdmin && (
         <p className="muted">Only a super-admin can create campaigns and upload lists.</p>
       )}
@@ -85,6 +116,30 @@ export function CampaignsPage() {
         <details className="card">
           <summary>New campaign</summary>
           <form className="customer-row" onSubmit={create}>
+            <label>
+              Company
+              <select
+                value={picksCompany ? customerId : String(user?.customerId ?? "")}
+                disabled={!picksCompany}
+                required={picksCompany}
+                onChange={(e) => setCustomerId(e.target.value)}
+              >
+                {picksCompany ? (
+                  <>
+                    <option value="">Choose a company…</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </>
+                ) : (
+                  <option value={String(user?.customerId ?? "")}>
+                    {ownCompany?.name ?? "Your company"}
+                  </option>
+                )}
+              </select>
+            </label>
             <label>
               Name
               <input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -110,6 +165,9 @@ export function CampaignsPage() {
             <button>Create</button>
           </form>
           <p className="muted">
+            {picksCompany
+              ? "The campaign is created for the company you pick. "
+              : `This campaign will belong to ${ownCompany?.name ?? "your company"}. `}
             Start and finish dates are required: a campaign without a window cannot be reported on.
           </p>
         </details>
@@ -126,6 +184,7 @@ export function CampaignsPage() {
                 <Link className="campaign-title" to={`/campaigns/${c.id}`}>
                   {c.name}
                 </Link>
+                {c.customer_name && <span className="badge">{c.customer_name}</span>}
                 <span className="muted">
                   {c.start_date ?? "—"} → {c.finish_date ?? "—"}
                 </span>

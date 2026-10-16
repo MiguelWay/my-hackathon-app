@@ -295,6 +295,8 @@ describe("anonymous callers are rejected everywhere", () => {
     ["POST", "/returns/resend"],
     ["GET", "/admin/customers"],
     ["GET", "/admin/customers/1/campaigns"],
+    ["GET", "/admin/campaigns"],
+    ["GET", "/admin/campaigns/uploads"],
     ["GET", "/admin/campaigns/1/export"],
     ["PATCH", "/admin/users/1"],
     ["DELETE", "/admin/users/1"],
@@ -444,11 +446,14 @@ describe("roles", () => {
     expect(list.status).toBe(200);
     expect(list.body.map((c) => c.name)).toEqual(expect.arrayContaining(["Alpha Co", "Beta Co"]));
 
-    const created = await superadmin.post<{ name: string }>("/admin/customers", {
-      name: "Gamma Co",
-    });
+    // A customer is never an empty shell: its first campaign is created with it.
+    const created = await superadmin.post<{ name: string; campaign: { name: string } }>(
+      "/admin/customers",
+      { name: "Gamma Co" }
+    );
     expect(created.status).toBe(201);
     expect(created.body.name).toBe("Gamma Co");
+    expect(created.body.campaign.name).toBe("Gamma Co");
   });
 
   it("logging out ends the session", async () => {
@@ -1068,5 +1073,155 @@ describe("a campaign's own read", () => {
       expect((await alphaUser.get(path)).status).toBe(403);
       expect((await alpha.get(path)).status).toBe(200);
     }
+  });
+});
+
+// Creating a customer now opens its first campaign, and a campaign can be aimed at a chosen company.
+describe("a customer arrives with its first campaign", () => {
+  const today = new Date().toISOString().slice(0, 10);
+  let newCustomerId = 0;
+
+  it("registers the customer and its first campaign together", async () => {
+    const created = await superadmin.post<{
+      id: number;
+      name: string;
+      campaign: { id: number; name: string; start_date: string; finish_date: string };
+    }>("/admin/customers", {
+      name: "Zeta Co",
+      campaignName: "Zeta launch",
+      startDate: "2026-05-01",
+      finishDate: "2026-05-31",
+    });
+    expect(created.status).toBe(201);
+    newCustomerId = created.body.id;
+    expect(created.body.campaign).toMatchObject({
+      name: "Zeta launch",
+      start_date: "2026-05-01",
+      finish_date: "2026-05-31",
+    });
+
+    // The campaign is really attached to the new customer, and it is the only one there.
+    const campaigns = await superadmin.get<{ id: number }[]>(
+      `/admin/customers/${newCustomerId}/campaigns`
+    );
+    expect(campaigns.body.map((c) => c.id)).toEqual([created.body.campaign.id]);
+  });
+
+  it("names the first campaign after the customer, and dates it today, when not told otherwise", async () => {
+    const created = await superadmin.post<{
+      campaign: { name: string; start_date: string; finish_date: string };
+    }>("/admin/customers", { name: "Eta Co" });
+    expect(created.status).toBe(201);
+    expect(created.body.campaign).toMatchObject({
+      name: "Eta Co",
+      start_date: today,
+      finish_date: today,
+    });
+  });
+
+  it("refuses a first campaign whose dates do not make sense, leaving nothing behind", async () => {
+    const backwards = await superadmin.post("/admin/customers", {
+      name: "Theta Co",
+      startDate: "2026-06-02",
+      finishDate: "2026-06-01",
+    });
+    expect(backwards.status).toBe(400);
+
+    const list = await superadmin.get<{ name: string }[]>("/admin/customers");
+    expect(list.body.some((c) => c.name === "Theta Co")).toBe(false);
+  });
+
+  it("lists every campaign on the platform, each with the company it belongs to", async () => {
+    const res = await superadmin.get<
+      { name: string; customer_id: number; customer_name: string }[]
+    >("/admin/campaigns");
+    expect(res.status).toBe(200);
+    expect(res.body.find((c) => c.name === "Zeta launch")).toMatchObject({
+      customer_id: newCustomerId,
+      customer_name: "Zeta Co",
+    });
+    // The tenant route is unchanged: a platform super-admin has no company, so it still reads empty.
+    expect((await superadmin.get<unknown[]>("/campaigns")).body).toEqual([]);
+  });
+
+  it("creates a campaign for the company the platform super-admin names", async () => {
+    const created = await superadmin.post<{ customer_id: number; name: string }>("/campaigns", {
+      customerId: alphaCustomerId,
+      name: "Alpha Placed",
+      startDate: "2026-07-01",
+      finishDate: "2026-07-31",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.customer_id).toBe(alphaCustomerId);
+
+    // It lands in Alpha's own list, and in nobody else's.
+    expect((await alpha.get<{ name: string }[]>("/campaigns")).body.map((c) => c.name)).toContain(
+      "Alpha Placed"
+    );
+    expect(
+      (await beta.get<{ name: string }[]>("/campaigns")).body.map((c) => c.name)
+    ).not.toContain("Alpha Placed");
+  });
+
+  it("makes a platform super-admin name a company, and refuses one that does not exist", async () => {
+    const window = { startDate: "2026-07-01", finishDate: "2026-07-31" };
+
+    const unnamed = await superadmin.post("/campaigns", { name: "Nowhere", ...window });
+    expect(unnamed.status).toBe(400);
+
+    const unknown = await superadmin.post("/campaigns", {
+      customerId: 999999,
+      name: "Nowhere",
+      ...window,
+    });
+    expect(unknown.status).toBe(404);
+    expect(unknown.body).toEqual({ error: "customer not found" });
+
+    const bad = await superadmin.post("/campaigns", {
+      customerId: "abc",
+      name: "Nowhere",
+      ...window,
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it("keeps a company super-admin inside its own company", async () => {
+    // Naming its own company is a no-op, and is allowed.
+    const own = await alpha.post<{ customer_id: number }>("/campaigns", {
+      customerId: alphaCustomerId,
+      name: "Alpha Own",
+      startDate: "2026-08-01",
+      finishDate: "2026-08-31",
+    });
+    expect(own.status).toBe(201);
+    expect(own.body.customer_id).toBe(alphaCustomerId);
+
+    // Naming somebody else's is not.
+    const foreign = await alpha.post<{ error: string }>("/campaigns", {
+      customerId: betaCustomerId,
+      name: "Planted",
+      startDate: "2026-08-01",
+      finishDate: "2026-08-31",
+    });
+    expect(foreign.status).toBe(403);
+    expect(foreign.body).toEqual({
+      error: "you can only create campaigns for your own company",
+    });
+    expect(
+      (await beta.get<{ name: string }[]>("/campaigns")).body.map((c) => c.name)
+    ).not.toContain("Planted");
+  });
+
+  it("keeps the platform campaign lists away from a `user`", async () => {
+    expect((await alphaUser.get("/admin/campaigns")).status).toBe(403);
+    expect((await alphaUser.get("/admin/campaigns/uploads")).status).toBe(403);
+  });
+
+  it("lists the uploaded lists of every campaign for a platform super-admin", async () => {
+    const res = await superadmin.get<{ filename: string }[]>("/admin/campaigns/uploads");
+    expect(res.status).toBe(200);
+    expect(res.body.map((u) => u.filename)).toEqual(
+      expect.arrayContaining(["alpha.xlsx", "beta.xlsx"])
+    );
   });
 });

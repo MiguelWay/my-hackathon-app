@@ -74,9 +74,8 @@ interface ResentNotice {
 
 /** The most recently recorded returns, newest first. */
 export function RecentReturnsPage() {
-  const { user } = useAuth();
+  const { user, isAdmin: isSuperAdmin } = useAuth();
   const hasCompany = user?.customerId != null;
-  const isSuperAdmin = user?.role === "superadmin";
   const location = useLocation();
   const resent = (location.state as { resent?: ResentNotice } | null)?.resent;
 

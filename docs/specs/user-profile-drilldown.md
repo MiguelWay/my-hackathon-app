@@ -53,14 +53,14 @@ in one screen, with the campaign's count ticking up.
 | Route | Who | What |
 |---|---|---|
 | `/customers` | both | The customer list. Admin controls render for a super-admin only. |
-| `/customers?customer=<id>` | both | Opens on that customer, campaigns expanded. |
+| `/customers?customer=<id>` | both | Opens with that customer's row already expanded. |
+| `/campaigns` | super-admin | The Campaigns screen: create one for a chosen company, and every list under its campaign. |
 | `/campaigns/:id/returns` | both | That campaign's returns screen (section 4). |
 | `/superadmin/customers` | any | Redirects to `/customers` (old links, the README, bookmarks). |
 | `/returns` | any | Redirects to `/customers`. The rail screen is gone. |
 | `/returns?customer=<id>&campaign=<id>` | any | Redirects to `/campaigns/:id/returns`. |
 | `/returns/recent` | super-admin | The reports page. A `user` is sent to `/customers`. |
-| `/` | super-admin | The Campaigns screen, unchanged. |
-| `/` | `user` | Redirects to `/customers`. |
+| `/` | any | Redirects to `/customers`. Every role lands there. |
 
 **Nav.** A `user` sees exactly one item: **Customers**. A super-admin keeps `Customers · Campaigns ·
 Returned Packages`.
@@ -153,7 +153,7 @@ A `user` calling any of those gets `403 super-admin only`, the same shape as the
 
 | File | Change |
 |---|---|
-| `src/pages/CustomersPage.tsx` | Role-aware: hide *New customer*, the *Users* panel, account management and the export controls from a `user`; campaign row shows name, dates and counts; campaign click links to `/campaigns/:id/returns` |
+| `src/pages/CustomersPage.tsx` | Role-aware: hide *New customer* and the export controls from a `user`; the row itself is the accordion that opens its campaigns and, for a super-admin, its accounts; campaign row shows name, dates and counts; campaign click links to `/campaigns/:id/returns` |
 | `src/pages/ReturnsPage.tsx` | Becomes the campaign's screen: takes `:id` from the route, drops the rail, the pickers and their state, loads the header and counters, keeps the lookup/record/resend |
 | `src/pages/RecentReturnsPage.tsx` | Unchanged (super-admin only) |
 | `src/App.tsx` | Routes and redirects per section 3; role-aware `/` |
@@ -236,6 +236,21 @@ The three questions left open in the first draft, as decided by the owner:
 2. **No campaign download controls** on the operator's customers page — the `.xlsx` stays with a
    super-admin, as agreed in `SECURITY.md` finding 21's era.
 3. **Campaign rows carry counts**, not just the name: `N packages · M returns` alongside the dates.
+
+Added 2026-10-16, after the owner reviewed the shipped drill-down (see `tasks/todo.md`):
+
+4. **`/` lands on Customers** for every role; the Campaigns screen moves to its own `/campaigns`,
+   because it used to *be* `/` and the menu link would otherwise land on the customers.
+5. **The customer row is the accordion.** Its campaigns and, for a super-admin, its accounts open in
+   place, as `details.section` disclosures. The `[Users]` and `[Campaigns]` buttons go, and with them
+   the accounts panel that opened below the whole table.
+6. **A customer arrives with its first campaign.** `POST /admin/customers` creates both in one
+   transaction. Name and dates are the caller's to set (the name defaults to the customer's, the dates
+   to a one-day window on today), so the customer can take a list immediately.
+7. **A campaign names its company at the platform level.** `POST /campaigns` takes an optional
+   `customerId`; only an account with no company of its own may set it. A company super-admin is fixed
+   to its own company and naming another is a `403`. The tenant `GET /campaigns` stays scoped, so a
+   platform super-admin still reads `[]` there; the platform list is `GET /admin/campaigns`.
 
 No open questions remain. Once this spec is approved, the plan and task list come next; no code is
 written before that.

@@ -515,6 +515,64 @@ table.grid tr.expand > td {
   border-left: 3px solid var(--accent);
 }
 
+/* A customer row IS the accordion header: the whole row opens it, the chevron is there for the
+   keyboard and for the eye. */
+table.grid tr.customer-head {
+  cursor: pointer;
+}
+
+table.grid tr.customer-head:hover > td {
+  background: #f7faff;
+}
+
+table.grid tr.customer-head.open > td {
+  background: #eef3fb;
+}
+
+td.disclosure-cell {
+  width: 1%;
+  text-align: right;
+}
+
+button.disclosure {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--panel);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+button.disclosure:hover {
+  border-color: var(--accent);
+}
+
+/* The two things one customer's row shows: its campaigns, then its accounts. */
+.customer-group {
+  padding: 2px 0 12px;
+}
+
+.customer-group + .customer-group {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+h2.group-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
 ul.campaign-list {
   list-style: none;
   margin: 0;

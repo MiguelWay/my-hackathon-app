@@ -19,16 +19,9 @@ function Protected({ children }: { children: ReactNode }) {
 
 /** The company-wide reports, and the admin screens. An operator is sent to their customers instead. */
 function SuperAdminOnly({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  if (user?.role !== "superadmin") return <Navigate to="/customers" replace />;
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <Navigate to="/customers" replace />;
   return <>{children}</>;
-}
-
-/** An operator starts at the customers; a super-admin still starts at the campaigns. */
-function Home() {
-  const { user } = useAuth();
-  if (user?.role !== "superadmin") return <Navigate to="/customers" replace />;
-  return <CampaignsPage />;
 }
 
 /**
@@ -46,19 +39,21 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
-      <Route
-        path="/"
-        element={
-          <Protected>
-            <Home />
-          </Protected>
-        }
-      />
+      {/* Every role lands on the customers: it is the one screen both of them use. */}
+      <Route path="/" element={<Navigate to="/customers" replace />} />
       <Route
         path="/customers"
         element={
           <Protected>
             <CustomersPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/campaigns"
+        element={
+          <Protected>
+            <CampaignsPage />
           </Protected>
         }
       />

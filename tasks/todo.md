@@ -1414,3 +1414,69 @@ test writes were deleted afterwards (`campaign_6_returns` back to 1, no `AGENT*`
 `src/App.tsx`, `src/styles.css`, `SECURITY.md`, `docs/specs/user-profile-drilldown.md`,
 `tasks/{plan,todo}.md`
 **Scope:** Large
+
+---
+
+## Landing on Customers, one accordion per customer, and a campaign that names its company
+
+**Description:** Four items from the owner on 2026-10-16, each answered with a question before any code
+was written:
+
+1. "open program to customers instead of campaigns"
+2. "remove users button and make it a accordian" — clarified as "same as other accordions"
+3. "After registering new customer, automatically create first campaign. and associate with the
+   customer" — plus "make sure I can name the campaign"
+4. "Create campaign must have a company selector. I must be able to associate a campaign to a
+   customer"
+
+**Progress:** **Done.** `/` now redirects to `/customers` for every role, and *Campaigns* moved to its
+own `/campaigns` — it used to *be* `/`, so the menu link would otherwise have landed on the customers.
+
+The `[Users]` and `[Campaigns]` buttons are gone, along with the accounts panel that opened *below* the
+whole table: the **customer row is now the accordion**, opening in place to show its **Campaigns** and —
+for a super-admin — its **Accounts**, the latter reusing the existing `details.section` disclosures so
+there is one pattern rather than three. A chevron button in the last cell keeps it keyboard-reachable
+and carries `aria-expanded`; the whole row is the click target.
+
+`POST /admin/customers` now creates the customer *and* its first campaign in one transaction, named by
+the caller (placeholder: the customer's name) with dates defaulting to a one-day window on today, so a
+new customer can take a list immediately.
+
+`POST /campaigns` takes an optional `customerId`: only a platform super-admin (no company of its own)
+may set it; a company super-admin is fixed to its own company, and naming another is a `403`. The *New
+campaign* form gained a **Company** selector — a real one for a platform super-admin, rendered
+`disabled` with their own company for everybody else — and each campaign in the list names its company.
+
+`GET /campaigns` deliberately did **not** change: a platform super-admin still reads `[]` there, which
+an existing test asserts. The platform list the selector needs is new and lives on the admin router:
+`GET /admin/campaigns` and `GET /admin/campaigns/uploads`. The only behavioural change to an existing
+endpoint is that a platform super-admin posting to `/campaigns` **without** a company now gets `400
+customerId is required: this account is not attached to a company` where it used to get a generic `403`.
+
+**Verification:** `npm test` — **209 tests** (+11): the first campaign created with its customer, its
+name defaulting to the customer's and its dates to today, a backwards window refused with *nothing* left
+behind, the platform campaign list naming each company, a platform super-admin creating into a named
+company, its refusal without one (`400`), an unknown one (`404`) and a nonsense one (`400`), a company
+super-admin allowed its own company (`201`) and refused another's (`403`), plus both new routes added to
+the anonymous-401 table and a `user`'s `403`. `npm run typecheck:api`, `npx tsc --noEmit` and `npm run
+build` clean, with no CSS warning.
+
+Live (`:3000`, restarted together with `:4000`): created `__agent_check__` with its campaign
+`__agent_check__ drop` in one call (`201`), read it back from `/api/admin/campaigns` with its
+`customer_name`, and got the `400` above posting to `/api/campaigns` without a company — then deleted
+both rows and confirmed `customers 2 · users 2 · campaigns 0 · packages 0 · returns 0`.
+
+Browser as `owner@mycompany.test`: `/` → `/customers`, nav `Customers · Campaigns · Returned Packages`,
+no buttons on a row, opening *Plátano de Canarias 2026* showing *Campaigns* (none yet) and *Accounts*
+(none yet), and the *New campaign* Company dropdown offering *Choose a company…* plus both customers.
+As a throwaway company super-admin on *Plátano de Canarias*: `/` → `/customers`, and the dropdown
+rendered `disabled` with that one company and the line *This campaign will belong to Plátano de
+Canarias*; the account was deleted afterwards and the session restored to `owner@mycompany.test`. New
+CSS confirmed applied by computed style (pointer cursor on the row, `#eef3fb` on the open row, the
+26px chevron and the 3px accent border on the expansion) after the earlier nesting incident in this
+stylesheet.
+
+**Files:** `server/src/{admin,campaigns}.ts`, `src/pages/{CampaignsPage,CustomersPage}.tsx`,
+`src/App.tsx`, `src/components/Layout.tsx`, `src/styles.css`, `tests/api/isolation.test.ts`,
+`docs/specs/user-profile-drilldown.md`, `tasks/{plan,todo}.md`
+**Scope:** Large

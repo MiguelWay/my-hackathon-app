@@ -148,8 +148,9 @@ reports become super-admin only. One returns screen serves both roles.
   (`SECURITY.md` finding 21). Gating four endpoints to `requireSuperAdmin` narrows what a `user` may
   *read*, which is the point of this change, and touches nothing about how a request is scoped.
 - **One customers page, two roles.** `/customers` renders the same list for everyone; the admin
-  controls (*New customer*, the *Users* panel, account management) and the export controls render only
-  for a super-admin. `/superadmin/customers` redirects, so old links keep working.
+  controls (*New customer* and the accounts inside a customer's row) and the export controls render only
+  for a super-admin. `/superadmin/customers` redirects, so old links keep working. *(The separate
+  *Users* panel this bullet first described was folded into the row on 2026-10-16 — see the plan below.)*
 
 ## Dependency graph
 ```
@@ -191,3 +192,60 @@ split, and the whole feature is roughly one session.
 
 ## Open Questions
 None. All three questions left open in the spec draft were decided by the owner on 2026-10-15.
+
+---
+
+# Feature Plan: Landing on Customers, one accordion per customer, and a campaign that names its company
+
+*Requested by the owner on 2026-10-16, straight after the drill-down shipped. Four items, each answered
+with a question first. They change where the app opens and how a customer's parts are arranged, not who
+may see what.*
+
+## Overview
+The app opened on **Campaigns** for a super-admin, the *Users* button opened a panel *below* the whole
+customers table, a new customer had to be given a campaign by hand afterwards, and the *New campaign*
+form silently used the caller's own company. These four items fix exactly that.
+
+## Architecture decisions
+
+- **One way in.** `/` redirects to `/customers` for every role. *Campaigns* keeps its own URL
+  (`/campaigns`), because it used to *be* `/` and the menu link would otherwise dead-end on the list.
+- **The customer row is the accordion.** The row is the header; opening it shows its **campaigns** and —
+  for a super-admin — its **accounts**, reusing the existing `details.section` disclosures. The
+  `[Users]` and `[Campaigns]` buttons and the bottom accounts panel are deleted, not hidden: one
+  pattern instead of three.
+- **A customer arrives ready to work.** `POST /admin/customers` creates the customer *and* its first
+  campaign in one transaction. The name is the caller's (defaulting to the customer's); the dates
+  default to a one-day window on today, so the campaign is valid immediately and can be re-dated later.
+- **The company is named, never inferred, at the platform level.** `POST /campaigns` takes an optional
+  `customerId`. Only an account with **no company of its own** may set it; anyone else is fixed to the
+  company they belong to, and naming another is a `403`. `GET /admin/campaigns` supplies the platform
+  list the selector needs — the tenant `GET /campaigns` is untouched and still scoped, so a platform
+  super-admin still reads `[]` there.
+
+## Task List
+
+- [x] `/` lands on Customers; Campaigns moves to `/campaigns`
+- [x] The customer row is the accordion: campaigns + accounts, no buttons
+- [x] A new customer comes with its first campaign
+- [x] New campaign names its company; the platform gets its own campaign list
+
+### Checkpoint: Feature complete
+- [x] `npm test`, `npm run typecheck:api`, `npx tsc --noEmit` and `npm run build` clean
+- [x] Browser walkthrough: a platform super-admin and a company super-admin
+- [ ] Review with the human before the change log is closed
+
+## Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Moving *Campaigns* off `/` breaks a bookmark | Low | `/` still works — it redirects; only the menu link points at `/campaigns` |
+| An auto-created campaign is unwanted bulk | Low | Its name is the caller's to set, its dates are defaulted rather than invented, and it is editable afterwards |
+| A company super-admin plants a campaign in another company | **High** | `POST /campaigns` ignores any choice that is not the caller's own (`403`), proved by a test |
+| The platform campaign list leaks one tenant's data to a `user` | **High** | All of `/admin` is `requireSuperAdmin`, and both new routes are in the anonymous-401 table |
+
+## Parallelisation
+One session, four small and sequential edits to the same two screens. No useful split.
+
+## Open Questions
+None — all four items were decided by the owner before any code was written.

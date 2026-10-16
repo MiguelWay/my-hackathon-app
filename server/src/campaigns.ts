@@ -3,7 +3,12 @@ import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { requireAuth, requireCompany, requireSuperAdmin, type AuthUser } from "./auth";
-import { MAX_NAME_LENGTH, boundedString, parseIsoDate } from "./validate";
+import {
+  MAX_NAME_LENGTH,
+  boundedString,
+  optionalPositiveInt,
+  parseIsoDate,
+} from "./validate";
 
 const ah =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler =>
@@ -70,10 +75,35 @@ campaignsRouter.get(
   })
 );
 
+/**
+ * Which customer a new campaign belongs to.
+ *
+ * A caller attached to a company can only ever write into its own, so the only account that gets to
+ * choose is a platform super-admin (`customerId === null`) — that is the "company" selector on the
+ * Campaigns screen. An `undefined` choice keeps the old behaviour: the caller's own company.
+ */
+async function resolveTargetCustomer(
+  raw: unknown,
+  caller: AuthUser
+): Promise<{ id: number } | { status: number; error: string }> {
+  if (raw === undefined || raw === null || raw === "") {
+    return caller.customerId === null
+      ? { status: 400, error: "customerId is required: this account is not attached to a company" }
+      : { id: caller.customerId };
+  }
+  const chosen = optionalPositiveInt(raw);
+  if (!chosen) return { status: 400, error: "customerId must be a positive number" };
+  if (caller.customerId !== null && chosen !== caller.customerId) {
+    return { status: 403, error: "you can only create campaigns for your own company" };
+  }
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT id FROM customers WHERE id = ?", [chosen]);
+  if (!rows[0]) return { status: 404, error: "customer not found" };
+  return { id: chosen };
+}
+
 campaignsRouter.post(
   "/",
   requireSuperAdmin,
-  requireCompany,
   ah(async (req, res) => {
     const user = currentUser(res);
     const { name, startDate, finishDate } = req.body ?? {};
@@ -93,13 +123,17 @@ campaignsRouter.post(
     if (finish < start) {
       return res.status(400).json({ error: "finishDate cannot be before startDate" });
     }
+    const target = await resolveTargetCustomer(req.body?.customerId, user);
+    if ("error" in target) return res.status(target.status).json({ error: target.error });
+
     const [result] = await pool.query<ResultSetHeader>(
       "INSERT INTO campaigns (customer_id, name, start_date, finish_date) VALUES (?, ?, ?, ?)",
-      [user.customerId, campaignName, start, finish]
+      [target.id, campaignName, start, finish]
     );
     const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT id, name, start_date, finish_date FROM campaigns WHERE id = ? AND customer_id = ?",
-      [result.insertId, user.customerId]
+      "SELECT id, customer_id, name, start_date, finish_date FROM campaigns" +
+        " WHERE id = ? AND customer_id = ?",
+      [result.insertId, target.id]
     );
     res.status(201).json(rows[0]);
   })

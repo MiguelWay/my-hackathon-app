@@ -5,7 +5,14 @@ import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
 import { sendCampaignExport } from "./export";
-import { boundedString, isValidEmail, MAX_NAME_LENGTH, optionalPositiveInt, passwordProblem } from "./validate";
+import {
+  boundedString,
+  isValidEmail,
+  MAX_NAME_LENGTH,
+  optionalPositiveInt,
+  parseIsoDate,
+  passwordProblem,
+} from "./validate";
 
 const ah =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler =>
@@ -32,22 +39,71 @@ adminRouter.get(
   })
 );
 
+// A customer is never an empty shell: registering one also opens its first campaign, named by the
+// caller (or after the customer) and landing on the chosen company. Both rows go in together, so a
+// failure leaves neither behind.
 adminRouter.post(
   "/customers",
   ah(async (req, res) => {
-    const { name } = req.body ?? {};
+    const { name, campaignName, startDate, finishDate } = req.body ?? {};
     const customerName = boundedString(name, MAX_NAME_LENGTH);
     if (!customerName) {
       return res.status(400).json({ error: "name is required (max 255 characters)" });
     }
-    const [result] = await pool.query<ResultSetHeader>("INSERT INTO customers (name) VALUES (?)", [
-      customerName,
-    ]);
-    const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT id, name, created_at FROM customers WHERE id = ?",
-      [result.insertId]
-    );
-    res.status(201).json(rows[0]);
+
+    const named = campaignName === undefined || campaignName === null || campaignName === "";
+    const firstCampaignName = named ? customerName : boundedString(campaignName, MAX_NAME_LENGTH);
+    if (!firstCampaignName) {
+      return res.status(400).json({ error: "campaignName must be 255 characters or fewer" });
+    }
+
+    // Dates are optional here and default to a one-day window on today, so the campaign is valid
+    // straight away; it can be re-dated from the Campaigns screen.
+    const today = new Date().toISOString().slice(0, 10);
+    const start = startDate === undefined || startDate === null || startDate === ""
+      ? today
+      : parseIsoDate(startDate);
+    if (!start) {
+      return res.status(400).json({ error: "startDate must be a valid date (YYYY-MM-DD)" });
+    }
+    const finish = finishDate === undefined || finishDate === null || finishDate === ""
+      ? start
+      : parseIsoDate(finishDate);
+    if (!finish) {
+      return res.status(400).json({ error: "finishDate must be a valid date (YYYY-MM-DD)" });
+    }
+    if (finish < start) {
+      return res.status(400).json({ error: "finishDate cannot be before startDate" });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [customer] = await conn.query<ResultSetHeader>(
+        "INSERT INTO customers (name) VALUES (?)",
+        [customerName]
+      );
+      const [campaign] = await conn.query<ResultSetHeader>(
+        "INSERT INTO campaigns (customer_id, name, start_date, finish_date) VALUES (?, ?, ?, ?)",
+        [customer.insertId, firstCampaignName, start, finish]
+      );
+      await conn.commit();
+      res.status(201).json({
+        id: customer.insertId,
+        name: customerName,
+        campaign: {
+          id: campaign.insertId,
+          name: firstCampaignName,
+          start_date: start,
+          finish_date: finish,
+        },
+      });
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
   })
 );
 
@@ -78,6 +134,39 @@ adminRouter.get(
         WHERE c.customer_id = ?
         ORDER BY c.id DESC`,
       [req.params.id]
+    );
+    res.json(rows);
+  })
+);
+
+// Every campaign on the platform, named with its company: the Campaigns screen needs one list that
+// a platform super-admin (no company of its own) can create into. The tenant route `/campaigns` is
+// deliberately untouched — it stays scoped to the caller's own company.
+adminRouter.get(
+  "/campaigns",
+  ah(async (_req, res) => {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT c.id, c.customer_id, cu.name AS customer_name, c.name, c.start_date, c.finish_date,
+              c.created_at,
+              COUNT(u.id) AS upload_count,
+              CAST(COALESCE(SUM(u.row_count), 0) AS UNSIGNED) AS total_rows
+         FROM campaigns c
+         JOIN customers cu ON cu.id = c.customer_id
+         LEFT JOIN campaign_uploads u ON u.campaign_id = c.id
+        GROUP BY c.id, c.customer_id, cu.name, c.name, c.start_date, c.finish_date, c.created_at
+        ORDER BY c.id DESC`
+    );
+    res.json(rows);
+  })
+);
+
+// The uploaded lists of every campaign, so the Campaigns screen can show them in one request.
+adminRouter.get(
+  "/campaigns/uploads",
+  ah(async (_req, res) => {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, campaign_id, customer_id, filename, row_count, created_at
+         FROM campaign_uploads ORDER BY campaign_id DESC, id`
     );
     res.json(rows);
   })
