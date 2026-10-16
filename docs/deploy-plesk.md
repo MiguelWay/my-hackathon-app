@@ -113,10 +113,10 @@ curl -s https://your-domain.example/api/health
 
 Then in a browser:
 
-1. Open the site and sign in → you land on **Campaigns**.
+1. Open the site, sign in as administrator → you land on **Customers**.
 2. Hard-refresh on a deep link (e.g. `https://your-domain.example/returns`) → the page loads, not a 404.
 3. Upload an `.xlsx` to a campaign, confirm the sender-ID column.
-4. Record a return on the **Process returns** page.
+4. Sign in through **Enter as operator**, then record a return: Customers → open a customer → open its campaign.
 5. Download the `.xlsx` and check the returned rows are shaded.
 
 ## Updating the app
@@ -141,6 +141,28 @@ npm ci && npm run build
 then restart. Migrations are additive and recorded in `schema_migrations`; **never edit a migration
 that has already been applied** — add a new one instead.
 
+## If you are locked out
+
+Recovery deliberately does **not** go through the login page — anything reachable from that page is
+only available while that page works. It is a command you run where the database is, and it needs no
+login at all:
+
+```sh
+npm run recover                                  # the logins that exist, then the commands
+npm run recover -- list
+npm run recover -- reset <login>                 # prompts for the new password, hidden
+npm run recover -- rename <login> <new-login>    # change the login itself
+npm run recover -- unlock <login>                # active, and a platform super-admin, again
+```
+
+This works with the app stopped, with the account deactivated, with the password lost, and while the
+login rate limit is in force, because it talks straight to the database. A password passed as an
+argument is visible in the shell history, so omit it and let the prompt read it hidden. Resetting a
+password also ends that account's existing sessions.
+
+On Plesk: **SSH Terminal** → `cd` into the app directory → the command above. If there is no shell
+access at all, say so — the fallback is a start-up repair from environment variables.
+
 ## Troubleshooting
 
 | Symptom | Likely cause |
@@ -148,6 +170,7 @@ that has already been applied** — add a new one instead.
 | 502 / app not responding | Wrong startup file, or the app crashed — check Plesk's Node.js log. Confirm `server/start.mjs` exists and `npm ci` ran. |
 | `Missing required env var: DB_USER` | `.env` missing, unreadable, or `DB_USER`/`DB_NAME` not set. |
 | Sign-in seems to do nothing | HTTPS not enabled while in production mode (Secure cookie dropped over HTTP), or the SPA was built with the wrong `VITE_API_BASE_URL` — it must be `/api`. |
+| Locked out, or the password is lost | Not a deployment fault — run `npm run recover` (see **If you are locked out** above). It needs no login. |
 | Deep link 404s | `SERVE_SPA` must be true, or your web server needs an SPA rewrite to `index.html`. |
 | Can't reach the database | On Plesk use `DB_HOST=localhost`; double-check the DB name and user from step 1. |
 | Uploads fail with "invalid campaign id" / 404 | You're hitting the API without the `/api` prefix. |

@@ -83,14 +83,27 @@ Two more facts that matter for the design:
   everywhere, owns nothing".
 - A **company** super-admin has a company and is pinned to it.
 
-**A super-admin may also act as a user** (built 2026-10-16). A **new top-level menu item, *Process
-returns***, is the way in: clicking it puts the app into the user's view and lands on the user's starting
-screen — the customer list — from where the operator's flow works exactly as it does for a `user`: pick the
-customer, pick the campaign, use the package return functionality. While in that view the admin items
-(*Campaigns*, *Returned Packages*) and every admin control are hidden, so the menu is **`Customers`
-alone**, and a `user view` chip marks where you are; getting back to the super-admin view takes a **fresh
-login**. This is a **view, not a permission**: the account stays a super-admin and the API still allows it
-everything.
+**A super-admin may also act as an operator** (reworked 2026-10-16). The login screen has **two doors** —
+*Enter as administrator* and *Enter as operator*. Both check the same credentials; the door chooses the
+**view**, never the role. A super-admin may use either; an **operator account** (the `user` role) may only
+use the operator's, and the administrator's door is **refused with the reason** rather than quietly
+downgraded. Entering as operator hides the admin items and every admin control, so the nav is
+**`Customers` alone**, and a `user view` chip marks where you are; getting back to the super-admin view
+takes a **fresh login**. This is a **view, not a permission**: the account stays a super-admin and the API
+still allows it everything. *(This replaced the *Process returns* top-level menu item, removed along with
+*Returned Packages* on 2026-10-16.)*
+
+**Changing a password** is an ordinary setting: `/account/password`, reached from the top bar, asks for the
+current password and then signs out every *other* session on the account (`POST /auth/password`).
+
+**Getting back in when that is not possible** does not go through the login page — anything reachable from
+that page is only available while that page works. `npm run recover` (`server/src/scripts/account.ts`)
+talks straight to the database: it lists the logins, resets a password (ending that account's sessions),
+renames a login, and restores an account to an active platform super-admin. It works with the app stopped,
+with the account deactivated, with the password lost, and while the login rate limit is in force. On the
+app side, `isLastPlatformAdmin` already refuses to deactivate or delete the last active platform
+super-admin, and no route can change an account's login — so the platform cannot lose its owner through the
+UI.
 
 ---
 
@@ -158,15 +171,16 @@ counters move as they work.
 | Screen | URL | Who | Purpose |
 |---|---|---|---|
 | Log in | `/login` | anyone | — |
-| **Customers** | `/customers` | both | The home screen. Each row opens (accordion) to its **Campaigns** and, for a super-admin, its **Accounts** |
+| **Change password** | `/account/password` | both | Your own setting: needs the password you have now, and signs out every other session on the account |
+| **Customers** | `/customers` | both | The home screen. Each row opens (accordion) to its **Campaigns**; for a super-admin the *Users* column also carries a **Users** button |
+| **Accounts** | `/customers/:id/accounts` | super-admin | One customer's accounts, on a page of their own: create one, activate or deactivate it, delete it. Reached by the **Users** button on a customer's row |
 | **Campaigns** | `/campaigns` | super-admin | Create a campaign for a company; every list under its campaign |
 | **Campaign page** | `/campaigns/:id` | super-admin | One campaign: edit its name/window, upload its lists |
 | **Campaign returns** | `/campaigns/:id/returns` | both | The operator's desk *and* that campaign's report: the counters, the lookup, the reason, the resend, the linking table and its `.xlsx` |
 
-A super-admin sees four items: **`Customers · Campaigns · Returned Packages · Process returns`**.
-*Process returns* is the **way into the user's view** (§4) — it hides the admin items and lands on the
-customer list, exactly where a `user` starts. While in that view the nav is **`Customers` alone**. What
-becomes of *Returned Packages* itself (R3) is still to be applied.
+A super-admin's nav is **`Customers · Campaigns`**; in the operator's view it is **`Customers` alone**.
+The way into either view is the **login screen's two doors** (§4) — *Process returns* and *Returned
+Packages* left the nav on 2026-10-16.
 
 ---
 
@@ -180,9 +194,9 @@ becomes of *Returned Packages* itself (R3) is still to be applied.
 | Uploading a list, as a platform super-admin | **403** | Imports into the campaign's own customer (Model A) |
 | Campaigns list → click a campaign | 404 for a platform super-admin | Opens the campaign page |
 | `← Campaigns` link on the campaign page | Points at `/`, which is now the customers — **a live bug from the last change** | Points at `/campaigns` |
-| *Returned Packages* in the menu | A report page that shows a platform super-admin nothing at all | Not yet done (R3): its report moves onto each campaign's results screen. Left alone for now. |
+| *Returned Packages* in the menu | A report page that shows a platform super-admin nothing at all | **Removed from the nav** (2026-10-16); the route stays but is now unreachable. The report itself still moves onto each campaign's results screen (R3, not started). |
 | Customer names | Two customers may differ only by case; that is how `Plátano de Canarias 2026` and `plátano de canarias 2026` both existed | **One name per customer.** `customers.name` has no unique index today; a duplicate must be refused with a friendly `409` |
-| A super-admin acting as a user | Not possible at all | **Built:** a new top-level **Process returns** item → the user's view (customer list, then campaign, then the package return functionality), admin items hidden, a `user view` chip shown; back via a **fresh login** |
+| A super-admin acting as an operator | Not possible at all | **Built:** two doors on the login screen — *Enter as administrator* / *Enter as operator* — the second opening the operator's view (customer list, then campaign, then the package return functionality), admin items hidden, a `user view` chip shown; back via a **fresh login**. An operator account may not use the administrator's door. The old *Process returns* menu item is gone |
 | Campaign results counters | Exist: packages sent · returned packages (`n% of sent`) · Resent (`n% of sent`) | **Unchanged** — confirmed |
 
 ---
@@ -198,8 +212,9 @@ becomes of *Returned Packages* itself (R3) is still to be applied.
 6. Only a platform super-admin may choose a company when creating a campaign; a company super-admin is
    pinned to its own.
 7. The **linking table** and its `.xlsx` download appear on each campaign's results screen.
-8. Clicking **Process returns** puts a super-admin into the user's view — admin items hidden, the
-   operator's flow working as it does for a `user` — and a fresh login brings the super-admin view back.
+8. Choosing **Enter as operator** on the login screen puts a super-admin into the operator's view — admin
+   items hidden, the operator's flow working as it does for a `user` — and a fresh login brings the
+   super-admin view back. An operator account can only ever enter the operator's view.
 
 ---
 
@@ -237,23 +252,29 @@ and the campaign page opens with the name field **focused and selected**, so you
 it. It never reads blank in a list. *(The alternative — making `name` nullable and printing “Untitled” —
 needs a migration and shows blank names in the campaign list; not recommended.)*
 
-### R2 — settled: a new **Process returns** item is the way in
+### R2 — settled: two doors on the login screen
 
-A new item in the top menu — **Process returns** — takes a super-admin into the user's view: it hides the
-admin items and lands them on the customer list, which is where a `user` starts. From there the operator's
-flow is unchanged — pick the customer, pick the campaign, use the package return functionality.
+The login screen carries **two buttons** — *Enter as administrator* and *Enter as operator*. Both check
+the same credentials, and the door chooses the **view**, never the role: a super-admin may use either,
+while an operator account may only use the operator's — the administrator's door is refused with the
+reason ("This is an operator account — use 'Enter as operator'.") instead of silently landing elsewhere.
+Entering as operator hides the admin items and every admin control and lands on the customer list, which
+is where a `user` starts. From there the operator's flow is unchanged — pick the customer, pick the
+campaign, use the package return functionality.
 
 While that view is on, the menu is **`Customers` alone**, a `user view` chip marks it, and the admin
 controls (*New customer*, *Accounts*, the export buttons) are hidden — a clean operator view. **Getting
-back to the super-admin view takes a fresh login**, as you asked, so the view survives navigation and a
-reload.
-
-*(An earlier idea — reusing the *Returned Packages* item as the way in — was set aside on 2026-10-16: it
-stays a report page.)*
+back to the super-admin view takes a fresh login** (or the *Enter as administrator* door at `/login`), as
+you asked, so the view survives navigation and a reload.
 
 **This is a view, not a permission.** The account is still a super-admin, so the API still permits it
 everything (Model A). The view changes what is on screen, not what is allowed. Making the restriction real
-would be a different piece of work.
+would be a different piece of work — although an operator *account* is a real restriction: it is a `user`,
+and the admin API already refuses it.
+
+*(This replaced the earlier *Process returns* menu item, set aside on 2026-10-16, and the item itself was
+removed the same day. The older idea of *Returned Packages* being the way in was set aside earlier — it
+stays a report page, now off the nav.)*
 
 ### R3 — settled: option **2** — the report moves under each campaign
 
@@ -279,10 +300,12 @@ Both restated by the owner on 2026-10-16. They are easy to lose sight of while e
 they are written down, and every task must be checked against them.
 
 1. **A customer's campaigns stay on the Customers page.** Opening a customer's row shows its **campaign
-   list** — each row reading `name · dates · N lines · N packages · M returns` — and clicking one opens
-   that campaign's returns screen. For a super-admin the `.xlsx` download controls sit beside each
-   campaign (*Download .xlsx*, and *Save as…* where the browser allows it). This list is how a campaign
-   is reached, and it stays.
+   list**: each row is the campaign's **name** and the **same three counters its own screen shows** —
+   packages sent · returned packages · Resent, the last two with their share of what was sent — read off
+   the same component (`src/components/ReturnCounters.tsx`). **No dates, and no separate "Record
+   returns" text**: the row itself opens the campaign's returns screen. For a super-admin the `.xlsx`
+   download controls sit beside each campaign (*Download .xlsx*, and *Save as…* where the browser allows
+   it). This list is how a campaign is reached, and it stays.
 2. **Creating a campaign always names the customer.** The *New campaign* form keeps its **Company**
    selector, listing every customer. Only a platform super-admin may use it; an account attached to a
    company is pinned to its own, and naming another is refused. Neither half may be dropped: a campaign
