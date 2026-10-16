@@ -186,6 +186,46 @@ authRouter.get(
   })
 );
 
+// Changing your own password. It needs the current one, so a borrowed session cannot lock the owner
+// out, and it ends every *other* session on the account — a new password should evict whoever else had
+// the old one — while leaving the caller's own session open.
+//
+authRouter.post(
+  "/password",
+  ah(async (req, res) => {
+    const token = req.cookies?.[COOKIE];
+    const me = await getUserFromToken(token);
+    if (!me || !token) return res.status(401).json({ error: "not authenticated" });
+
+    const { currentPassword, newPassword } = req.body ?? {};
+    // Reject an over-long password before hashing (see MAX_PASSWORD_LENGTH).
+    if (typeof currentPassword !== "string" || currentPassword.length > MAX_PASSWORD_LENGTH) {
+      return res.status(401).json({ error: "current password is incorrect" });
+    }
+    const problem = passwordProblem(newPassword);
+    if (problem) return res.status(400).json({ error: problem });
+
+    const [rows] = await pool.query<(RowDataPacket & { password_hash: string })[]>(
+      "SELECT password_hash FROM users WHERE id = ?",
+      [me.id]
+    );
+    // Always run a comparison, so the response does not reveal whether the account still exists.
+    const currentOk = await bcrypt.compare(currentPassword, rows[0]?.password_hash ?? DUMMY_HASH);
+    if (!rows[0] || !currentOk) {
+      console.warn(`[security] failed password change for user ${me.id}`);
+      return res.status(401).json({ error: "current password is incorrect" });
+    }
+
+    const hash = await bcrypt.hash(newPassword as string, 12);
+    await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [hash, me.id]);
+    await pool.query("DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?", [
+      me.id,
+      hashToken(token),
+    ]);
+    res.json({ ok: true });
+  })
+);
+
 // ---- Middleware ----
 
 export const requireAuth: RequestHandler = ah(async (req, res, next) => {

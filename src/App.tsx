@@ -9,6 +9,8 @@ import { CampaignDetailPage } from "./pages/CampaignDetailPage";
 import { ReturnsPage } from "./pages/ReturnsPage";
 import { RecentReturnsPage } from "./pages/RecentReturnsPage";
 import { CustomersPage } from "./pages/CustomersPage";
+import { AccountsPage } from "./pages/AccountsPage";
+import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -49,6 +51,27 @@ export default function App() {
           </Protected>
         }
       />
+      {/* A customer's accounts, on their own page: the *Users* button on a customer's row lands here. */}
+      <Route
+        path="/customers/:id/accounts"
+        element={
+          <Protected>
+            <SuperAdminOnly>
+              <AccountsPage />
+            </SuperAdminOnly>
+          </Protected>
+        }
+      />
+      {/* Changing your own password: a plain setting, so both roles have it. */}
+      <Route
+        path="/account/password"
+        element={
+          <Protected>
+            <ChangePasswordPage />
+          </Protected>
+        }
+      />
+      <Route path="/superadmin/customers" element={<Navigate to="/customers" replace />} />
       <Route
         path="/campaigns"
         element={
