@@ -13,15 +13,19 @@ export interface User {
 interface AuthValue {
   user: User | null;
   loading: boolean;
-  /** A super-admin has dropped into the user's view. */
+  /** A super-admin has entered the operator's view instead of the administrator's. */
   asUser: boolean;
-  /** May render the admin controls: a super-admin, and not currently in the user's view. */
+  /** May render the admin controls: a super-admin, and not currently in the operator's view. */
   isAdmin: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /**
+   * Logs in through one of the login screen's two doors. `asOperator` picks the *view*, never the
+   * role: the account's own role always wins, and an operator account may only enter the operator's
+   * view — asking for the administrator's door is refused, with the reason, rather than quietly
+   * landing somewhere else.
+   */
+  login: (email: string, password: string, asOperator?: boolean) => Promise<void>;
   register: (customerName: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  /** Sends a super-admin into the user's view. Only a fresh login brings them back out. */
-  enterUserView: () => void;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -53,9 +57,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, asOperator = false) => {
     const me = await api.post<User>("/auth/login", { email, password });
-    setView(false);
+    // The account decides the role; the door only decides the view. An operator account has no
+    // administrator view to enter, so that door is refused rather than quietly downgraded — the person
+    // is told which door is theirs instead of landing somewhere they did not ask for. The session made
+    // by that attempt is dropped again straight away.
+    if (me.role !== "superadmin" && !asOperator) {
+      await api.post("/auth/logout").catch(() => undefined);
+      throw new Error('This is an operator account — use "Enter as operator".');
+    }
+    // A super-admin enters whichever view they asked for; an operator is always in the operator's.
+    setView(asOperator || me.role !== "superadmin");
     setUser(me);
   };
 
@@ -83,7 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
-        enterUserView: () => setView(true),
       }}
     >
       {children}

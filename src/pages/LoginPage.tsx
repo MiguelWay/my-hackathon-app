@@ -3,25 +3,31 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { PasswordInput } from "../components/PasswordInput";
 
+/** The login screen's two doors. Both check the same credentials; a door only picks the view. */
+type Door = "administrator" | "operator";
+
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Door | null>(null);
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Which button was pressed. Enter inside a field submits through the first one — the administrator.
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const door: Door = submitter?.value === "operator" ? "operator" : "administrator";
     setError(null);
-    setBusy(true);
+    setPending(door);
     try {
-      await login(email, password);
+      await login(email, password, door === "operator");
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
@@ -42,7 +48,16 @@ export function LoginPage() {
           />
         </label>
         {error && <p className="error">{error}</p>}
-        <button disabled={busy}>{busy ? "…" : "Log in"}</button>
+        {/* Two doors, one credential check. The account's own role decides what it actually gets, so a
+            super-admin may enter either view and an operator account only the operator's. */}
+        <div className="btn-row">
+          <button type="submit" value="administrator" disabled={pending !== null}>
+            {pending === "administrator" ? "…" : "Enter as administrator"}
+          </button>
+          <button type="submit" value="operator" className="secondary" disabled={pending !== null}>
+            {pending === "operator" ? "…" : "Enter as operator"}
+          </button>
+        </div>
         <p className="muted">
           No account? <Link to="/signup">Sign up</Link>
         </p>
