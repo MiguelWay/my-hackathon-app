@@ -10,7 +10,6 @@ import {
   isValidEmail,
   MAX_NAME_LENGTH,
   optionalPositiveInt,
-  parseIsoDate,
   passwordProblem,
 } from "./validate";
 
@@ -39,70 +38,31 @@ adminRouter.get(
   })
 );
 
-// A customer is never an empty shell: registering one also opens its first campaign, named by the
-// caller (or after the customer) and landing on the chosen company. Both rows go in together, so a
-// failure leaves neither behind.
+// Register a customer. A customer starts with no campaigns: the caller is sent on to the campaign form
+// with this customer already chosen and makes the first campaign there — the same one place every later
+// campaign is made, so there is only one way to create a campaign.
 adminRouter.post(
   "/customers",
   ah(async (req, res) => {
-    const { name, campaignName, startDate, finishDate } = req.body ?? {};
+    const { name } = req.body ?? {};
     const customerName = boundedString(name, MAX_NAME_LENGTH);
     if (!customerName) {
       return res.status(400).json({ error: "name is required (max 255 characters)" });
     }
 
-    const named = campaignName === undefined || campaignName === null || campaignName === "";
-    const firstCampaignName = named ? customerName : boundedString(campaignName, MAX_NAME_LENGTH);
-    if (!firstCampaignName) {
-      return res.status(400).json({ error: "campaignName must be 255 characters or fewer" });
-    }
-
-    // Dates are optional here and default to a one-day window on today, so the campaign is valid
-    // straight away; it can be re-dated from the Campaigns screen.
-    const today = new Date().toISOString().slice(0, 10);
-    const start = startDate === undefined || startDate === null || startDate === ""
-      ? today
-      : parseIsoDate(startDate);
-    if (!start) {
-      return res.status(400).json({ error: "startDate must be a valid date (YYYY-MM-DD)" });
-    }
-    const finish = finishDate === undefined || finishDate === null || finishDate === ""
-      ? start
-      : parseIsoDate(finishDate);
-    if (!finish) {
-      return res.status(400).json({ error: "finishDate must be a valid date (YYYY-MM-DD)" });
-    }
-    if (finish < start) {
-      return res.status(400).json({ error: "finishDate cannot be before startDate" });
-    }
-
-    const conn = await pool.getConnection();
     try {
-      await conn.beginTransaction();
-      const [customer] = await conn.query<ResultSetHeader>(
+      const [result] = await pool.query<ResultSetHeader>(
         "INSERT INTO customers (name) VALUES (?)",
         [customerName]
       );
-      const [campaign] = await conn.query<ResultSetHeader>(
-        "INSERT INTO campaigns (customer_id, name, start_date, finish_date) VALUES (?, ?, ?, ?)",
-        [customer.insertId, firstCampaignName, start, finish]
-      );
-      await conn.commit();
-      res.status(201).json({
-        id: customer.insertId,
-        name: customerName,
-        campaign: {
-          id: campaign.insertId,
-          name: firstCampaignName,
-          start_date: start,
-          finish_date: finish,
-        },
-      });
+      res.status(201).json({ id: result.insertId, name: customerName });
     } catch (err) {
-      await conn.rollback();
+      // `customers.name` is unique (migration 008), and the collation ignores case and accents, so two
+      // customers can never end up sharing a name.
+      if ((err as { code?: string }).code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ error: `a customer called "${customerName}" already exists` });
+      }
       throw err;
-    } finally {
-      conn.release();
     }
   })
 );
@@ -119,18 +79,24 @@ adminRouter.get(
   })
 );
 
-// Every campaign of one customer, with the counts a platform admin needs to choose one.
+// Every campaign of one customer, with the counts needed to show it. This is the only source the
+// Campaigns screen uses for a chosen company, so another customer's campaigns are never even fetched.
 adminRouter.get(
   "/customers/:id/campaigns",
   ah(async (req, res) => {
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT c.id, c.name, c.start_date, c.finish_date,
+      `SELECT c.id, c.customer_id, cu.name AS customer_name,
+              c.name, c.start_date, c.finish_date,
               (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS package_count,
               (SELECT COUNT(*) FROM packages p JOIN returns r ON r.package_id = p.id
                 WHERE p.campaign_id = c.id) AS return_count,
+              (SELECT COUNT(*) FROM packages p
+                WHERE p.campaign_id = c.id AND p.created_via = 'resend') AS resend_count,
+              (SELECT COUNT(*) FROM campaign_uploads u WHERE u.campaign_id = c.id) AS upload_count,
               (SELECT CAST(COALESCE(SUM(u.row_count), 0) AS UNSIGNED) FROM campaign_uploads u
                 WHERE u.campaign_id = c.id) AS total_rows
          FROM campaigns c
+         JOIN customers cu ON cu.id = c.customer_id
         WHERE c.customer_id = ?
         ORDER BY c.id DESC`,
       [req.params.id]
@@ -160,13 +126,21 @@ adminRouter.get(
   })
 );
 
-// The uploaded lists of every campaign, so the Campaigns screen can show them in one request.
+// The uploaded lists of every campaign. `?customerId=` narrows it to one customer, which is what the
+// Campaigns screen asks for: without it this is the platform-wide list, used nowhere in the app.
 adminRouter.get(
   "/campaigns/uploads",
-  ah(async (_req, res) => {
+  ah(async (req, res) => {
+    const customerId = optionalPositiveInt(req.query.customerId);
+    if (customerId === null) {
+      return res.status(400).json({ error: "customerId must be a positive number" });
+    }
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT id, campaign_id, customer_id, filename, row_count, created_at
-         FROM campaign_uploads ORDER BY campaign_id DESC, id`
+         FROM campaign_uploads
+        ${customerId ? "WHERE customer_id = ?" : ""}
+        ORDER BY campaign_id DESC, id`,
+      customerId ? [customerId] : []
     );
     res.json(rows);
   })

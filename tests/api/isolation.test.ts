@@ -386,10 +386,12 @@ describe("roles", () => {
     expect((await newCampaign(newUser, "nope")).status).toBe(403);
   });
 
-  it("a super-admin has no customer data of its own", async () => {
+  it("a super-admin has no customer data of its own, but is not shut out of what a request names", async () => {
+    // The list and the company-wide reports stay scoped to a company, and this account has none...
     expect((await superadmin.get<CampaignRow[]>("/campaigns")).body).toEqual([]);
-    expect((await superadmin.get(`/campaigns/${alphaCampaign}`)).status).toBe(404);
     expect((await superadmin.get<unknown[]>("/returns")).body).toEqual([]);
+    // ...but the boundary is the request (`SECURITY.md` finding 21), so naming a campaign reaches it.
+    expect((await superadmin.get(`/campaigns/${alphaCampaign}`)).status).toBe(200);
   });
 
   it("a resend with no campaign lands in the original package's campaign", async () => {
@@ -446,14 +448,12 @@ describe("roles", () => {
     expect(list.status).toBe(200);
     expect(list.body.map((c) => c.name)).toEqual(expect.arrayContaining(["Alpha Co", "Beta Co"]));
 
-    // A customer is never an empty shell: its first campaign is created with it.
-    const created = await superadmin.post<{ name: string; campaign: { name: string } }>(
-      "/admin/customers",
-      { name: "Gamma Co" }
-    );
+    // A customer is registered on its own, so nothing is created with it.
+    const created = await superadmin.post<{ name: string }>("/admin/customers", {
+      name: "Gamma Co",
+    });
     expect(created.status).toBe(201);
     expect(created.body.name).toBe("Gamma Co");
-    expect(created.body.campaign.name).toBe("Gamma Co");
   });
 
   it("logging out ends the session", async () => {
@@ -1076,59 +1076,40 @@ describe("a campaign's own read", () => {
   });
 });
 
-// Creating a customer now opens its first campaign, and a campaign can be aimed at a chosen company.
-describe("a customer arrives with its first campaign", () => {
-  const today = new Date().toISOString().slice(0, 10);
+// A customer is created on its own; the screen then sends you to the campaign form with that customer
+// already chosen, so its first campaign is made the same way as every campaign after it.
+describe("a customer starts with no campaigns", () => {
   let newCustomerId = 0;
 
-  it("registers the customer and its first campaign together", async () => {
-    const created = await superadmin.post<{
-      id: number;
-      name: string;
-      campaign: { id: number; name: string; start_date: string; finish_date: string };
-    }>("/admin/customers", {
+  it("registers the customer alone", async () => {
+    const created = await superadmin.post<{ id: number; name: string }>("/admin/customers", {
       name: "Zeta Co",
-      campaignName: "Zeta launch",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.name).toBe("Zeta Co");
+    newCustomerId = created.body.id;
+
+    // Nothing came with it: no campaign is invented on its behalf.
+    const campaigns = await superadmin.get<unknown[]>(
+      `/admin/customers/${newCustomerId}/campaigns`
+    );
+    expect(campaigns.body).toEqual([]);
+  });
+
+  it("takes its first campaign, aimed at it by name", async () => {
+    const campaign = await superadmin.post<{ customer_id: number; name: string }>("/campaigns", {
+      customerId: newCustomerId,
+      name: "Zeta launch",
       startDate: "2026-05-01",
       finishDate: "2026-05-31",
     });
-    expect(created.status).toBe(201);
-    newCustomerId = created.body.id;
-    expect(created.body.campaign).toMatchObject({
-      name: "Zeta launch",
-      start_date: "2026-05-01",
-      finish_date: "2026-05-31",
-    });
+    expect(campaign.status).toBe(201);
+    expect(campaign.body.customer_id).toBe(newCustomerId);
 
-    // The campaign is really attached to the new customer, and it is the only one there.
-    const campaigns = await superadmin.get<{ id: number }[]>(
+    const theirs = await superadmin.get<{ name: string }[]>(
       `/admin/customers/${newCustomerId}/campaigns`
     );
-    expect(campaigns.body.map((c) => c.id)).toEqual([created.body.campaign.id]);
-  });
-
-  it("names the first campaign after the customer, and dates it today, when not told otherwise", async () => {
-    const created = await superadmin.post<{
-      campaign: { name: string; start_date: string; finish_date: string };
-    }>("/admin/customers", { name: "Eta Co" });
-    expect(created.status).toBe(201);
-    expect(created.body.campaign).toMatchObject({
-      name: "Eta Co",
-      start_date: today,
-      finish_date: today,
-    });
-  });
-
-  it("refuses a first campaign whose dates do not make sense, leaving nothing behind", async () => {
-    const backwards = await superadmin.post("/admin/customers", {
-      name: "Theta Co",
-      startDate: "2026-06-02",
-      finishDate: "2026-06-01",
-    });
-    expect(backwards.status).toBe(400);
-
-    const list = await superadmin.get<{ name: string }[]>("/admin/customers");
-    expect(list.body.some((c) => c.name === "Theta Co")).toBe(false);
+    expect(theirs.body.map((c) => c.name)).toEqual(["Zeta launch"]);
   });
 
   it("lists every campaign on the platform, each with the company it belongs to", async () => {
@@ -1223,5 +1204,80 @@ describe("a customer arrives with its first campaign", () => {
     expect(res.body.map((u) => u.filename)).toEqual(
       expect.arrayContaining(["alpha.xlsx", "beta.xlsx"])
     );
+  });
+});
+
+// One name, one customer (migration 008). The collation ignores case, and treats an accent as equal to
+// the plain letter, so a name differing only in case or accent is the same name.
+describe("one customer name, one customer", () => {
+  it("refuses a name that is already taken, whatever its case", async () => {
+    const first = await superadmin.post("/admin/customers", { name: "Duplicado SA" });
+    expect(first.status).toBe(201);
+
+    const again = await superadmin.post("/admin/customers", { name: "duplicado sa" });
+    expect(again.status).toBe(409);
+    expect(again.body).toEqual({ error: 'a customer called "duplicado sa" already exists' });
+  });
+
+  it("treats an accent as the same name, which is how the pair that prompted this appeared", async () => {
+    const accented = await superadmin.post("/admin/customers", { name: "Plátano Nuevo" });
+    expect(accented.status).toBe(201);
+
+    const plain = await superadmin.post("/admin/customers", { name: "platano nuevo" });
+    expect(plain.status).toBe(409);
+  });
+});
+
+// The boundary is the request: a list goes into the campaign it was uploaded to, and that campaign's
+// customer owns it. Without this, a platform super-admin — who has no company of its own — cannot
+// upload the list for the customer and campaign it just created.
+describe("a platform super-admin fills in a campaign it is not attached to", () => {
+  it("opens the campaign, its lists and its packages", async () => {
+    const res = await superadmin.get<{ customer_id: number; name: string }>(
+      `/campaigns/${alphaCampaign}`
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.customer_id).toBe(alphaCustomerId);
+    expect((await superadmin.get(`/campaigns/${alphaCampaign}/uploads`)).status).toBe(200);
+    expect((await superadmin.get(`/campaigns/${alphaCampaign}/packages`)).status).toBe(200);
+  });
+
+  it("uploads a list into it, and the packages belong to that campaign's customer", async () => {
+    const res = await superadmin.post<{ imported: number }>(`/campaigns/${betaCampaign}/packages`, {
+      filename: "platform.xlsx",
+      columns: COLUMNS,
+      senderColumn: 2,
+      rows: [row("PQAPLATFORM01ES", "Lugo")],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.imported).toBe(1);
+
+    // Beta sees it: the campaign's customer is Beta, not the platform admin, which has none.
+    const betaPackages = await beta.get<PackageRow[]>(`/campaigns/${betaCampaign}/packages`);
+    expect(betaPackages.body.map((p) => p.sender_id)).toContain("PQAPLATFORM01ES");
+  });
+
+  it("renames and re-dates it, and refuses a blank name", async () => {
+    const renamed = await superadmin.patch<{ name: string }>(`/campaigns/${betaCampaign}`, {
+      name: "Beta March renamed",
+    });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.name).toBe("Beta March renamed");
+    expect((await superadmin.patch(`/campaigns/${betaCampaign}`, { name: "  " })).status).toBe(400);
+  });
+
+  it("still keeps a company super-admin inside its own company", async () => {
+    expect((await alpha.get(`/campaigns/${alphaCampaign}`)).status).toBe(200);
+    expect((await alpha.get(`/campaigns/${betaCampaign}`)).status).toBe(404);
+    expect(
+      (
+        await alpha.post(`/campaigns/${betaCampaign}/packages`, {
+          filename: "x.xlsx",
+          columns: COLUMNS,
+          senderColumn: 2,
+          rows: [row("PQNOPE004ES", "Nowhere")],
+        })
+      ).status
+    ).toBe(404);
   });
 });

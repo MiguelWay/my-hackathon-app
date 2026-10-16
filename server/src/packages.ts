@@ -2,11 +2,13 @@ import { Router } from "express";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
-import { requireAuth, requireCompany, requireSuperAdmin, type AuthUser } from "./auth";
+import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
+import { scopedCampaign } from "./scope";
 import { parseImportBody } from "./importValidation";
 
-// Mounted at /campaigns/:campaignId — packages and uploads belong to one campaign,
-// which belongs to one customer. Every query is scoped by customer_id.
+// Mounted at /campaigns/:campaignId — packages and uploads belong to one campaign, which belongs to
+// one customer. The campaign is resolved per request (see scope.ts); every query then runs under the
+// customer that campaign belongs to, not the caller's own, which a platform super-admin has none of.
 
 const ah =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler =>
@@ -21,28 +23,17 @@ const LOOKUP_CHUNK = 1_000;
 export const packagesRouter = Router({ mergeParams: true });
 packagesRouter.use(requireAuth);
 
-/** Returns the campaign id if it belongs to this customer, else null. A null customer owns nothing. */
-async function ownCampaign(campaignId: string, customerId: number | null): Promise<number | null> {
-  if (customerId === null) return null;
-  const [rows] = await pool.query<(RowDataPacket & { id: number })[]>(
-    "SELECT id FROM campaigns WHERE id = ? AND customer_id = ?",
-    [campaignId, customerId]
-  );
-  return rows[0] ? rows[0].id : null;
-}
-
 packagesRouter.get(
   "/uploads",
   ah(async (req, res) => {
-    const user = currentUser(res);
-    const campaignId = await ownCampaign(String(req.params.campaignId), user.customerId ?? -1);
-    if (campaignId === null) return res.status(404).json({ error: "campaign not found" });
+    const campaign = await scopedCampaign(req.params.campaignId, currentUser(res));
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT id, filename, columns, row_count, created_at
          FROM campaign_uploads
         WHERE campaign_id = ? AND customer_id = ?
         ORDER BY id DESC`,
-      [campaignId, user.customerId]
+      [campaign.id, campaign.customer_id]
     );
     res.json(rows);
   })
@@ -51,15 +42,14 @@ packagesRouter.get(
 packagesRouter.get(
   "/packages",
   ah(async (req, res) => {
-    const user = currentUser(res);
-    const campaignId = await ownCampaign(String(req.params.campaignId), user.customerId ?? -1);
-    if (campaignId === null) return res.status(404).json({ error: "campaign not found" });
+    const campaign = await scopedCampaign(req.params.campaignId, currentUser(res));
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT id, upload_id, source_row, sender_id, extra_columns, created_at
          FROM packages
         WHERE campaign_id = ? AND customer_id = ?
         ORDER BY id`,
-      [campaignId, user.customerId]
+      [campaign.id, campaign.customer_id]
     );
     res.json(rows);
   })
@@ -68,16 +58,18 @@ packagesRouter.get(
 packagesRouter.post(
   "/packages",
   requireSuperAdmin,
-  requireCompany,
   ah(async (req, res) => {
-    const user = currentUser(res);
-
-    const campaignId = await ownCampaign(String(req.params.campaignId), user.customerId);
-    if (campaignId === null) return res.status(404).json({ error: "campaign not found" });
+    const campaign = await scopedCampaign(req.params.campaignId, currentUser(res));
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
 
     const parsed = parseImportBody(req.body);
     if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
-    const { filename, columns: cols, senderIndex: idx, records } = parsed.value;
+    const { filename, columns: cols, senderIndex: idx, records, skipped } = parsed.value;
+
+    // The packages belong to the campaign's customer, which is not necessarily the caller's: a platform
+    // super-admin has no company of its own and is filling in somebody else's campaign.
+    const customerId = campaign.customer_id;
+    const campaignId = campaign.id;
 
     // ---- no sender ID already stored in this campaign ----
     const existing: string[] = [];
@@ -85,7 +77,7 @@ packagesRouter.post(
     for (let i = 0; i < ids.length; i += LOOKUP_CHUNK) {
       const [found] = await pool.query<(RowDataPacket & { sender_id: string })[]>(
         "SELECT sender_id FROM packages WHERE customer_id = ? AND campaign_id = ? AND sender_id IN (?)",
-        [user.customerId, campaignId, ids.slice(i, i + LOOKUP_CHUNK)]
+        [customerId, campaignId, ids.slice(i, i + LOOKUP_CHUNK)]
       );
       existing.push(...found.map((f) => f.sender_id));
     }
@@ -103,7 +95,7 @@ packagesRouter.post(
       const [upload] = await conn.query<ResultSetHeader>(
         `INSERT INTO campaign_uploads (customer_id, campaign_id, filename, columns, row_count)
          VALUES (?, ?, ?, ?, ?)`,
-        [user.customerId, campaignId, filename, JSON.stringify(cols), records.length]
+        [customerId, campaignId, filename, JSON.stringify(cols), records.length]
       );
 
       for (let i = 0; i < records.length; i += INSERT_CHUNK) {
@@ -113,7 +105,7 @@ packagesRouter.post(
             if (ci !== idx) extra[header] = rec.cells[ci];
           });
           return [
-            user.customerId,
+            customerId,
             campaignId,
             upload.insertId,
             rec.sourceRow,
@@ -136,6 +128,7 @@ packagesRouter.post(
         senderColumn: { index: idx, name: cols[idx] },
         columns: cols,
         imported: records.length,
+        skipped,
       });
     } catch (err) {
       await conn.rollback();

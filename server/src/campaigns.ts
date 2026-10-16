@@ -2,7 +2,8 @@ import { Router } from "express";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
-import { requireAuth, requireCompany, requireSuperAdmin, type AuthUser } from "./auth";
+import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
+import { scopedCampaign } from "./scope";
 import {
   MAX_NAME_LENGTH,
   boundedString,
@@ -45,7 +46,12 @@ campaignsRouter.get(
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT c.id, c.name, c.start_date, c.finish_date, c.created_at,
               COUNT(u.id) AS upload_count,
-              CAST(COALESCE(SUM(u.row_count), 0) AS UNSIGNED) AS total_rows
+              CAST(COALESCE(SUM(u.row_count), 0) AS UNSIGNED) AS total_rows,
+              (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS package_count,
+              (SELECT COUNT(*) FROM packages p JOIN returns r ON r.package_id = p.id
+                WHERE p.campaign_id = c.id) AS return_count,
+              (SELECT COUNT(*) FROM packages p
+                WHERE p.campaign_id = c.id AND p.created_via = 'resend') AS resend_count
          FROM campaigns c
          LEFT JOIN campaign_uploads u ON u.campaign_id = c.id
         WHERE c.customer_id = ?
@@ -139,38 +145,44 @@ campaignsRouter.post(
   })
 );
 
+// One campaign. The boundary is the request (`SECURITY.md` finding 21): an account attached to a
+// company only reaches its own campaigns, while a platform super-admin reaches any campaign a request
+// names — that is what lets it open the campaign that came with a customer it just created.
 campaignsRouter.get(
   "/:id",
   ah(async (req, res) => {
-    const user = currentUser(res);
-    const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT id, name, start_date, finish_date FROM campaigns WHERE id = ? AND customer_id = ?",
-      [req.params.id, user.customerId]
-    );
-    if (!rows[0]) return res.status(404).json({ error: "campaign not found" });
-    res.json(rows[0]);
+    const campaign = await scopedCampaign(req.params.id, currentUser(res));
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
+    res.json({
+      id: campaign.id,
+      customer_id: campaign.customer_id,
+      name: campaign.name,
+      start_date: campaign.start_date,
+      finish_date: campaign.finish_date,
+    });
   })
 );
 
+// Renaming and re-dating a campaign. The campaign is resolved through the same request-scoped rule as
+// the read above, and a blank name is refused rather than stored (`COALESCE` would not catch it).
 campaignsRouter.patch(
   "/:id",
   requireSuperAdmin,
-  requireCompany,
   ah(async (req, res) => {
-    const user = currentUser(res);
     const { name, startDate, finishDate } = req.body ?? {};
 
-    const [existing] = await pool.query<
-      (RowDataPacket & { start_date: string | null; finish_date: string | null })[]
-    >("SELECT start_date, finish_date FROM campaigns WHERE id = ? AND customer_id = ?", [
-      req.params.id,
-      user.customerId,
-    ]);
-    if (!existing[0]) return res.status(404).json({ error: "campaign not found" });
+    const campaign = await scopedCampaign(req.params.id, currentUser(res));
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
+
+    let newName: string | null = null;
+    if (name !== undefined) {
+      newName = boundedString(name, MAX_NAME_LENGTH);
+      if (!newName) return res.status(400).json({ error: "name must be 1-255 characters" });
+    }
 
     // Only the dates that were supplied are validated, against the values that will result.
-    const start = startDate === undefined ? existing[0].start_date : parseIsoDate(startDate);
-    const finish = finishDate === undefined ? existing[0].finish_date : parseIsoDate(finishDate);
+    const start = startDate === undefined ? campaign.start_date : parseIsoDate(startDate);
+    const finish = finishDate === undefined ? campaign.finish_date : parseIsoDate(finishDate);
     if (!start) {
       return res.status(400).json({ error: "startDate is required and must be a valid date (YYYY-MM-DD)" });
     }
@@ -181,19 +193,20 @@ campaignsRouter.patch(
       return res.status(400).json({ error: "finishDate cannot be before startDate" });
     }
 
-    const [result] = await pool.query<ResultSetHeader>(
+    await pool.query(
       `UPDATE campaigns SET
          name = COALESCE(?, name),
          start_date = COALESCE(?, start_date),
          finish_date = COALESCE(?, finish_date)
-       WHERE id = ? AND customer_id = ?`,
-      [name ?? null, startDate ?? null, finishDate ?? null, req.params.id, user.customerId]
+       WHERE id = ?`,
+      [newName, startDate ?? null, finishDate ?? null, campaign.id]
     );
-    if (result.affectedRows === 0) return res.status(404).json({ error: "campaign not found" });
-    const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT id, name, start_date, finish_date FROM campaigns WHERE id = ? AND customer_id = ?",
-      [req.params.id, user.customerId]
-    );
-    res.json(rows[0]);
+    res.json({
+      id: campaign.id,
+      customer_id: campaign.customer_id,
+      name: newName ?? campaign.name,
+      start_date: startDate === undefined ? campaign.start_date : start,
+      finish_date: finishDate === undefined ? campaign.finish_date : finish,
+    });
   })
 );

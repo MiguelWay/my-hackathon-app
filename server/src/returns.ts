@@ -96,7 +96,9 @@ returnsRouter.get(
               (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS package_count,
               (SELECT COUNT(*) FROM returns r
                  JOIN packages p ON p.id = r.package_id
-                WHERE p.campaign_id = c.id) AS return_count
+                WHERE p.campaign_id = c.id) AS return_count,
+              (SELECT COUNT(*) FROM packages p
+                WHERE p.campaign_id = c.id AND p.created_via = 'resend') AS resend_count
          FROM campaigns c
         WHERE c.customer_id = ?
         ORDER BY c.start_date DESC, c.id DESC`,
@@ -107,6 +109,7 @@ returnsRouter.get(
         ...row,
         package_count: Number(row.package_count),
         return_count: Number(row.return_count),
+        resend_count: Number(row.resend_count),
       }))
     );
   })
