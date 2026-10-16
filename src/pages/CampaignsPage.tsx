@@ -1,7 +1,25 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../auth/AuthContext";
+import {
+  adminCampaignExportUrl,
+  canChooseSaveLocation,
+  downloadExport,
+  exportFileName,
+  saveExportAs,
+  saveNotice,
+} from "../lib/campaignExport";
+import { CampaignListUpload } from "../components/CampaignListUpload";
+import { SaveLocationHint } from "../components/SaveLocationHint";
+import { ReturnCounters } from "../components/ReturnCounters";
 
 interface Campaign {
   id: number;
@@ -10,7 +28,10 @@ interface Campaign {
   finish_date: string | null;
   upload_count: number;
   total_rows: number;
-  /** Only on the platform list: the company the campaign belongs to. */
+  package_count: number;
+  return_count: number;
+  resend_count: number;
+  /** Which company the campaign belongs to. */
   customer_id?: number;
   customer_name?: string;
 }
@@ -36,27 +57,57 @@ export function CampaignsPage() {
   // other super-admin can only ever write into its own company, so its selector is fixed.
   const picksCompany = isSuperAdmin && user?.customerId == null;
 
+  // A customer just created lands here as ?customer=<id>, so its first campaign can be made with the
+  // company already chosen in the selector below — and with the form already open, since making a
+  // campaign is the whole reason for arriving here.
+  const [searchParams] = useSearchParams();
+  const wantedCustomer = searchParams.get("customer") ?? "";
+  const [newCampaignOpen, setNewCampaignOpen] = useState(wantedCustomer !== "");
+
   const [items, setItems] = useState<Campaign[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [customers, setCustomers] = useState<CustomerRef[]>([]);
   const [customerId, setCustomerId] = useState("");
+  // Which campaign's list-upload is open. A plain toggle, not an accordion: the form appears in the
+  // card itself rather than hidden behind a disclosure header.
+  const [uploadingFor, setUploadingFor] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [finishDate, setFinishDate] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Which campaign's results file is being prepared, so only its own accordion says "Preparing…".
+  const [exporting, setExporting] = useState<number | null>(null);
 
-  async function load() {
+  // Another customer's campaigns are never even fetched. With a company chosen the request names it, and
+  // with nothing chosen there is nothing to ask for. A company super-admin stays on its own scoped
+  // routes, which only ever carry its own data.
+  const load = useCallback(async () => {
+    if (!picksCompany) {
+      const [campaigns, lists] = await Promise.all([
+        api.get<Campaign[]>("/campaigns"),
+        api.get<Upload[]>("/campaigns/uploads"),
+      ]);
+      setItems(campaigns);
+      setUploads(lists);
+      return;
+    }
+    if (!customerId) {
+      setItems([]);
+      setUploads([]);
+      return;
+    }
     const [campaigns, lists] = await Promise.all([
-      api.get<Campaign[]>(picksCompany ? "/admin/campaigns" : "/campaigns"),
-      api.get<Upload[]>(picksCompany ? "/admin/campaigns/uploads" : "/campaigns/uploads"),
+      api.get<Campaign[]>(`/admin/customers/${customerId}/campaigns`),
+      api.get<Upload[]>(`/admin/campaigns/uploads?customerId=${customerId}`),
     ]);
     setItems(campaigns);
     setUploads(lists);
-  }
+  }, [picksCompany, customerId]);
 
   useEffect(() => {
     load().catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
-  }, [picksCompany]);
+  }, [load]);
 
   // The company selector's options. A company super-admin can read the same admin list, so the one
   // company it is allowed to use is always available to name.
@@ -64,9 +115,15 @@ export function CampaignsPage() {
     if (!isSuperAdmin) return;
     api
       .get<CustomerRef[]>("/admin/customers")
-      .then(setCustomers)
+      .then((list) => {
+        setCustomers(list);
+        // Arriving from "New customer": that customer is the one you came here to make a campaign for.
+        if (wantedCustomer && list.some((c) => String(c.id) === wantedCustomer)) {
+          setCustomerId(wantedCustomer);
+        }
+      })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load customers"));
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, wantedCustomer]);
 
   async function create(e: FormEvent) {
     e.preventDefault();
@@ -89,6 +146,49 @@ export function CampaignsPage() {
     }
   }
 
+  /** Downloads one campaign's results file the ordinary way, into the browser's download folder. */
+  async function downloadCampaign(campaign: Campaign) {
+    setError(null);
+    setNotice(null);
+    setExporting(campaign.id);
+    try {
+      const filename = await downloadExport(
+        adminCampaignExportUrl(campaign.id),
+        exportFileName(campaign.id, campaign.name)
+      );
+      setNotice(`Downloaded ${campaign.name} as ${filename}, in your browser's download folder.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  /** Chrome and Edge: ask where to put this campaign's results file. */
+  async function saveCampaignAs(campaign: Campaign) {
+    setError(null);
+    setNotice(null);
+    setExporting(campaign.id);
+    try {
+      const result = await saveExportAs(
+        adminCampaignExportUrl(campaign.id),
+        exportFileName(campaign.id, campaign.name)
+      );
+      setNotice(saveNotice(result));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open a save dialog");
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  /** A plain left-click downloads through the app; the link itself stays for right-click → save as. */
+  function onExportClick(e: ReactMouseEvent<HTMLAnchorElement>, campaign: Campaign) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    void downloadCampaign(campaign);
+  }
+
   /** After an import: refresh the counts and the uploaded lists. */
   const listsByCampaign = useMemo(() => {
     const map = new Map<number, Upload[]>();
@@ -102,6 +202,21 @@ export function CampaignsPage() {
 
   const ownCompany = customers.find((c) => c.id === user?.customerId);
 
+  // One company's campaigns at a time. A platform super-admin picks the company in the form above, and
+  // until they do there is no list at all — never a view that mixes customers. A company super-admin
+  // only ever has its own, so its list is unchanged either way.
+  const visible = picksCompany
+    ? customerId
+      ? items.filter((c) => String(c.customer_id) === customerId)
+      : []
+    : items;
+
+  const emptyMessage = picksCompany
+    ? customerId
+      ? "This customer has no campaigns yet."
+      : "Pick a customer above to see its campaigns."
+    : "No campaigns yet.";
+
   return (
     <div>
       <h1>Campaigns</h1>
@@ -111,9 +226,14 @@ export function CampaignsPage() {
       )}
 
       {error && <p className="error">{error}</p>}
+      {notice && <p className="ok">{notice}</p>}
 
       {isSuperAdmin && (
-        <details className="card">
+        <details
+          className="card"
+          open={newCampaignOpen}
+          onToggle={(e) => setNewCampaignOpen(e.currentTarget.open)}
+        >
           <summary>New campaign</summary>
           <form className="customer-row" onSubmit={create}>
             <label>
@@ -141,7 +261,7 @@ export function CampaignsPage() {
               </select>
             </label>
             <label>
-              Name
+              Campaign name
               <input value={name} onChange={(e) => setName(e.target.value)} required />
             </label>
             <label>
@@ -173,44 +293,121 @@ export function CampaignsPage() {
         </details>
       )}
 
-      {items.length === 0 ? (
-        <p className="muted">No campaigns yet.</p>
-      ) : (
-        items.map((c) => {
-          const lists = listsByCampaign.get(c.id) ?? [];
-          return (
-            <section className="campaign-block" key={c.id}>
-              <div className="campaign-head">
-                <Link className="campaign-title" to={`/campaigns/${c.id}`}>
-                  {c.name}
-                </Link>
-                {c.customer_name && <span className="badge">{c.customer_name}</span>}
-                <span className="muted">
-                  {c.start_date ?? "—"} → {c.finish_date ?? "—"}
-                </span>
-                <span className="muted">
-                  {c.upload_count} list{c.upload_count === 1 ? "" : "s"} · {c.total_rows} line
-                  {c.total_rows === 1 ? "" : "s"}
-                </span>
-              </div>
+      <details className="card" open>
+        <summary>{isSuperAdmin ? "A customer's campaigns" : "Campaigns"}</summary>
 
-              {lists.length === 0 ? (
-                <p className="muted">No lists uploaded yet.</p>
-              ) : (
-                <ul className="upload-list">
-                  {lists.map((u) => (
-                    <li key={u.id}>
-                      <span className="file">{u.filename ?? "unknown file"}</span>
-                      <span>{u.row_count} lines</span>
-                      <span className="muted">uploaded {u.created_at}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          );
-        })
-      )}
+        {/* The customer whose campaigns are listed below. The create form above shares this choice, so
+            the page can never show two different customers at once. */}
+        {picksCompany && (
+          <div className="customer-row">
+            <label>
+              Customer
+              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                <option value="">Choose a customer…</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {visible.length === 0 ? (
+          <p className="muted">{emptyMessage}</p>
+        ) : (
+          visible.map((c) => {
+            const lists = listsByCampaign.get(c.id) ?? [];
+            return (
+              <section className="campaign-block" key={c.id}>
+                <div className="campaign-head">
+                  {/* Plain text, not a hot link. */}
+                  <span className="campaign-name">{c.name}</span>
+                  {c.customer_name && <span className="badge">{c.customer_name}</span>}
+                  <span className="muted">
+                    {c.start_date ?? "—"} → {c.finish_date ?? "—"}
+                  </span>
+                  <span className="muted">
+                    {c.upload_count} list{c.upload_count === 1 ? "" : "s"} · {c.total_rows} line
+                    {c.total_rows === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {/* The same three counters, in the same format, as the campaign's own screen. */}
+                <ReturnCounters
+                  sent={c.package_count}
+                  returns={c.return_count}
+                  resends={c.resend_count}
+                />
+
+                {lists.length === 0 ? (
+                  <p className="muted">No lists uploaded yet.</p>
+                ) : (
+                  <ul className="upload-list">
+                    {lists.map((u) => (
+                      <li key={u.id}>
+                        <span className="file">{u.filename ?? "unknown file"}</span>
+                        <span>{u.row_count} lines</span>
+                        <span className="muted">uploaded {u.created_at}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* A button, not an accordion: the upload opens in the card itself. */}
+                {isSuperAdmin && (
+                  <div className="btn-row">
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setUploadingFor(uploadingFor === c.id ? null : c.id)}
+                    >
+                      {uploadingFor === c.id ? "Close" : "Add a list"}
+                    </button>
+                  </div>
+                )}
+
+                {uploadingFor === c.id && (
+                  <div className="upload-inline">
+                    <CampaignListUpload campaignId={c.id} onImported={load} />
+                  </div>
+                )}
+
+                {/* The campaign's own results file, as an accordion inside the campaign: the download
+                    belongs to the campaign rather than sitting beside it. */}
+                {isSuperAdmin && (
+                  <details className="section campaign-download">
+                    <summary>Results file download</summary>
+                    <div className="btn-row">
+                      <a
+                        className="button secondary"
+                        aria-disabled={exporting !== null || c.package_count === 0}
+                        href={adminCampaignExportUrl(c.id)}
+                        download
+                        onClick={(e) => onExportClick(e, c)}
+                      >
+                        {exporting === c.id ? "Preparing…" : "Download .xlsx"}
+                      </a>
+                      {canChooseSaveLocation() && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={exporting !== null || c.package_count === 0}
+                          onClick={() => void saveCampaignAs(c)}
+                        >
+                          Save as…
+                        </button>
+                      )}
+                    </div>
+                    <SaveLocationHint />
+                  </details>
+                )}
+              </section>
+            );
+          })
+        )}
+      </details>
     </div>
   );
 }

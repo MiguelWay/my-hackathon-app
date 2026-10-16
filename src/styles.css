@@ -54,6 +54,11 @@ body {
   color: var(--muted);
 }
 
+.topbar .who a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .content {
   max-width: 900px;
   margin: 0 auto;
@@ -67,6 +72,14 @@ body {
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 20px;
+}
+
+/* A narrow vertical form, one field under the other: the change-password screen. */
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 400px;
 }
 
 .card.inline {
@@ -243,6 +256,15 @@ table.grid th {
 
 .auth-card h1 {
   margin: 0;
+}
+
+/* Two full-width doors, one above the other, as the single button used to be. */
+.auth-card .btn-row {
+  flex-direction: column;
+}
+
+.auth-card .btn-row button {
+  width: 100%;
 }
 
 select {
@@ -464,6 +486,19 @@ ul.upload-list .file {
   min-width: 190px;
 }
 
+/* The list upload opened from a campaign card: in the card itself, not behind an accordion. */
+.upload-inline {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* The results-file accordion sits inside the campaign's own card, so its download belongs to the
+   campaign rather than beside it. */
+.campaign-block details.campaign-download {
+  margin-top: 12px;
+}
+
 .upload-input {
   margin-bottom: 10px;
 }
@@ -534,6 +569,15 @@ td.disclosure-cell {
   text-align: right;
 }
 
+/* The Users column: the count, then the way to the customer's accounts page. */
+table.grid td.users-cell {
+  white-space: nowrap;
+}
+
+td.users-cell a.button {
+  margin-left: 12px;
+}
+
 button.disclosure {
   display: inline-flex;
   align-items: center;
@@ -581,12 +625,21 @@ ul.campaign-list {
 
 ul.campaign-list li {
   display: flex;
+  /* Wraps so the campaign's own accordions can take a line of their own under it. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
 
 ul.campaign-list a.campaign-choice {
   flex: 1;
+}
+
+/* The results-file download belongs to the campaign, so its accordion sits inside the campaign's own
+   box, on a line of its own under the campaign's counters. */
+ul.campaign-list details.campaign-download {
+  flex: 1 1 100%;
+  margin-top: 4px;
 }
 
 button.campaign-choice,
@@ -618,4 +671,12 @@ a.campaign-choice:hover {
 .campaign-choice .download {
   margin-left: auto;
   color: var(--accent);
+}
+
+/* A campaign row carries the same three counters as the campaign's own screen, so the stats take a line
+   of their own inside the row instead of sharing the name's line. */
+a.campaign-choice .stats,
+button.campaign-choice .stats {
+  flex: 1 1 100%;
+  margin: 0;
 }
