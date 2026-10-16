@@ -16,6 +16,8 @@ export interface ParsedImport {
   columns: string[];
   senderIndex: number;
   records: ParsedRow[];
+  /** Rows left out because they carried no package ID. */
+  skipped: number;
 }
 
 export type ParseResult =
@@ -67,14 +69,21 @@ export function parseImportBody(body: unknown): ParseResult {
     cells: r.map((c) => String(c ?? "")),
   }));
 
-  const blank = records.filter((rec) => !rec.sender);
-  if (blank.length) {
-    const sample = blank.slice(0, 5).map((x) => x.sourceRow).join(", ");
-    return fail(400, `package ID is empty on row(s): ${sample}${blank.length > 5 ? ", …" : ""}`);
+  // A row without a package ID is not an error. Real sheets carry blank separator rows, sub-totals, notes
+  // and footers, and refusing the whole file over them helps nobody. They are left out instead, and their
+  // count is reported back so nothing is dropped in silence. The rows that ARE imported keep their
+  // original sheet numbers, so `sourceRow` still points at the right line of the upload.
+  const imported = records.filter((rec) => rec.sender !== "");
+  if (imported.length === 0) {
+    // Every row empty in the chosen column: that column is almost certainly the wrong one.
+    return fail(
+      400,
+      `no package IDs in that column — all ${records.length} rows came out empty. Is it the right column?`
+    );
   }
 
   // Longer than the column: reject here rather than let MySQL raise a 500.
-  const tooLong = records.filter((rec) => rec.sender.length > MAX_SENDER_ID_LENGTH);
+  const tooLong = imported.filter((rec) => rec.sender.length > MAX_SENDER_ID_LENGTH);
   if (tooLong.length) {
     const sample = tooLong.slice(0, 5).map((x) => x.sourceRow).join(", ");
     return fail(
@@ -88,7 +97,7 @@ export function parseImportBody(body: unknown): ParseResult {
   // ---- no duplicate package IDs inside this file (case-insensitive, like the DB) ----
   const seen = new Set<string>();
   const dupes: string[] = [];
-  for (const rec of records) {
+  for (const rec of imported) {
     const key = rec.sender.toLowerCase();
     if (seen.has(key)) {
       if (!dupes.includes(rec.sender)) dupes.push(rec.sender);
@@ -106,5 +115,14 @@ export function parseImportBody(body: unknown): ParseResult {
   }
 
   const filename = b.filename ? String(b.filename).slice(0, 255) : null;
-  return { ok: true, value: { filename, columns: cols, senderIndex: idx, records } };
+  return {
+    ok: true,
+    value: {
+      filename,
+      columns: cols,
+      senderIndex: idx,
+      records: imported,
+      skipped: records.length - imported.length,
+    },
+  };
 }

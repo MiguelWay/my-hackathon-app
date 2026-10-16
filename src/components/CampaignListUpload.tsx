@@ -6,6 +6,8 @@ import { guessSenderColumn } from "../lib/senderColumn";
 export interface ImportResult {
   uploadId: number;
   imported: number;
+  /** Rows the file had with no package ID in the chosen column; they were left out. */
+  skipped: number;
   columns: string[];
   senderColumn: { index: number; name: string };
 }
@@ -83,9 +85,13 @@ export function CampaignListUpload({
         senderColumn: senderIdx,
         rows,
       });
+      // Rows with no package ID are left out rather than refused, so say so instead of hiding it.
+      const skipped = result.skipped
+        ? ` · left out ${result.skipped} row${result.skipped === 1 ? "" : "s"} with no package ID`
+        : "";
       setNotice(
         `Imported ${result.imported} lines · package ID column: "${result.senderColumn.name}" · ` +
-          `${result.columns.length} columns kept verbatim.`
+          `${result.columns.length} columns kept verbatim${skipped}.`
       );
       reset();
       await onImported?.();

@@ -87,13 +87,26 @@ describe("parseImportBody", () => {
     });
   });
 
-  it("rejects blank package IDs and reports the sheet rows", () => {
-    const res = parseImportBody({ ...valid, rows: [["a", "PQ1"], ["b", "   "], ["c", ""]] });
-    expect(res).toMatchObject({
-      ok: false,
-      status: 400,
-      error: "package ID is empty on row(s): 3, 4",
+  it("leaves rows with no package ID out of the import, and counts them", () => {
+    // A sheet's blank separator rows, notes and footers are not packages, and they no longer block the
+    // upload. The rows that are imported keep their sheet numbers, so one still points at its own line.
+    const res = parseImportBody({
+      ...valid,
+      rows: [["a", "PQ1"], ["b", "   "], ["c", ""], ["d", "PQ2"]],
     });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.skipped).toBe(2);
+    expect(res.value.records.map((r) => [r.sourceRow, r.sender])).toEqual([
+      [2, "PQ1"],
+      [5, "PQ2"],
+    ]);
+  });
+
+  it("refuses a chosen column that is empty on every row — that is the wrong column", () => {
+    const res = parseImportBody({ ...valid, rows: [["a", ""], ["b", "  "]] });
+    expect(res).toMatchObject({ ok: false, status: 400 });
+    if (!res.ok) expect(res.error).toContain("no package IDs in that column");
   });
 
   it("rejects duplicate package IDs within the file, case-insensitively", () => {
