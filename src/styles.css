@@ -239,7 +239,8 @@ table.grid th {
 }
 
 .auth-card {
-  width: 340px;
+  width: 100%;
+  max-width: 340px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -285,6 +286,7 @@ select {
 
 /* Wide content pans sideways without ever trapping a vertical scroll gesture. */
 .scroll {
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -733,4 +735,119 @@ a.campaign-choice .stats,
 button.campaign-choice .stats {
   flex: 1 1 100%;
   margin: 0;
+}
+
+/* ---- Narrow screens: rows that cannot fit side by side move onto their own lines ---- */
+@media (max-width: 900px) {
+  .content {
+    padding: 18px 14px 56px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  /* The top bar becomes two rows: the product and menu, then the account. */
+  .topbar {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 10px 14px;
+  }
+
+  .topbar .spacer {
+    display: none;
+  }
+
+  .topbar .who {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    font-size: 13px;
+  }
+
+  /* Three counters side by side, small enough for a phone. */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .stat {
+    min-width: 0;
+    padding: 8px 10px;
+  }
+
+  .stat-number {
+    font-size: 20px;
+  }
+
+  .stat .muted,
+  .stat-share {
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+  /* The returns screen: the list button takes a line of its own under the counters. */
+  .stats-row {
+    flex-wrap: wrap;
+  }
+
+  .stats-row .stats {
+    flex: 1 1 100%;
+  }
+
+  .stats-row .return-list-toggle {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  /* A campaign row: its card on one line, its two actions on the next. */
+  ul.campaign-list a.campaign-choice {
+    flex: 1 1 100%;
+  }
+
+  /* The list opens inside a table cell; let it shrink so its tables scroll, not the page. */
+  .campaign-list-panel,
+  .return-list-panel {
+    min-width: 0;
+  }
+
+  ul.campaign-list button.campaign-list-toggle,
+  ul.campaign-list a.button {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+  }
+
+  /* Uploaded lists put the file name on its own line, so a long one cannot push the row wide. */
+  ul.upload-list .file {
+    flex: 1 1 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Tables keep their columns but breathe less. */
+  table.grid th,
+  table.grid td {
+    padding: 8px;
+  }
+
+  /* The customer table's expanded row holds the campaign list, whose own width must not push the
+     table (and the page) wider than the phone. Fixing the layout lets the name column absorb the
+     space and the campaign rows wrap inside it. */
+  table.customers-table {
+    table-layout: fixed;
+  }
+
+  table.customers-table th:first-child {
+    width: 52px;
+  }
+
+  table.customers-table th:last-child {
+    width: 44px;
+  }
+
+  table.customers-table td:nth-child(2) {
+    overflow-wrap: anywhere;
+  }
 }

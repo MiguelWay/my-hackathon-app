@@ -94,6 +94,11 @@ export function ReturnsPage() {
   // The return package list opens inline, under the counters.
   const [listOpen, setListOpen] = useState(false);
   const [listRefresh, setListRefresh] = useState(0);
+
+  // Another campaign always starts with the list closed.
+  useEffect(() => {
+    setListOpen(false);
+  }, [campaignId]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The outcome of a resend save, shown beside the button that was pressed.

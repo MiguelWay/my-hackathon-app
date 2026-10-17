@@ -72,6 +72,12 @@ export function CustomersPage() {
   const [exporting, setExporting] = useState<number | null>(null);
   // Which campaign's return package list is open inline under its row. One at a time.
   const [listFor, setListFor] = useState<number | null>(null);
+
+  // The list belongs to the customer row that is open: closing or switching customers closes it too,
+  // so it always starts closed when a row is opened again.
+  useEffect(() => {
+    setListFor(null);
+  }, [openId]);
   // The open row, which can be below the fold.
   const expandRef = useRef<HTMLTableRowElement | null>(null);
   // Which row's data is allowed to land: a quick click on another customer must not show stale rows.
@@ -310,7 +316,7 @@ export function CustomersPage() {
           {isSuperAdmin && "Create the first one above."}
         </p>
       ) : (
-        <table className="grid">
+        <table className="grid customers-table">
           <thead>
             <tr>
               <th>ID</th>

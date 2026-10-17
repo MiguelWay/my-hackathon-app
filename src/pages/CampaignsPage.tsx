@@ -74,6 +74,11 @@ export function CampaignsPage() {
   const [uploadingFor, setUploadingFor] = useState<number | null>(null);
   // Which campaign's return package list is open inline. One at a time, like the upload above.
   const [listFor, setListFor] = useState<number | null>(null);
+
+  // Switching company closes the list, so another company's campaigns always start with it closed.
+  useEffect(() => {
+    setListFor(null);
+  }, [customerId]);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [finishDate, setFinishDate] = useState("");

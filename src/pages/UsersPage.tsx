@@ -186,67 +186,69 @@ export function UsersPage() {
         <p className="muted">No users yet.</p>
       ) : (
         <>
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Customer</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Added</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.email}</td>
-                  <td>{u.customer_name ?? <span className="muted">platform</span>}</td>
-                  <td>
-                    <span className={`badge role-${u.role}`}>{u.role}</span>
-                  </td>
-                  <td>{u.is_active === 1 ? "active" : <span className="chip">disabled</span>}</td>
-                  <td className="muted">{u.created_at.slice(0, 10)}</td>
-                  <td>
-                    <div className="btn-row">
-                      <button
-                        type="button"
-                        className="secondary"
-                        disabled={busy}
-                        onClick={() => setActive(u, u.is_active !== 1)}
-                      >
-                        {u.is_active === 1 ? "Deactivate" : "Activate"}
-                      </button>
-                      {confirmDelete === u.id ? (
-                        <>
-                          <button type="button" disabled={busy} onClick={() => remove(u)}>
-                            Confirm delete
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary"
-                            disabled={busy}
-                            onClick={() => setConfirmDelete(null)}
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
+          <div className="scroll">
+            <table className="grid">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Customer</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Added</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounts.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.email}</td>
+                    <td>{u.customer_name ?? <span className="muted">platform</span>}</td>
+                    <td>
+                      <span className={`badge role-${u.role}`}>{u.role}</span>
+                    </td>
+                    <td>{u.is_active === 1 ? "active" : <span className="chip">disabled</span>}</td>
+                    <td className="muted">{u.created_at.slice(0, 10)}</td>
+                    <td>
+                      <div className="btn-row">
                         <button
                           type="button"
                           className="secondary"
                           disabled={busy}
-                          onClick={() => setConfirmDelete(u.id)}
+                          onClick={() => setActive(u, u.is_active !== 1)}
                         >
-                          Delete
+                          {u.is_active === 1 ? "Deactivate" : "Activate"}
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        {confirmDelete === u.id ? (
+                          <>
+                            <button type="button" disabled={busy} onClick={() => remove(u)}>
+                              Confirm delete
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              disabled={busy}
+                              onClick={() => setConfirmDelete(null)}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={busy}
+                            onClick={() => setConfirmDelete(u.id)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p className="muted">
             {active} active · {accounts.length - active} disabled. A disabled user cannot log in and its
             open sessions end at once. A user that recorded returns can only be disabled, never deleted.
