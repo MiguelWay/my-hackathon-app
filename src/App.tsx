@@ -9,7 +9,7 @@ import { CampaignDetailPage } from "./pages/CampaignDetailPage";
 import { ReturnsPage } from "./pages/ReturnsPage";
 import { RecentReturnsPage } from "./pages/RecentReturnsPage";
 import { CustomersPage } from "./pages/CustomersPage";
-import { AccountsPage } from "./pages/AccountsPage";
+import { UsersPage } from "./pages/UsersPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 
 function Protected({ children }: { children: ReactNode }) {
@@ -51,13 +51,13 @@ export default function App() {
           </Protected>
         }
       />
-      {/* A customer's accounts, on their own page: the *Users* button on a customer's row lands here. */}
+      {/* Every account on the platform, in one place: the one screen that administers users. */}
       <Route
-        path="/customers/:id/accounts"
+        path="/users"
         element={
           <Protected>
             <SuperAdminOnly>
-              <AccountsPage />
+              <UsersPage />
             </SuperAdminOnly>
           </Protected>
         }
@@ -80,7 +80,6 @@ export default function App() {
           </Protected>
         }
       />
-      <Route path="/superadmin/customers" element={<Navigate to="/customers" replace />} />
       <Route
         path="/campaigns/:id"
         element={

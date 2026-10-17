@@ -1,37 +1,45 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { PasswordInput } from "../components/PasswordInput";
 
-interface CustomerUser {
+interface Account {
   id: number;
   email: string;
   role: "superadmin" | "user";
   is_active: number;
   created_at: string;
+  customer_id: number | null;
+  customer_name: string | null;
+}
+
+interface CustomerRef {
+  id: number;
+  name: string;
 }
 
 interface NewUserForm {
+  customerId: string;
   email: string;
   password: string;
   role: "superadmin" | "user";
 }
 
-const emptyForm = (): NewUserForm => ({ email: "", password: "", role: "superadmin" });
+const emptyForm = (): NewUserForm => ({
+  customerId: "",
+  email: "",
+  password: "",
+  role: "superadmin",
+});
 
 /**
- * One customer's accounts, on a page of their own.
+ * Every account on the platform, in one place.
  *
- * These used to sit under the customer's row on the Customers screen. They live here so that the
- * customers list stays about customers and their campaigns, and so that an account is managed in one
- * place with room to read it — the *Users* button on a customer's row is the way in.
+ * This is the only screen that administers users: who exists, which customer they belong to, and
+ * whether they may sign in. The Customers screen is about customers and their campaigns, not accounts.
  */
-export function AccountsPage() {
-  const { id } = useParams();
-  const customerId = String(id ?? "");
-
-  const [customerName, setCustomerName] = useState<string | null>(null);
-  const [users, setUsers] = useState<CustomerUser[]>([]);
+export function UsersPage() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [customers, setCustomers] = useState<CustomerRef[]>([]);
   const [form, setForm] = useState<NewUserForm>(emptyForm());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,20 +47,20 @@ export function AccountsPage() {
   // The account whose delete has been armed, so deleting is never one careless click.
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
-  const loadUsers = useCallback(async () => {
-    setUsers(await api.get<CustomerUser[]>(`/admin/customers/${customerId}/users`));
-  }, [customerId]);
+  const load = useCallback(async () => {
+    const [list, customerList] = await Promise.all([
+      api.get<Account[]>("/admin/users"),
+      api.get<CustomerRef[]>("/admin/customers"),
+    ]);
+    setAccounts(list);
+    setCustomers(customerList);
+  }, []);
 
   useEffect(() => {
-    // The name is for the heading only, and the admin list already carries it.
-    api
-      .get<{ id: number; name: string }[]>("/admin/customers")
-      .then((list) => setCustomerName(list.find((c) => String(c.id) === customerId)?.name ?? null))
-      .catch(() => setCustomerName(null));
-    loadUsers().catch((e: unknown) =>
-      setError(e instanceof Error ? e.message : "Failed to load the accounts")
+    load().catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : "Failed to load the users")
     );
-  }, [customerId, loadUsers]);
+  }, [load]);
 
   async function addUser(e: FormEvent) {
     e.preventDefault();
@@ -60,14 +68,14 @@ export function AccountsPage() {
     setNotice(null);
     setBusy(true);
     try {
-      const created = await api.post<CustomerUser>(`/admin/customers/${customerId}/users`, {
+      const created = await api.post<Account>(`/admin/customers/${form.customerId}/users`, {
         email: form.email,
         password: form.password,
         role: form.role,
       });
       setNotice(`Created ${created.role === "superadmin" ? "super-admin" : "user"} ${created.email}.`);
       setForm(emptyForm());
-      await loadUsers();
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create the account");
     } finally {
@@ -75,15 +83,15 @@ export function AccountsPage() {
     }
   }
 
-  async function setActive(user: CustomerUser, active: boolean) {
+  async function setActive(account: Account, active: boolean) {
     setError(null);
     setNotice(null);
     setBusy(true);
     try {
-      await api.patch(`/admin/users/${user.id}`, { active });
-      setNotice(`${active ? "Activated" : "Deactivated"} ${user.email}.`);
+      await api.patch(`/admin/users/${account.id}`, { active });
+      setNotice(`${active ? "Activated" : "Deactivated"} ${account.email}.`);
       setConfirmDelete(null);
-      await loadUsers();
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not change that account");
     } finally {
@@ -91,15 +99,15 @@ export function AccountsPage() {
     }
   }
 
-  async function remove(user: CustomerUser) {
+  async function remove(account: Account) {
     setError(null);
     setNotice(null);
     setBusy(true);
     try {
-      await api.delete(`/admin/users/${user.id}`);
-      setNotice(`Deleted ${user.email}.`);
+      await api.delete(`/admin/users/${account.id}`);
+      setNotice(`Deleted ${account.email}.`);
       setConfirmDelete(null);
-      await loadUsers();
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete that account");
     } finally {
@@ -107,17 +115,15 @@ export function AccountsPage() {
     }
   }
 
-  const active = users.filter((u) => u.is_active === 1).length;
+  const active = accounts.filter((u) => u.is_active === 1).length;
 
   return (
     <div>
-      <p>
-        <Link to={`/customers?customer=${customerId}`}>← Customers</Link>
-      </p>
-      <h1>Accounts{customerName ? ` · ${customerName}` : ""}</h1>
+      <h1>Users</h1>
       <p className="muted">
-        Who may sign in for this customer. Emails are unique across the whole platform, and a new
-        account can log in straight away.
+        Every account that can sign in, and the customer it belongs to. Emails are unique across the
+        platform, and a new account can sign in straight away. An account with no customer — a platform
+        super-admin — is created from the command line (<code>npm run create:superadmin</code>).
       </p>
 
       {error && <p className="error">{error}</p>}
@@ -126,6 +132,21 @@ export function AccountsPage() {
       <details className="card" open>
         <summary>New user</summary>
         <form className="customer-row" onSubmit={addUser}>
+          <label>
+            Customer
+            <select
+              value={form.customerId}
+              onChange={(e) => setForm({ ...form, customerId: e.target.value })}
+              required
+            >
+              <option value="">Choose a customer…</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Email
             <input
@@ -161,7 +182,7 @@ export function AccountsPage() {
       </details>
 
       <h2>Current users</h2>
-      {users.length === 0 ? (
+      {accounts.length === 0 ? (
         <p className="muted">No users yet.</p>
       ) : (
         <>
@@ -169,6 +190,7 @@ export function AccountsPage() {
             <thead>
               <tr>
                 <th>Email</th>
+                <th>Customer</th>
                 <th>Role</th>
                 <th>Status</th>
                 <th>Added</th>
@@ -176,15 +198,14 @@ export function AccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {accounts.map((u) => (
                 <tr key={u.id}>
                   <td>{u.email}</td>
+                  <td>{u.customer_name ?? <span className="muted">platform</span>}</td>
                   <td>
                     <span className={`badge role-${u.role}`}>{u.role}</span>
                   </td>
-                  <td>
-                    {u.is_active === 1 ? "active" : <span className="chip">disabled</span>}
-                  </td>
+                  <td>{u.is_active === 1 ? "active" : <span className="chip">disabled</span>}</td>
                   <td className="muted">{u.created_at.slice(0, 10)}</td>
                   <td>
                     <div className="btn-row">
@@ -227,7 +248,7 @@ export function AccountsPage() {
             </tbody>
           </table>
           <p className="muted">
-            {active} active · {users.length - active} disabled. A disabled user cannot log in and its
+            {active} active · {accounts.length - active} disabled. A disabled user cannot log in and its
             open sessions end at once. A user that recorded returns can only be disabled, never deleted.
           </p>
         </>

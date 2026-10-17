@@ -24,9 +24,6 @@ import { ReturnCounters } from "../components/ReturnCounters";
 interface Customer {
   id: number;
   name: string;
-  /** A super-admin sees how many accounts a customer has; the operator's directory does not carry it. */
-  user_count?: number;
-  active_user_count?: number;
 }
 
 interface CustomerCampaign {
@@ -39,6 +36,19 @@ interface CustomerCampaign {
   package_count: number;
   return_count: number;
   resend_count: number;
+}
+
+/** The machine's local date as YYYY-MM-DD, so the comparison cannot shift by a timezone. */
+function localToday(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** Closed once its finish date is before today. An upcoming campaign, or one with no finish date, is open. */
+function isClosed(campaign: CustomerCampaign, todayIso: string): boolean {
+  return campaign.finish_date !== null && campaign.finish_date < todayIso;
 }
 
 export function CustomersPage() {
@@ -54,8 +64,8 @@ export function CustomersPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // The customer whose row is open. Its accounts live on their own page now, so its campaigns are all
-  // this row holds.
+  // The customer whose row is open. Its campaigns are all this row holds; accounts live on the
+  // Users screen.
   const [openId, setOpenId] = useState<number | null>(null);
   const [campaigns, setCampaigns] = useState<CustomerCampaign[] | null>(null);
   const [exporting, setExporting] = useState<number | null>(null);
@@ -178,12 +188,80 @@ export function CustomersPage() {
     if (items.some((c) => c.id === id)) void toggle(id);
   }, [wantedCustomer, items]);
 
+  // An operator's list is split by date: a campaign whose finish date has passed is closed and moves
+  // into an accordion directly under the open ones. An upcoming campaign is still open. The
+  // administrator's list is deliberately left unsplit.
+  const todayIso = localToday();
+  const openCampaigns = (campaigns ?? []).filter((camp) => !isClosed(camp, todayIso));
+  const closedCampaigns = (campaigns ?? []).filter((camp) => isClosed(camp, todayIso));
+
+  /** One campaign's row: the same markup whoever is looking; only the grouping differs. */
+  function campaignRow(camp: CustomerCampaign) {
+    return (
+      <li key={camp.id}>
+        {/* The row itself is the way in, and it reads exactly like the campaign's own screen: its
+            name and the same three counters, without the dates. */}
+        <Link
+          className="campaign-choice"
+          to={`/campaigns/${camp.id}/returns`}
+          aria-label={`Record returns for ${camp.name}`}
+        >
+          <span className="campaign-name">{camp.name}</span>
+          <ReturnCounters
+            sent={camp.package_count}
+            returns={camp.return_count}
+            resends={camp.resend_count}
+          />
+        </Link>
+        {/* An operator has no download accordion, so the way in is spelled out: the row is also a
+            link, but a button is what it looks like. The administrator's view is unchanged. */}
+        {!isSuperAdmin && (
+          <Link
+            className="button"
+            to={`/campaigns/${camp.id}/returns`}
+            aria-label={`Open the returns of ${camp.name}`}
+          >
+            Record returns
+          </Link>
+        )}
+        {/* The results file is part of the campaign, so its download lives inside the campaign. */}
+        {isSuperAdmin && (
+          <details className="section campaign-download">
+            <summary>Results file download</summary>
+            <div className="btn-row">
+              <a
+                className="button secondary"
+                aria-disabled={exporting !== null || camp.package_count === 0}
+                href={adminCampaignExportUrl(camp.id)}
+                download
+                onClick={(e) => onCampaignChoiceClick(e, camp)}
+              >
+                {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
+              </a>
+              {canChooseSaveLocation() && (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={exporting !== null || camp.package_count === 0}
+                  onClick={() => saveCampaignAs(camp)}
+                >
+                  Save as…
+                </button>
+              )}
+            </div>
+            <SaveLocationHint />
+          </details>
+        )}
+      </li>
+    );
+  }
+
   return (
     <div>
       <h1>Customers</h1>
       <p className="muted">
         {isSuperAdmin
-          ? "Each customer is a separate company. Their data never mixes with another customer's. Open a row for its campaigns, or Users for its accounts."
+          ? "Each customer is a separate company. Their data never mixes with another customer's. Open a row for its campaigns."
           : "Pick a customer to see its campaigns, then a campaign to record its returns."}
       </p>
 
@@ -218,7 +296,6 @@ export function CustomersPage() {
             <tr>
               <th>ID</th>
               <th>Name</th>
-              {isSuperAdmin && <th>Users</th>}
               <th></th>
             </tr>
           </thead>
@@ -233,24 +310,6 @@ export function CustomersPage() {
                   >
                     <td>{c.id}</td>
                     <td>{c.name}</td>
-                    {isSuperAdmin && (
-                      <td className="users-cell">
-                        <span>
-                          {c.user_count}
-                          {c.active_user_count !== c.user_count && (
-                            <span className="muted"> · {c.active_user_count} active</span>
-                          )}
-                        </span>
-                        {/* The accounts live on a page of their own; this is the way there. */}
-                        <Link
-                          className="button secondary"
-                          to={`/customers/${c.id}/accounts`}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Users
-                        </Link>
-                      </td>
-                    )}
                     <td className="disclosure-cell">
                       <button
                         type="button"
@@ -270,7 +329,7 @@ export function CustomersPage() {
 
                   {open && (
                     <tr className="expand" id={`customer-${c.id}-panel`} ref={expandRef}>
-                      <td colSpan={isSuperAdmin ? 4 : 3}>
+                      <td colSpan={3}>
                         <section className="customer-group">
                           <h2 className="group-title">Campaigns</h2>
                           {campaigns === null ? (
@@ -287,64 +346,27 @@ export function CustomersPage() {
                                 {campaigns.length === 1 ? "" : "s"}.{" "}
                                 Click one to record its returns and resends.
                               </p>
-                              <ul className="campaign-list">
-                                {campaigns.map((camp) => {
-                                  return (
-                                    <li key={camp.id}>
-                                      {/* The row itself is the way in, and it reads exactly like the
-                                          campaign's own screen: its name and the same three counters,
-                                          without the dates and without a separate "Record returns". */}
-                                      <Link
-                                        className="campaign-choice"
-                                        to={`/campaigns/${camp.id}/returns`}
-                                        aria-label={`Record returns for ${camp.name}`}
-                                      >
-                                        <span className="campaign-name">{camp.name}</span>
-                                        <ReturnCounters
-                                          sent={camp.package_count}
-                                          returns={camp.return_count}
-                                          resends={camp.resend_count}
-                                        />
-                                      </Link>
-                                      {/* The results file is part of the campaign, so its download lives
-                                          inside the campaign rather than beside it. */}
-                                      {isSuperAdmin && (
-                                        <details className="section campaign-download">
-                                          <summary>Results file download</summary>
-                                          <div className="btn-row">
-                                            <a
-                                              className="button secondary"
-                                              aria-disabled={
-                                                exporting !== null || camp.package_count === 0
-                                              }
-                                              href={adminCampaignExportUrl(camp.id)}
-                                              download
-                                              onClick={(e) => onCampaignChoiceClick(e, camp)}
-                                            >
-                                              {exporting === camp.id
-                                                ? "Preparing…"
-                                                : "Download .xlsx"}
-                                            </a>
-                                            {canChooseSaveLocation() && (
-                                              <button
-                                                type="button"
-                                                className="secondary"
-                                                disabled={
-                                                  exporting !== null || camp.package_count === 0
-                                                }
-                                                onClick={() => saveCampaignAs(camp)}
-                                              >
-                                                Save as…
-                                              </button>
-                                            )}
-                                          </div>
-                                          <SaveLocationHint />
-                                        </details>
-                                      )}
-                                    </li>
-                                  );
-                                })}
-                              </ul>
+                              {isSuperAdmin ? (
+                                <ul className="campaign-list">{campaigns.map(campaignRow)}</ul>
+                              ) : (
+                                <>
+                                  {openCampaigns.length === 0 ? (
+                                    <p className="muted">No open campaigns right now.</p>
+                                  ) : (
+                                    <ul className="campaign-list">
+                                      {openCampaigns.map(campaignRow)}
+                                    </ul>
+                                  )}
+                                  {closedCampaigns.length > 0 && (
+                                    <details className="section campaign-archive">
+                                      <summary>Closed campaigns ({closedCampaigns.length})</summary>
+                                      <ul className="campaign-list">
+                                        {closedCampaigns.map(campaignRow)}
+                                      </ul>
+                                    </details>
+                                  )}
+                                </>
+                              )}
                             </>
                           )}
                         </section>

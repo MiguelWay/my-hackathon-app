@@ -210,6 +210,22 @@ async function problemWith(
 
 // Activate or deactivate one account. A deactivated account cannot log in, and its open sessions end
 // immediately, because every authenticated request checks users.is_active.
+// Every account on the platform, with the customer it belongs to. The Users screen is the one place
+// accounts are administered, so it needs the whole set rather than one customer at a time.
+adminRouter.get(
+  "/users",
+  ah(async (_req, res) => {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT u.id, u.email, u.role, u.is_active, u.created_at,
+              u.customer_id, c.name AS customer_name
+         FROM users u
+         LEFT JOIN customers c ON c.id = u.customer_id
+        ORDER BY u.is_active DESC, c.name, u.email`
+    );
+    res.json(rows);
+  })
+);
+
 adminRouter.patch(
   "/users/:id",
   ah(async (req, res) => {

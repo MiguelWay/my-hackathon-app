@@ -13,6 +13,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <nav>
           {user && <Link to="/customers">Customers</Link>}
           {isAdmin && <Link to="/campaigns">Campaigns</Link>}
+          {isAdmin && <Link to="/users">Users</Link>}
         </nav>
         <div className="spacer" />
         {user && (

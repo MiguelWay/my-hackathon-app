@@ -172,8 +172,8 @@ counters move as they work.
 |---|---|---|---|
 | Log in | `/login` | anyone | — |
 | **Change password** | `/account/password` | both | Your own setting: needs the password you have now, and signs out every other session on the account |
-| **Customers** | `/customers` | both | The home screen. Each row opens (accordion) to its **Campaigns**; for a super-admin the *Users* column also carries a **Users** button |
-| **Accounts** | `/customers/:id/accounts` | super-admin | One customer's accounts, on a page of their own: create one, activate or deactivate it, delete it. Reached by the **Users** button on a customer's row |
+| **Customers** | `/customers` | both | The home screen. Each row opens (accordion) to its **Campaigns** |
+| **Users** | `/users` | super-admin | Every account on the platform in one place, with the customer it belongs to: create one, activate or deactivate it, delete it. The only screen that administers users |
 | **Campaigns** | `/campaigns` | super-admin | Create a campaign for a company; every list under its campaign |
 | **Campaign page** | `/campaigns/:id` | super-admin | One campaign: edit its name/window, upload its lists |
 | **Campaign returns** | `/campaigns/:id/returns` | both | The operator's desk *and* that campaign's report: the counters, the lookup, the reason, the resend, the linking table and its `.xlsx` |
@@ -220,12 +220,17 @@ Packages* left the nav on 2026-10-16.
 
 ## 9. Boundaries
 
-- **Always:** keep every existing isolation test green; a company super-admin never reaches another
-  company's data; every new route is added to the anonymous-401 table.
-- **Ask first:** changing the tenancy rule itself (this document), dropping `requireCompany` from a
-  route, adding a dependency.
-- **Never:** let a `user` reach customers, campaigns, uploads or reports; invent trial data in the live
-  database; weaken a test to make a change land.
+- **Always:** keep every existing isolation test green; a tenant's own administrator never reaches
+  another company's data; every new route is added to the anonymous-401 table.
+- **Ask first:** changing the tenancy rule itself (this document), adding a dependency.
+- **The boundary is the request** (settled 2026-10-17). An **operator** (`user`) and a **platform
+  super-admin** work whichever customer a request names — the directory, the campaign, its packages and
+  uploads, the lookup. Only an account that is *both* a super-admin **and** attached to a company is
+  confined to that company (`scope.isConfined`).
+- **Never:** let a tenant's own administrator reach another company's data; let a `user` reach the
+  platform admin API or the company-wide reports; resend one package twice (a chain is a line — each
+  attempt may go out again only once); invent trial data in the live database; weaken a test to make a
+  change land.
 
 ---
 
@@ -263,7 +268,7 @@ is where a `user` starts. From there the operator's flow is unchanged — pick t
 campaign, use the package return functionality.
 
 While that view is on, the menu is **`Customers` alone**, a `user view` chip marks it, and the admin
-controls (*New customer*, *Accounts*, the export buttons) are hidden — a clean operator view. **Getting
+controls (*New customer*, *Users*, the export buttons) are hidden — a clean operator view. **Getting
 back to the super-admin view takes a fresh login** (or the *Enter as administrator* door at `/login`), as
 you asked, so the view survives navigation and a reload.
 

@@ -246,6 +246,20 @@ describe("customer A can never write customer B's data", () => {
     expect(asB.body[0].return_id).toBeNull();
   });
 
+  it("cannot record a return on B's package by naming its id", async () => {
+    // The package id names its own customer, and that customer is not the caller's.
+    const res = await alpha.post("/returns", {
+      senderId: SENDER_B,
+      packageId: betaPackageId,
+      reasonCode: "otro",
+    });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "package not found" });
+
+    const asB = await beta.get<LookupRow[]>(`/returns/lookup?senderId=${SENDER_B}`);
+    expect(asB.body[0].return_id).toBeNull();
+  });
+
   it("refuses a resend aimed at another company's campaign", async () => {
     // Beta's package was never returned, so it cannot be resent at all.
     const notReturned = await alpha.post("/returns/resend", {
@@ -295,6 +309,7 @@ describe("anonymous callers are rejected everywhere", () => {
     ["POST", "/returns/resend"],
     ["GET", "/admin/customers"],
     ["GET", "/admin/customers/1/campaigns"],
+    ["GET", "/admin/users"],
     ["GET", "/admin/campaigns"],
     ["GET", "/admin/campaigns/uploads"],
     ["GET", "/admin/campaigns/1/export"],
@@ -314,6 +329,28 @@ describe("roles", () => {
     expect((await alphaUser.get("/campaigns")).status).toBe(200);
     expect((await alphaUser.get(`/campaigns/${alphaCampaign}/packages`)).status).toBe(200);
     expect((await alphaUser.get<unknown[]>("/returns/reasons")).body).toHaveLength(5);
+  });
+
+  it("an operator works every client: another company's campaign, packages and uploads", async () => {
+    expect((await alphaUser.get(`/campaigns/${betaCampaign}`)).status).toBe(200);
+    expect((await alphaUser.get(`/campaigns/${betaCampaign}/packages`)).status).toBe(200);
+    expect((await alphaUser.get(`/campaigns/${betaCampaign}/uploads`)).status).toBe(200);
+  });
+
+  it("an operator looks inside any campaign it names", async () => {
+    const found = await alphaUser.get<LookupRow[]>(
+      `/returns/lookup?senderId=${SENDER_B}&campaignId=${betaCampaign}`
+    );
+    expect(found.body).toHaveLength(1);
+    expect(found.body[0].campaign_id).toBe(betaCampaign);
+  });
+
+  it("but a tenant's own administrator still cannot name another company's campaign", async () => {
+    const res = await alpha.get<{ error: string }>(
+      `/returns/lookup?senderId=${SENDER_B}&campaignId=${betaCampaign}`
+    );
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "campaign not found" });
   });
 
   it("a `user` may not export the flagged sheet", async () => {
@@ -357,6 +394,22 @@ describe("roles", () => {
     expect(res.body).toEqual({ error: "super-admin only" });
   });
 
+  it("the Users screen lists every account with the customer it belongs to", async () => {
+    const res = await alpha.get<
+      { email: string; customer_id: number | null; customer_name: string | null }[]
+    >("/admin/users");
+    expect(res.status).toBe(200);
+
+    const operator = res.body.find((u) => u.email === "alpha-user@test.local");
+    expect(operator?.customer_name).toBe("Alpha Co");
+    // A platform super-admin has no customer of its own.
+    expect(res.body.some((u) => u.customer_id === null)).toBe(true);
+  });
+
+  it("keeps the Users screen away from a `user`", async () => {
+    expect((await alphaUser.get("/admin/users")).status).toBe(403);
+  });
+
   it("a super-admin can create both account types for a customer", async () => {
     const asUser = await alpha.post<{ role: string }>(
       `/admin/customers/${alphaCustomerId}/users`,
@@ -395,10 +448,16 @@ describe("roles", () => {
   });
 
   it("a resend with no campaign lands in the original package's campaign", async () => {
-    // The UI no longer asks which campaign: a resend always stays where the original was sent.
+    // One resend per package, so the next attempt has to come from the one before it: return the first
+    // resend, then send that again. The UI no longer asks which campaign — it always stays where the
+    // original was sent.
+    const middle = await alpha.get<LookupRow[]>(`/returns/lookup?senderId=${SENDER_A_RESEND}`);
+    const middleId = middle.body[0].id;
+    await alpha.post("/returns", { senderId: SENDER_A_RESEND, reasonCode: "ausente" });
+
     const created = await alpha.post<{ campaignId: number; campaignName: string }>(
       "/returns/resend",
-      { packageId: alphaReturnedPackageId, newSenderId: SENDER_A_SECOND_RESEND }
+      { packageId: middleId, newSenderId: SENDER_A_SECOND_RESEND }
     );
     expect(created.status).toBe(201);
     expect(created.body.campaignId).toBe(alphaCampaign);
@@ -410,14 +469,19 @@ describe("roles", () => {
     expect(chain.body[0].chain).toHaveLength(3);
   });
 
-  it("the recent list names the package a resend was sent as", async () => {
-    // A resend can come back too, and then it shows up in the list in its own right.
-    const resentAgain = await alpha.post("/returns", {
-      senderId: SENDER_A_RESEND,
-      reasonCode: "ausente",
+  it("refuses a second resend of the same package", async () => {
+    // The original already has a later attempt in its chain, so it cannot go out again: a chain is a
+    // line, not a fork.
+    const res = await alpha.post<{ error: string }>("/returns/resend", {
+      packageId: alphaReturnedPackageId,
+      newSenderId: "PQTWICE001ES",
     });
-    expect(resentAgain.status).toBe(201);
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: "this package has already been resent" });
+  });
 
+  it("the recent list names the package a resend was sent as", async () => {
+    // The first resend was returned by the test above, so it shows up in the list in its own right.
     const recent = await alpha.get<{ sender_id: string; resent_as: string | null }[]>("/returns");
 
     // Each returned package names the next package in its chain.
@@ -883,8 +947,14 @@ describe("a `user` links the resend that follows a return", () => {
   }
 
   it("links a resend of a returned package, in the original's campaign", async () => {
+    // One resend per package: the latest attempt has to come back before it can be sent again.
+    await alphaUser.post("/returns", { senderId: SENDER_A_SECOND_RESEND, reasonCode: "ausente" });
+    const latest = await alphaUser.get<ChainLookup[]>(
+      `/returns/lookup?senderId=${SENDER_A_SECOND_RESEND}`
+    );
+
     const res = await alphaUser.post<{ senderId: string; campaignId: number }>("/returns/resend", {
-      packageId: alphaReturnedPackageId,
+      packageId: latest.body[0].id,
       newSenderId: "PQUSERRESEND01ES",
     });
     expect(res.status).toBe(201);
@@ -904,8 +974,12 @@ describe("a `user` links the resend that follows a return", () => {
 
   it("attaches to the original even when the package resent is itself a resend", async () => {
     // The attempt in the middle of a chain must not become the thing the next link points at:
-    // every resend in a chain names the same original.
-    const middle = await alphaUser.get<ChainLookup[]>(`/returns/lookup?senderId=${SENDER_A_RESEND}`);
+    // every resend in a chain names the same original. This one has to come back before it can be
+    // sent again, since a package may be resent only once.
+    await alphaUser.post("/returns", { senderId: "PQUSERRESEND01ES", reasonCode: "ausente" });
+    const middle = await alphaUser.get<ChainLookup[]>(
+      "/returns/lookup?senderId=PQUSERRESEND01ES"
+    );
     expect(middle.body[0].id).not.toBe(alphaReturnedPackageId);
     expect(middle.body[0].chain_id).toBe(alphaReturnedPackageId);
 

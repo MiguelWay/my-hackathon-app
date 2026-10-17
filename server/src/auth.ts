@@ -246,16 +246,3 @@ export const requireSuperAdmin: RequestHandler = (_req, res, next) => {
   }
   next();
 };
-
-/**
- * For routes that operate on a customer's own data. A super-admin with no customer attached
- * (a pure platform owner) has nowhere to put a campaign, so those routes are refused.
- */
-export const requireCompany: RequestHandler = (_req, res, next) => {
-  const user = res.locals.user as AuthUser | undefined;
-  if (!user || user.customerId === null) {
-    res.status(403).json({ error: "this account is not attached to a company" });
-    return;
-  }
-  next();
-};

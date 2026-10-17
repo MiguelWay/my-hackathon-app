@@ -7,7 +7,8 @@ import { loadChains } from "./chains";
 import { sendChainsExport } from "./export";
 import { normalizeSenderId } from "./senderId";
 import { chainRootId, parseResendBody } from "./resends";
-import { optionalPositiveInt } from "./validate";
+import { isConfined } from "./scope";
+import { MAX_NOTE_LENGTH, optionalPositiveInt } from "./validate";
 
 // Mounted at /returns. A store operator types a sender ID, sees the package, and picks a reason.
 // Every query is scoped by customer_id.
@@ -267,16 +268,25 @@ returnsRouter.get(
       return res.status(400).json({ error: "campaignId must be a positive number" });
     }
     if (campaignId !== undefined) {
-      // A campaign names its own owner, so it can stand in for the customer; naming both means they
-      // have to agree.
+      // A campaign names its own owner, so it can stand in for the customer. An operator, and a
+      // platform super-admin, may therefore look inside any campaign they name; a tenant's own
+      // administrator may not leave its company, and a customer the caller explicitly names must
+      // still agree with the campaign.
       const [own] = await pool.query<(RowDataPacket & { customer_id: number })[]>(
         "SELECT id, customer_id FROM campaigns WHERE id = ?",
         [campaignId]
       );
-      if (!own[0] || (customerId !== null && Number(own[0].customer_id) !== customerId)) {
+      if (!own[0]) return res.status(404).json({ error: "campaign not found" });
+      const campaignCustomer = Number(own[0].customer_id);
+      const confined = isConfined(currentUser(res));
+      const named = req.query.customerId !== undefined;
+      if (
+        (confined && campaignCustomer !== customerId) ||
+        (named && customerId !== campaignCustomer)
+      ) {
         return res.status(404).json({ error: "campaign not found" });
       }
-      customerId = Number(own[0].customer_id);
+      customerId = campaignCustomer;
     }
     const campaignFilter = campaignId === undefined ? "" : " AND p.campaign_id = ?";
     const params: (number | string | null)[] =
@@ -339,7 +349,7 @@ returnsRouter.get(
 returnsRouter.post(
   "/resend",
   ah(async (req, res) => {
-    const user = currentUser(res);
+    const caller = currentUser(res);
 
     const parsed = parseResendBody(req.body);
     if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
@@ -354,10 +364,11 @@ returnsRouter.post(
         customer_id: number;
         campaign_name: string;
         return_id: number | null;
+        extra_columns: unknown;
       })[]
     >(
-      `SELECT p.id, p.chain_id, p.campaign_id, p.customer_id, c.name AS campaign_name,
-              r.id AS return_id
+      `SELECT p.id, p.chain_id, p.campaign_id, p.customer_id, p.extra_columns,
+              c.name AS campaign_name, r.id AS return_id
          FROM packages p
          JOIN campaigns c ON c.id = p.campaign_id
          LEFT JOIN returns r ON r.package_id = p.id
@@ -368,6 +379,11 @@ returnsRouter.post(
     const customerId = Number(orig[0].customer_id);
     if (!orig[0].return_id) {
       return res.status(400).json({ error: "only a returned package can be resent" });
+    }
+    // A tenant's own administrator cannot act on another company's package by naming its id. Checked
+    // after the state, so the answer for a package they can reach does not change.
+    if (isConfined(caller) && customerId !== caller.customerId) {
+      return res.status(404).json({ error: "package not found" });
     }
 
     // A resend always goes in the SAME campaign as the package it replaces.
@@ -385,6 +401,19 @@ returnsRouter.post(
       });
     }
 
+    const root = chainRootId(orig[0]);
+
+    // One resend per package: a chain is a line, so each attempt may be sent again only once. The
+    // next attempt in the same chain is this package's successor, and its presence means this one
+    // has already gone out again.
+    const [successor] = await pool.query<(RowDataPacket & { id: number })[]>(
+      "SELECT id FROM packages WHERE customer_id = ? AND chain_id = ? AND id > ? LIMIT 1",
+      [customerId, root, orig[0].id]
+    );
+    if (successor[0]) {
+      return res.status(409).json({ error: "this package has already been resent" });
+    }
+
     const [dupe] = await pool.query<RowDataPacket[]>(
       "SELECT id FROM packages WHERE customer_id = ? AND campaign_id = ? AND sender_id = ?",
       [customerId, campaignId, newSenderId]
@@ -393,12 +422,20 @@ returnsRouter.post(
       return res.status(409).json({ error: "that package ID is already used in that campaign" });
     }
 
-    const root = chainRootId(orig[0]);
+    // A resend is the same label with a new package ID, so it carries the original's label columns
+    // forward. Without this the resend's own card has nothing to show and the export leaves them blank.
+    const extra =
+      orig[0].extra_columns === null || orig[0].extra_columns === undefined
+        ? "{}"
+        : typeof orig[0].extra_columns === "string"
+          ? orig[0].extra_columns
+          : JSON.stringify(orig[0].extra_columns);
+
     const [result] = await pool.query<ResultSetHeader>(
       `INSERT INTO packages
          (customer_id, campaign_id, upload_id, source_row, sender_id, chain_id, created_via, extra_columns)
        VALUES (?, ?, NULL, NULL, ?, ?, 'resend', ?)`,
-      [customerId, campaignId, newSenderId, root, JSON.stringify({})]
+      [customerId, campaignId, newSenderId, root, extra]
     );
     res.status(201).json({
       id: result.insertId,
@@ -437,8 +474,13 @@ returnsRouter.post(
         [Number(packageId)]
       );
       if (!byId[0]) return res.status(404).json({ error: "package not found" });
+      const pkgCustomer = Number(byId[0].customer_id);
+      // A tenant's own administrator cannot reach another company's package by naming its id.
+      if (isConfined(user) && pkgCustomer !== user.customerId) {
+        return res.status(404).json({ error: "package not found" });
+      }
       pkgId = byId[0].id;
-      customerId = Number(byId[0].customer_id);
+      customerId = pkgCustomer;
     } else {
       const scope = await scopeOf(res, req.body?.customerId);
       if ("error" in scope) return res.status(scope.status).json({ error: scope.error });
@@ -464,7 +506,7 @@ returnsRouter.post(
           customerId,
           pkgId,
           reasons[0].id,
-          note ? String(note).slice(0, 500) : null,
+          note ? String(note).slice(0, MAX_NOTE_LENGTH) : null,
           user.id,
         ]
       );

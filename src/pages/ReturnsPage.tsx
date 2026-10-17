@@ -88,7 +88,10 @@ export function ReturnsPage() {
   const [resends, setResends] = useState<Record<number, ResendForm>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // What the last recorded change was, shown beside the search button — the same place every time.
+  const [confirmation, setConfirmation] = useState<string | null>(null);
+  // A resend just recorded: shown in the resend row, which is where the action was taken.
+  const [lastResend, setLastResend] = useState<{ original: string; created: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   /** The campaign's head and counters. Re-read after every change, so the numbers move as they work. */
@@ -129,7 +132,8 @@ export function ReturnsPage() {
     setNotes({});
     setResends({});
     setError(null);
-    setNotice(null);
+    setConfirmation(null);
+    setLastResend(null);
     searchRef.current?.focus();
   }
 
@@ -141,7 +145,8 @@ export function ReturnsPage() {
       return;
     }
     setError(null);
-    setNotice(null);
+    setConfirmation(null);
+    setLastResend(null);
     setBusy(true);
     setNotes({});
     try {
@@ -156,7 +161,7 @@ export function ReturnsPage() {
 
   async function record(match: Match, reason: Reason) {
     setError(null);
-    setNotice(null);
+    setConfirmation(null);
     setBusy(true);
     try {
       const res = await api.post<{ reasonLabel: string }>("/returns", {
@@ -165,7 +170,7 @@ export function ReturnsPage() {
         reasonCode: reason.code,
         note: notes[match.id] ?? "",
       });
-      setNotice(`Recorded "${res.reasonLabel}" for ${match.sender_id}.`);
+      setConfirmation(`Return recorded — "${res.reasonLabel}" for ${match.sender_id}.`);
       setMatches(await lookup(match.sender_id));
       await loadHead();
     } catch (err) {
@@ -182,18 +187,19 @@ export function ReturnsPage() {
       return;
     }
     setError(null);
-    setNotice(null);
+    setConfirmation(null);
     setBusy(true);
     try {
       // No campaign is sent: a resend stays in the original package's campaign.
-      const res = await api.post<{ senderId: string }>("/returns/resend", {
+      const res = await api.post<{ id: number; senderId: string }>("/returns/resend", {
         packageId: match.id,
         newSenderId: form.senderId.trim(),
       });
       setResends({});
-      setNotice(`Linked ${res.senderId} as a resend of ${match.sender_id}.`);
-      // Stay here: the chain above now names its replacement, and the counters have moved.
-      setMatches(await lookup(match.sender_id));
+      setLastResend({ original: match.sender_id, created: res.senderId });
+      // Show the package that was just created, the same way a lookup shows one: its details, its
+      // place in the chain, and the confirmation that it was recorded.
+      setMatches(await lookup(res.senderId));
       await loadHead();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the resend");
@@ -201,6 +207,17 @@ export function ReturnsPage() {
       setBusy(false);
     }
   }
+
+  const onlyMatch = matches !== null && matches.length === 1 ? matches[0] : null;
+  // The next attempt in this package's chain, when it has already been sent again.
+  const successor = onlyMatch ? onlyMatch.chain.find((n) => n.id > onlyMatch.id) ?? null : null;
+  // The resend row keeps what was saved: which package now follows which, whether it was saved just
+  // now or found already resent.
+  const resendSaved =
+    lastResend?.created ??
+    (onlyMatch && onlyMatch.return_id !== null ? successor?.sender_id ?? null : null);
+  const resendOriginal = lastResend?.original ?? onlyMatch?.sender_id ?? null;
+  const showResendRow = lastResend !== null || (onlyMatch !== null && onlyMatch.return_id !== null);
 
   /** A campaign that is not there says so, rather than showing an empty screen to work in. */
   if (!head && error) {
@@ -230,7 +247,6 @@ export function ReturnsPage() {
       )}
 
       {error && <p className="error">{error}</p>}
-      {notice && <p className="ok">{notice}</p>}
 
       {head && <ReturnCounters sent={head.sent} returns={head.returns} resends={head.resends} />}
 
@@ -248,20 +264,93 @@ export function ReturnsPage() {
         <button type="submit" disabled={busy}>
           {busy ? "Working…" : "Find package"}
         </button>
+        {confirmation && <p className="ok confirmation">✓ {confirmation}</p>}
       </form>
-
-      <p className="muted">
-        Type the package ID printed on the returned package. A package can be returned once.
-      </p>
 
       {matches !== null && matches.length === 0 && (
         <p className="muted">No package with that ID in this campaign.</p>
       )}
 
+      {/* The reason is the next thing an operator needs after finding the package, so it sits directly
+          under the find row rather than at the foot of a long card. A sender ID is unique inside a
+          campaign, so there is at most one package it can be about. */}
+      {matches !== null &&
+        matches.length === 1 &&
+        matches[0].return_id === null &&
+        lastResend === null && (
+        <div className="card reason-pick">
+          <label>
+            Note (optional)
+            <input
+              value={notes[matches[0].id] ?? ""}
+              onChange={(e) => setNotes((n) => ({ ...n, [matches[0].id]: e.target.value }))}
+              placeholder="e.g. second visit"
+            />
+          </label>
+          <p className="muted">Reason</p>
+          <div className="btn-row">
+            {reasons.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => record(matches[0], r)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* The resend action, in the same place as the reasons. One resend per package, so once the
+          package has a later attempt the row keeps what was saved and offers no second save. */}
+      {showResendRow && (
+        <div className="card reason-pick">
+          {resendSaved ? (
+            <div className="btn-row">
+              <label>
+                New package ID
+                <input value={resendSaved} readOnly />
+              </label>
+              <button type="button" disabled>
+                Save resend
+              </button>
+              <p className="ok confirmation">
+                ✓ Saved — {resendSaved} now follows {resendOriginal}.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="muted">
+                Sent it again? Record the new package ID — it stays in this campaign.
+              </p>
+              {onlyMatch && (
+                <div className="btn-row">
+                  <label>
+                    New package ID
+                    <input
+                      value={resends[onlyMatch.id]?.senderId ?? ""}
+                      onChange={(e) =>
+                        setResends((r) => ({ ...r, [onlyMatch.id]: { senderId: e.target.value } }))
+                      }
+                      placeholder="e.g. PortaP_151"
+                    />
+                  </label>
+                  <button type="button" disabled={busy} onClick={() => saveResend(onlyMatch)}>
+                    Save resend
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {matches?.map((m) => {
         const extra = parseExtra(m.extra_columns);
         const returned = m.return_id !== null;
-        const form = resends[m.id] ?? { senderId: "" };
         return (
           <div className="card" key={m.id}>
             <div className="match-head">
@@ -287,68 +376,25 @@ export function ReturnsPage() {
               </ol>
             )}
 
-            <div className="kv">
-              {Object.entries(extra).map(([k, v]) => (
-                <div key={k}>
-                  <span className="k">{k}</span>
-                  <span>{v}</span>
-                </div>
-              ))}
-            </div>
-
-            {returned ? (
-              <p className="ok">
-                Returned {m.returned_at} · {m.reason_label}
-                {m.return_note ? ` · ${m.return_note}` : ""}
-              </p>
-            ) : (
-              <>
-                <label>
-                  Note (optional)
-                  <input
-                    value={notes[m.id] ?? ""}
-                    onChange={(e) => setNotes((n) => ({ ...n, [m.id]: e.target.value }))}
-                    placeholder="e.g. second visit"
-                  />
-                </label>
-                <p className="muted">Reason</p>
-                <div className="btn-row">
-                  {reasons.map((r) => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      className="secondary"
-                      disabled={busy}
-                      onClick={() => record(m, r)}
-                    >
-                      {r.label}
-                    </button>
+            {Object.keys(extra).length > 0 && (
+              <details className="section label-details">
+                <summary>Label details</summary>
+                <div className="kv">
+                  {Object.entries(extra).map(([k, v]) => (
+                    <div key={k}>
+                      <span className="k">{k}</span>
+                      <span>{v}</span>
+                    </div>
                   ))}
                 </div>
-              </>
+              </details>
             )}
 
-            {returned && (
-              <div className="resend">
-                <p className="muted">
-                  Sent it again? Record the new package ID — it stays in this campaign.
-                </p>
-                <div className="btn-row">
-                  <label>
-                    New package ID
-                    <input
-                      value={form.senderId}
-                      onChange={(e) =>
-                        setResends((r) => ({ ...r, [m.id]: { ...form, senderId: e.target.value } }))
-                      }
-                      placeholder="e.g. PortaP_151"
-                    />
-                  </label>
-                  <button type="button" disabled={busy} onClick={() => saveResend(m)}>
-                    Save resend
-                  </button>
-                </div>
-              </div>
+            {!returned && m.created_via === "resend" && (
+              <p className="muted">
+                Resent {m.chain.find((n) => n.id === m.id)?.created_at ?? ""}
+                {m.chain.length > 1 ? ` — replaces ${m.chain[0].sender_id}` : ""}
+              </p>
             )}
           </div>
         );
