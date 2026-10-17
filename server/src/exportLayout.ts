@@ -36,6 +36,8 @@ export interface PackageLike {
   sender_id: string;
   extra_columns: unknown; // object (mysql2) or a JSON string
   chain_id: number | null;
+  /** 1 for a package as uploaded, 2 for the package used as its resend, and so on. */
+  attempt_no?: number;
 }
 
 export function parseExtraColumns(value: unknown): Record<string, string> {
@@ -112,7 +114,11 @@ export function chainsByPackage(chainPackages: PackageLike[]): Record<number, Ch
   const map: Record<number, Chain> = {};
   for (const members of byRoot.values()) {
     if (members.length < 2) continue;
-    const ordered = [...members].sort((a, b) => a.id - b.id);
+    // A resend target is an ordinary uploaded package, so its id can sit anywhere in the upload. The
+    // attempt number says which one came first; id only breaks a tie that should never exist.
+    const ordered = [...members].sort(
+      (a, b) => (a.attempt_no ?? 1) - (b.attempt_no ?? 1) || a.id - b.id
+    );
     const chain: Chain = {
       original: ordered[0].sender_id,
       resends: ordered.slice(1).map((p) => p.sender_id),

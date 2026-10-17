@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import {
   closePool,
@@ -18,7 +19,10 @@ const SENDER_A_RETURNED = "PQA000002ES";
 const SENDER_A_THIRD = "PQA000003ES";
 const SENDER_A_RESEND = "PQA000004ES";
 const SENDER_A_SECOND_RESEND = "PQSAMECAMP001ES";
+const USER_RESEND_1 = "PQUSERRESEND01ES";
+const USER_RESEND_2 = "PQUSERRESEND04ES";
 const SENDER_B = "PQB000001ES";
+const BETA_RESEND = "PQCROSS001ES";
 
 const COLUMNS = ["Fecha de envío", "Dirección", "ID de envío"];
 const row = (sender: string, city: string) => ["2026-03-01", city, sender];
@@ -82,7 +86,9 @@ beforeAll(async () => {
   await alphaUser.login("alpha-user@test.local", "password123");
   await superadmin.login("root@test.local", "password123");
 
-  // ---- customer A: a campaign with three packages, one returned and resent ----
+  // ---- customer A: a campaign of seven packages, one returned and resent ----
+  // A resend goes out as a package that already exists in the campaign, so every package used later
+  // as a resend is uploaded here, exactly as a real list holds it.
   const campaign = await newCampaign(alpha, "Alpha March");
   alphaCampaign = campaign.body.id;
   await alpha.post(`/campaigns/${alphaCampaign}/packages`, {
@@ -93,6 +99,10 @@ beforeAll(async () => {
       row(SENDER_A, "Cádiz"),
       row(SENDER_A_RETURNED, "Málaga"),
       row(SENDER_A_THIRD, "Sevilla"),
+      row(SENDER_A_RESEND, "Córdoba"),
+      row(SENDER_A_SECOND_RESEND, "Granada"),
+      row(USER_RESEND_1, "Toledo"),
+      row(USER_RESEND_2, "Cuenca"),
     ],
   });
 
@@ -108,14 +118,14 @@ beforeAll(async () => {
     campaignId: alphaCampaign,
   });
 
-  // ---- customer B: its own campaign and one package ----
+  // ---- customer B: its own campaign and two packages ----
   const betaCampaignRes = await newCampaign(beta, "Beta March");
   betaCampaign = betaCampaignRes.body.id;
   await beta.post(`/campaigns/${betaCampaign}/packages`, {
     filename: "beta.xlsx",
     columns: COLUMNS,
     senderColumn: 2,
-    rows: [row(SENDER_B, "Bilbao")],
+    rows: [row(SENDER_B, "Bilbao"), row(BETA_RESEND, "Vigo")],
   });
   const betaPackages = await beta.get<PackageRow[]>(`/campaigns/${betaCampaign}/packages`);
   betaPackageId = betaPackages.body[0].id;
@@ -142,7 +152,7 @@ describe("the app works for the owner (control group)", () => {
   it("reads its own campaign and packages", async () => {
     expect((await alpha.get(`/campaigns/${alphaCampaign}`)).status).toBe(200);
     const packages = await alpha.get<PackageRow[]>(`/campaigns/${alphaCampaign}/packages`);
-    expect(packages.body).toHaveLength(4); // three uploaded + one resend
+    expect(packages.body).toHaveLength(7); // the uploaded list
   });
 
   it("finds its own package and shows the whole resend chain", async () => {
@@ -231,8 +241,8 @@ describe("customer A can never write customer B's data", () => {
     expect(attempt.status).toBe(404);
 
     const bPackages = await beta.get<PackageRow[]>(`/campaigns/${betaCampaign}/packages`);
-    expect(bPackages.body).toHaveLength(1);
-    expect(bPackages.body.map((p) => p.sender_id)).toEqual([SENDER_B]);
+    expect(bPackages.body).toHaveLength(2);
+    expect(bPackages.body.map((p) => p.sender_id)).toEqual([SENDER_B, BETA_RESEND]);
   });
 
   it("cannot record a return on B's package without naming B", async () => {
@@ -280,7 +290,7 @@ describe("customer A can never write customer B's data", () => {
     expect(foreignCampaign.body).toEqual({ error: "campaign not found" });
 
     const bPackages = await beta.get<PackageRow[]>(`/campaigns/${betaCampaign}/packages`);
-    expect(bPackages.body).toHaveLength(1);
+    expect(bPackages.body).toHaveLength(2);
   });
 });
 
@@ -474,10 +484,47 @@ describe("roles", () => {
     // line, not a fork.
     const res = await alpha.post<{ error: string }>("/returns/resend", {
       packageId: alphaReturnedPackageId,
-      newSenderId: "PQTWICE001ES",
+      newSenderId: SENDER_A,
     });
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ error: "this package has already been resent" });
+  });
+
+  it("refuses a resend to a package that is not in the campaign", async () => {
+    const res = await alpha.post<{ error: string }>("/returns/resend", {
+      packageId: alphaReturnedPackageId,
+      newSenderId: "PQNOTHERE001ES",
+    });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "no package with that ID in this campaign" });
+  });
+
+  it("refuses to resend a package as itself", async () => {
+    const res = await alpha.post<{ error: string }>("/returns/resend", {
+      packageId: alphaReturnedPackageId,
+      newSenderId: SENDER_A_RETURNED,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "a package cannot be resent as itself" });
+  });
+
+  it("refuses a package that is already part of a chain", async () => {
+    const res = await alpha.post<{ error: string }>("/returns/resend", {
+      packageId: alphaReturnedPackageId,
+      newSenderId: SENDER_A_RESEND,
+    });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: "that package is already part of a resend chain" });
+  });
+
+  it("refuses a returned package as the resend", async () => {
+    // SENDER_A_THIRD came back in an earlier test and is not part of any chain.
+    const res = await alpha.post<{ error: string }>("/returns/resend", {
+      packageId: alphaReturnedPackageId,
+      newSenderId: SENDER_A_THIRD,
+    });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: "that package has already been returned" });
   });
 
   it("the recent list names the package a resend was sent as", async () => {
@@ -593,10 +640,10 @@ describe("a platform super-admin works across customers", () => {
     );
 
     const of = (name: string) => list.body.find((c) => c.name === name)!;
-    // Three uploaded lines, two resends added later, three of the five packages came back.
+    // Seven uploaded lines; the resend target is one of them, marked as the second attempt.
     expect(of("Alpha March")).toMatchObject({
-      total_rows: 3,
-      package_count: 5,
+      total_rows: 7,
+      package_count: 7,
       return_count: 3,
     });
     // A campaign with nothing in it still appears, with zeroes.
@@ -633,8 +680,8 @@ describe("campaign list counts", () => {
     expect(list.status).toBe(200);
 
     const of = (name: string) => list.body.find((c) => c.name === name)!;
-    // beforeAll imported one three-line list into Alpha March; Alpha Reprise got one line.
-    expect(of("Alpha March")).toMatchObject({ upload_count: 1, total_rows: 3 });
+    // beforeAll imported one seven-line list into Alpha March; Alpha Reprise got one line.
+    expect(of("Alpha March")).toMatchObject({ upload_count: 1, total_rows: 7 });
     expect(of("Alpha Reprise")).toMatchObject({ upload_count: 1, total_rows: 1 });
     // A campaign with nothing uploaded still lists, with zeroes rather than nulls.
     expect(of("Alpha Other")).toMatchObject({ upload_count: 0, total_rows: 0 });
@@ -648,7 +695,7 @@ describe("campaign list counts", () => {
     expect(res.body.map((u) => u.filename).sort()).toEqual(["alpha.xlsx", "reprise.xlsx"]);
     expect(res.body.find((u) => u.filename === "alpha.xlsx")).toMatchObject({
       campaign_id: alphaCampaign,
-      row_count: 3,
+      row_count: 7,
     });
     // Never another company's uploads.
     expect(res.body.some((u) => u.filename === "beta.xlsx")).toBe(false);
@@ -662,7 +709,7 @@ describe("exporting one uploaded list", () => {
       `/campaigns/${alphaCampaign}/uploads`
     );
     const list = lists.body[0];
-    expect(list.row_count).toBe(3);
+    expect(list.row_count).toBe(7);
 
     const res = await alpha.raw(`/campaigns/${alphaCampaign}/export?uploadId=${list.id}`);
     expect(res.status).toBe(200);
@@ -675,10 +722,19 @@ describe("exporting one uploaded list", () => {
       header: 1,
       raw: false,
     });
-    // A header row plus the three uploaded lines: the two resends are not in any list.
-    expect(matrix).toHaveLength(4);
+    // A header row plus the seven uploaded lines. A resend target is an uploaded line too, so it is
+    // here — the report says which attempt it is in the chain columns.
+    expect(matrix).toHaveLength(8);
     expect(matrix.slice(1).map((r) => String(r[2])).sort()).toEqual(
-      [SENDER_A, SENDER_A_RETURNED, SENDER_A_THIRD].sort()
+      [
+        SENDER_A,
+        SENDER_A_RETURNED,
+        SENDER_A_THIRD,
+        SENDER_A_RESEND,
+        SENDER_A_SECOND_RESEND,
+        USER_RESEND_1,
+        USER_RESEND_2,
+      ].sort()
     );
   });
 
@@ -710,8 +766,9 @@ describe("return counters", () => {
       recent: number;
     }>("/returns/summary");
     expect(summary.status).toBe(200);
-    // Six packages exist (three uploaded, three resends), three of them came back, two were resent.
-    expect(summary.body.sent).toBe(6);
+    // Eight packages exist across the company (seven uploaded to Alpha March, one to Alpha Reprise),
+    // three came back, two were resent.
+    expect(summary.body.sent).toBe(8);
     expect(summary.body.returns).toBe(3);
     expect(summary.body.resends).toBe(2);
     expect(summary.body.recent).toBe(100);
@@ -721,7 +778,7 @@ describe("return counters", () => {
     const betaSummary = await beta.get<{ sent: number; returns: number; resends: number }>(
       "/returns/summary"
     );
-    expect(betaSummary.body).toMatchObject({ sent: 1, returns: 0, resends: 0 });
+    expect(betaSummary.body).toMatchObject({ sent: 2, returns: 0, resends: 0 });
   });
 });
 
@@ -803,6 +860,32 @@ describe("resend chains", () => {
     const res = await beta.get<{ error: string }>("/returns/chains/export");
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "this company has no resends to report" });
+  });
+
+  it("shades returned rows red and resent rows green in the campaign export", async () => {
+    // The colours are the point of the export: the operator's original list, marked up.
+    const res = await alpha.raw(`/campaigns/${alphaCampaign}/export`);
+    expect(res.status).toBe(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.buffer);
+    const sheet = wb.worksheets[0];
+
+    const fillOf = (sender: string): string | undefined => {
+      let found: string | undefined;
+      sheet.eachRow((row) => {
+        if (String(row.getCell(3).value) === sender) {
+          const fill = row.getCell(1).fill as { fgColor?: { argb?: string } } | undefined;
+          found = fill?.fgColor?.argb;
+        }
+      });
+      return found;
+    };
+
+    expect(fillOf(SENDER_A)).toBeUndefined(); // never came back
+    expect(fillOf(SENDER_A_RETURNED)).toBe("FFFFC7CE"); // red
+    expect(fillOf(SENDER_A_SECOND_RESEND)).toBe("FFC6EFCE"); // green
+    // Returned wins over resent: this one went out again AND came back.
+    expect(fillOf(SENDER_A_RESEND)).toBe("FFFFC7CE");
   });
 
   it("puts the same chain columns on the campaign export", async () => {
@@ -955,7 +1038,7 @@ describe("a `user` links the resend that follows a return", () => {
 
     const res = await alphaUser.post<{ senderId: string; campaignId: number }>("/returns/resend", {
       packageId: latest.body[0].id,
-      newSenderId: "PQUSERRESEND01ES",
+      newSenderId: USER_RESEND_1,
     });
     expect(res.status).toBe(201);
     expect(res.body.senderId).toBe("PQUSERRESEND01ES");
@@ -1020,7 +1103,7 @@ describe("the boundary is the request, not the account", () => {
     );
     expect(campaigns.status).toBe(200);
     expect(campaigns.body).toEqual([
-      expect.objectContaining({ name: "Beta March", package_count: 1 }),
+      expect.objectContaining({ name: "Beta March", package_count: 2 }),
     ]);
 
     expect(
@@ -1059,13 +1142,13 @@ describe("the boundary is the request, not the account", () => {
   it("resends another customer's returned package, still inside that customer", async () => {
     const res = await alphaUser.post<{ campaignId: number }>("/returns/resend", {
       packageId: betaPackageId,
-      newSenderId: "PQCROSS001ES",
+      newSenderId: BETA_RESEND,
     });
     expect(res.status).toBe(201);
     expect(res.body.campaignId).toBe(betaCampaign);
 
     const betaPackages = await beta.get<PackageRow[]>(`/campaigns/${betaCampaign}/packages`);
-    expect(betaPackages.body.map((p) => p.sender_id)).toContain("PQCROSS001ES");
+    expect(betaPackages.body.map((p) => p.sender_id)).toContain(BETA_RESEND);
   });
 
   it("counts each customer separately, whichever one the caller asked for", async () => {
@@ -1353,5 +1436,130 @@ describe("a platform super-admin fills in a campaign it is not attached to", () 
         })
       ).status
     ).toBe(404);
+  });
+});
+
+// The campaign's return package list: the IDs behind the two counters, one row each.
+describe("a campaign's return package list", () => {
+  interface ListRow {
+    sender_id: string;
+    status: "Returned" | "Resent";
+    reason_label: string | null;
+  }
+  interface LinkRow {
+    returned_id: string;
+    reason: string | null;
+    resent_id: string;
+    returned_again_id: string | null;
+    returned_again_reason: string | null;
+  }
+  interface ListBody {
+    campaign: { id: number; name: string };
+    rows: ListRow[];
+    links: LinkRow[];
+  }
+
+  it("lists every returned and resent package once, a return winning", async () => {
+    const res = await alpha.get<ListBody>(`/returns/campaigns/${alphaCampaign}/return-list`);
+    expect(res.status).toBe(200);
+    expect(res.body.campaign).toEqual({ id: alphaCampaign, name: "Alpha March" });
+
+    const byId = new Map(res.body.rows.map((r) => [r.sender_id, r]));
+    expect(byId.get(SENDER_A_RETURNED)).toMatchObject({
+      status: "Returned",
+      reason_label: "estacionada",
+    });
+    expect(byId.get(USER_RESEND_2)).toMatchObject({ status: "Resent", reason_label: null });
+    // Returned and resent: one row, and it reads as a return.
+    expect(res.body.rows.filter((r) => r.sender_id === SENDER_A_RESEND)).toHaveLength(1);
+    expect(byId.get(SENDER_A_RESEND)?.status).toBe("Returned");
+    // Never returned and never resent → not on the list.
+    expect(byId.has(SENDER_A)).toBe(false);
+
+    // One row per return → resend pair, in chain order, with the resent package's own return beside it.
+    expect(res.body.links).toHaveLength(4);
+    expect(res.body.links[0]).toEqual({
+      returned_id: SENDER_A_RETURNED,
+      reason: "estacionada",
+      resent_id: SENDER_A_RESEND,
+      returned_again_id: SENDER_A_RESEND,
+      returned_again_reason: "ausente",
+    });
+    // The last resend has not come back, so its own two columns are empty.
+    expect(res.body.links[3]).toEqual({
+      returned_id: USER_RESEND_1,
+      reason: "ausente",
+      resent_id: USER_RESEND_2,
+      returned_again_id: null,
+      returned_again_reason: null,
+    });
+  });
+
+  it("is open to an operator, and never mixes campaigns", async () => {
+    const mine = await alphaUser.get<ListBody>(
+      `/returns/campaigns/${alphaCampaign}/return-list`
+    );
+    expect(mine.status).toBe(200);
+    expect(mine.body.rows.every((r) => r.sender_id !== SENDER_B)).toBe(true);
+  });
+
+  it("refuses another company's campaign to a confined administrator", async () => {
+    expect((await beta.get(`/returns/campaigns/${alphaCampaign}/return-list`)).status).toBe(404);
+    expect(
+      (await beta.get(`/returns/campaigns/${alphaCampaign}/return-list/export`)).status
+    ).toBe(404);
+  });
+
+  it("wants a real campaign", async () => {
+    expect((await alpha.get("/returns/campaigns/999999/return-list")).status).toBe(404);
+    expect((await alpha.get("/returns/campaigns/abc/return-list")).status).toBe(400);
+  });
+
+  it("downloads the same rows as a one-sheet .xlsx, marked red and green", async () => {
+    const res = await alphaUser.raw(`/returns/campaigns/${alphaCampaign}/return-list/export`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("spreadsheetml");
+    expect(res.headers.get("content-disposition")).toContain("return-package-list");
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.buffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Return package list", "Resend links"]);
+    const sheet = wb.worksheets[0];
+    expect(sheet.getRow(1).values.slice(1)).toEqual(["Package ID", "Status", "Reason"]);
+
+    const ids: string[] = [];
+    const fills = new Map<string, string | undefined>();
+    sheet.eachRow((row, n) => {
+      if (n === 1) return;
+      const id = String(row.getCell(1).value);
+      ids.push(id);
+      const fill = row.getCell(1).fill as { fgColor?: { argb?: string } } | undefined;
+      fills.set(id, fill?.fgColor?.argb);
+    });
+    expect(ids).toContain(USER_RESEND_2);
+    expect(fills.get(USER_RESEND_2)).toBe("FFC6EFCE"); // resent, green
+    expect(fills.get(SENDER_A_RETURNED)).toBe("FFFFC7CE"); // returned, red
+    expect(fills.get(SENDER_A_RESEND)).toBe("FFFFC7CE"); // both: red wins
+
+    // The second sheet is the links table, and it carries no colours.
+    const links = wb.worksheets[1];
+    expect(links.getRow(1).values.slice(1)).toEqual([
+      "Returned ID",
+      "Reason",
+      "Resent ID",
+      "Returned ID",
+      "Reason",
+    ]);
+    expect(links.getRow(2).values.slice(1)).toEqual([
+      SENDER_A_RETURNED,
+      "estacionada",
+      SENDER_A_RESEND,
+      SENDER_A_RESEND,
+      "ausente",
+    ]);
+    const linkFill = links.getRow(2).getCell(1).fill as
+      | { fgColor?: { argb?: string } }
+      | undefined;
+    expect(linkFill?.fgColor?.argb).toBeUndefined();
   });
 });

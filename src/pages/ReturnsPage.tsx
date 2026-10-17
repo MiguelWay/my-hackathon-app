@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { ReturnCounters } from "../components/ReturnCounters";
+import { ReturnPackageList } from "../components/ReturnPackageList";
 
 interface Reason {
   id: number;
@@ -15,6 +16,8 @@ interface ChainNode {
   id: number;
   sender_id: string;
   chain_id: number | null;
+  attempt_no: number;
+  resent_at: string | null;
   created_via: string;
   created_at: string;
   campaign_name: string;
@@ -28,6 +31,8 @@ interface Match {
   id: number;
   sender_id: string;
   chain_id: number | null;
+  attempt_no: number;
+  resent_at: string | null;
   created_via: string;
   extra_columns: Record<string, string> | string;
   campaign_id: number;
@@ -86,12 +91,21 @@ export function ReturnsPage() {
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [resends, setResends] = useState<Record<number, ResendForm>>({});
+  // The return package list opens inline, under the counters.
+  const [listOpen, setListOpen] = useState(false);
+  const [listRefresh, setListRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The outcome of a resend save, shown beside the button that was pressed.
+  const [resendError, setResendError] = useState<string | null>(null);
   // What the last recorded change was, shown beside the search button — the same place every time.
   const [confirmation, setConfirmation] = useState<string | null>(null);
-  // A resend just recorded: shown in the resend row, which is where the action was taken.
-  const [lastResend, setLastResend] = useState<{ original: string; created: string } | null>(null);
+  // A resend just recorded: its row stays below the package, with the package it created under that.
+  const [lastResend, setLastResend] = useState<{
+    original: string;
+    created: string;
+    card: Match | null;
+  } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   /** The campaign's head and counters. Re-read after every change, so the numbers move as they work. */
@@ -134,6 +148,7 @@ export function ReturnsPage() {
     setError(null);
     setConfirmation(null);
     setLastResend(null);
+    setResendError(null);
     searchRef.current?.focus();
   }
 
@@ -147,6 +162,7 @@ export function ReturnsPage() {
     setError(null);
     setConfirmation(null);
     setLastResend(null);
+    setResendError(null);
     setBusy(true);
     setNotes({});
     try {
@@ -161,6 +177,7 @@ export function ReturnsPage() {
 
   async function record(match: Match, reason: Reason) {
     setError(null);
+    setResendError(null);
     setConfirmation(null);
     setBusy(true);
     try {
@@ -173,6 +190,7 @@ export function ReturnsPage() {
       setConfirmation(`Return recorded — "${res.reasonLabel}" for ${match.sender_id}.`);
       setMatches(await lookup(match.sender_id));
       await loadHead();
+      setListRefresh((n) => n + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not record the return");
     } finally {
@@ -183,9 +201,10 @@ export function ReturnsPage() {
   async function saveResend(match: Match) {
     const form = resends[match.id];
     if (!form || !form.senderId.trim()) {
-      setError("Type the new package ID.");
+      setResendError("Type the new package ID.");
       return;
     }
+    setResendError(null);
     setError(null);
     setConfirmation(null);
     setBusy(true);
@@ -196,13 +215,15 @@ export function ReturnsPage() {
         newSenderId: form.senderId.trim(),
       });
       setResends({});
-      setLastResend({ original: match.sender_id, created: res.senderId });
-      // Show the package that was just created, the same way a lookup shows one: its details, its
-      // place in the chain, and the confirmation that it was recorded.
-      setMatches(await lookup(res.senderId));
+      const created = await lookup(res.senderId);
+      setLastResend({ original: match.sender_id, created: res.senderId, card: created[0] ?? null });
+      // Keep the package being worked on on screen: the resend row belongs under its card, and the
+      // package the resend created is shown below that row.
+      setMatches(await lookup(match.sender_id));
       await loadHead();
+      setListRefresh((n) => n + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save the resend");
+      setResendError(err instanceof Error ? err.message : "Could not save the resend");
     } finally {
       setBusy(false);
     }
@@ -210,14 +231,18 @@ export function ReturnsPage() {
 
   const onlyMatch = matches !== null && matches.length === 1 ? matches[0] : null;
   // The next attempt in this package's chain, when it has already been sent again.
-  const successor = onlyMatch ? onlyMatch.chain.find((n) => n.id > onlyMatch.id) ?? null : null;
+  const successor = onlyMatch
+    ? onlyMatch.chain.find((n) => n.attempt_no > onlyMatch.attempt_no) ?? null
+    : null;
   // The resend row keeps what was saved: which package now follows which, whether it was saved just
   // now or found already resent.
   const resendSaved =
     lastResend?.created ??
     (onlyMatch && onlyMatch.return_id !== null ? successor?.sender_id ?? null : null);
-  const resendOriginal = lastResend?.original ?? onlyMatch?.sender_id ?? null;
   const showResendRow = lastResend !== null || (onlyMatch !== null && onlyMatch.return_id !== null);
+  // The package the resend created, shown under the resend row.
+  const createdCard = lastResend?.card ?? null;
+  const createdExtra = createdCard ? parseExtra(createdCard.extra_columns) : {};
 
   /** A campaign that is not there says so, rather than showing an empty screen to work in. */
   if (!head && error) {
@@ -248,7 +273,23 @@ export function ReturnsPage() {
 
       {error && <p className="error">{error}</p>}
 
-      {head && <ReturnCounters sent={head.sent} returns={head.returns} resends={head.resends} />}
+      {head && (
+        <div className="stats-row">
+          <ReturnCounters sent={head.sent} returns={head.returns} resends={head.resends} />
+          <button
+            type="button"
+            className="secondary return-list-toggle"
+            aria-expanded={listOpen}
+            onClick={() => setListOpen((open) => !open)}
+          >
+            {listOpen ? "Hide return package list" : "Return package list"}
+          </button>
+        </div>
+      )}
+
+      {head && listOpen && (
+        <ReturnPackageList campaignId={Number(campaignId)} refreshToken={listRefresh} />
+      )}
 
       <form className="card inline" onSubmit={search}>
         <label>
@@ -304,50 +345,6 @@ export function ReturnsPage() {
         </div>
       )}
 
-      {/* The resend action, in the same place as the reasons. One resend per package, so once the
-          package has a later attempt the row keeps what was saved and offers no second save. */}
-      {showResendRow && (
-        <div className="card reason-pick">
-          {resendSaved ? (
-            <div className="btn-row">
-              <label>
-                New package ID
-                <input value={resendSaved} readOnly />
-              </label>
-              <button type="button" disabled>
-                Save resend
-              </button>
-              <p className="ok confirmation">
-                ✓ Saved — {resendSaved} now follows {resendOriginal}.
-              </p>
-            </div>
-          ) : (
-            <>
-              <p className="muted">
-                Sent it again? Record the new package ID — it stays in this campaign.
-              </p>
-              {onlyMatch && (
-                <div className="btn-row">
-                  <label>
-                    New package ID
-                    <input
-                      value={resends[onlyMatch.id]?.senderId ?? ""}
-                      onChange={(e) =>
-                        setResends((r) => ({ ...r, [onlyMatch.id]: { senderId: e.target.value } }))
-                      }
-                      placeholder="e.g. PortaP_151"
-                    />
-                  </label>
-                  <button type="button" disabled={busy} onClick={() => saveResend(onlyMatch)}>
-                    Save resend
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
       {matches?.map((m) => {
         const extra = parseExtra(m.extra_columns);
         const returned = m.return_id !== null;
@@ -355,15 +352,15 @@ export function ReturnsPage() {
           <div className="card" key={m.id}>
             <div className="match-head">
               <strong>{m.sender_id}</strong>
-              {m.created_via === "resend" && <span className="badge">resend</span>}
+              {m.attempt_no > 1 && <span className="badge">resend</span>}
               {returned && m.closed_store === 1 && <span className="chip">closed store</span>}
             </div>
 
             {m.chain.length > 1 && (
               <ol className="chain">
-                {m.chain.map((n, i) => (
+                {m.chain.map((n) => (
                   <li key={n.id} className={n.id === m.id ? "now" : ""}>
-                    <span className="k">Attempt {i + 1}</span>
+                    <span className="k">Attempt {n.attempt_no}</span>
                     <span>{n.sender_id}</span>
                     <span className="muted">{n.campaign_name}</span>
                     <span className="muted">
@@ -390,15 +387,84 @@ export function ReturnsPage() {
               </details>
             )}
 
-            {!returned && m.created_via === "resend" && (
+            {!returned && m.attempt_no > 1 && (
               <p className="muted">
-                Resent {m.chain.find((n) => n.id === m.id)?.created_at ?? ""}
+                Resent {m.resent_at ?? ""}
                 {m.chain.length > 1 ? ` — replaces ${m.chain[0].sender_id}` : ""}
               </p>
             )}
           </div>
         );
       })}
+
+      {/* The resend action, directly under the package it is about. One resend per package, so once
+          the package has a later attempt the row keeps what was saved and offers no second save. */}
+      {showResendRow && (
+        <div className="resend-row">
+          {resendSaved ? (
+            <>
+              <label>
+                New package ID
+                <input value={resendSaved} readOnly />
+              </label>
+              <button type="button" disabled>
+                Save resend
+              </button>
+              <span className="resend-saved">Saved</span>
+            </>
+          ) : (
+            onlyMatch && (
+              <>
+                <label>
+                  New package ID
+                  <input
+                    value={resends[onlyMatch.id]?.senderId ?? ""}
+                    onChange={(e) => {
+                      setResendError(null);
+                      setResends((r) => ({
+                        ...r,
+                        [onlyMatch.id]: { senderId: e.target.value },
+                      }));
+                    }}
+                    placeholder="a package ID in this campaign, e.g. PortaP_21"
+                  />
+                </label>
+                <button type="button" disabled={busy} onClick={() => saveResend(onlyMatch)}>
+                  Save resend
+                </button>
+                {resendError && (
+                  <span className="resend-error" role="alert">
+                    {resendError}
+                  </span>
+                )}
+              </>
+            )
+          )}
+        </div>
+      )}
+
+      {/* The package the resend created, under the row that created it. The card above already shows
+          the chain, so this one only needs what is new: the ID and its label columns. */}
+      {createdCard && (
+        <div className="card">
+          <div className="match-head">
+            <strong>{createdCard.sender_id}</strong>
+          </div>
+          {Object.keys(createdExtra).length > 0 && (
+            <details className="section label-details">
+              <summary>Label details</summary>
+              <div className="kv">
+                {Object.entries(createdExtra).map(([k, v]) => (
+                  <div key={k}>
+                    <span className="k">{k}</span>
+                    <span>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
 
       {matches !== null && (
         <div className="btn-row next-action">

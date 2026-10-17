@@ -5,7 +5,9 @@ import ExcelJS from "exceljs";
 import type { Worksheet } from "exceljs";
 import { pool } from "./db";
 import { loadChains } from "./chains";
+import { loadReturnList } from "./returnList";
 import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
+import { isConfined } from "./scope";
 import { optionalPositiveInt } from "./validate";
 import {
   buildExportLayout,
@@ -19,7 +21,8 @@ import {
 
 // Mounted at /campaigns/:campaignId/export, and reused by /admin/campaigns/:id/export.
 // The sheet reproduces the uploaded columns exactly (same names, same order), appends the three
-// reporting columns, and shades every returned row light red.
+// reporting columns, and shades every returned row light red and every resent row light green — red
+// wins, because a package that came back is a return even when it was also used as a resend.
 //
 // ExcelJS is used instead of SheetJS here because the community SheetJS build cannot write cell
 // styles (fills are silently dropped). This is server-side only, so it never reaches the SPA bundle.
@@ -32,6 +35,7 @@ const ah =
 const currentUser = (res: Response) => res.locals.user as AuthUser;
 
 const RETURNED_FILL = "FFFFC7CE"; // the familiar Excel "light red fill"
+const RESENT_FILL = "FFC6EFCE"; // and its "light green fill"
 const HEADER_FILL = "FFEFEFEF";
 const MAX_WIDTH = 45;
 const ROOT_CHUNK = 500;
@@ -42,6 +46,8 @@ interface PackageRow extends RowDataPacket {
   sender_id: string;
   extra_columns: unknown;
   chain_id: number | null;
+  attempt_no: number;
+  resent_at: string | null;
   return_id: number | null;
   reason_label: string | null;
 }
@@ -52,6 +58,8 @@ const toPackageLike = (row: Record<string, unknown>): PackageLike => ({
   sender_id: String(row.sender_id),
   extra_columns: row.extra_columns,
   chain_id: row.chain_id === null || row.chain_id === undefined ? null : Number(row.chain_id),
+  attempt_no:
+    row.attempt_no === null || row.attempt_no === undefined ? 1 : Number(row.attempt_no),
 });
 
 function sheetName(name: string): string {
@@ -142,7 +150,7 @@ export async function sendCampaignExport(
   }
 
   const [rows] = await pool.query<PackageRow[]>(
-    `SELECT p.id, p.upload_id, p.sender_id, p.extra_columns, p.chain_id,
+    `SELECT p.id, p.upload_id, p.sender_id, p.extra_columns, p.chain_id, p.attempt_no, p.resent_at,
             r.id AS return_id, rr.label AS reason_label
        FROM packages p
        LEFT JOIN returns r ON r.package_id = p.id
@@ -176,7 +184,7 @@ export async function sendCampaignExport(
   for (let i = 0; i < roots.length; i += ROOT_CHUNK) {
     const chunk = roots.slice(i, i + ROOT_CHUNK);
     const [chainRows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, upload_id, sender_id, extra_columns, chain_id
+      `SELECT id, upload_id, sender_id, extra_columns, chain_id, attempt_no
          FROM packages
         WHERE customer_id = ? AND (id IN (?) OR chain_id IN (?))`,
       [customerId, chunk, chunk]
@@ -208,15 +216,17 @@ export async function sendCampaignExport(
   for (const row of rows) {
     const pkg = toPackageLike(row);
     const returned = row.return_id !== null;
+    const resent = row.resent_at !== null;
     const added = sheet.addRow([
       ...layout.columns.map((c) => cellFor(pkg, c, layout)),
-      returned ? "Returned" : "Sent",
+      returned ? "Returned" : resent ? "Resent" : "Sent",
       row.reason_label ? String(row.reason_label) : "",
       ...chainCellsFor(pkg),
     ]);
-    if (returned) {
+    const fill = returned ? RETURNED_FILL : resent ? RESENT_FILL : null;
+    if (fill !== null) {
       added.eachCell({ includeEmpty: true }, (cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: RETURNED_FILL } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
       });
     }
   }
@@ -277,6 +287,85 @@ export async function sendChainsExport(res: Response, customerId: number | null)
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   );
   res.setHeader("Content-Disposition", 'attachment; filename="resend-chains.xlsx"');
+  res.setHeader("Content-Length", String(buffer.byteLength));
+  res.end(Buffer.from(buffer));
+}
+
+/**
+ * One campaign's return package list: every package that came back or was used as a resend, one row
+ * each. A package that is both is red — the same rule as the campaign export — so it appears once.
+ */
+export async function sendReturnListExport(
+  res: Response,
+  campaignId: number,
+  user: AuthUser
+): Promise<void> {
+  const [campaigns] = await pool.query<
+    (RowDataPacket & { id: number; name: string; customer_id: number })[]
+  >("SELECT id, name, customer_id FROM campaigns WHERE id = ?", [campaignId]);
+  const campaign = campaigns[0];
+  if (!campaign) {
+    res.status(404).json({ error: "campaign not found" });
+    return;
+  }
+  const customerId = Number(campaign.customer_id);
+  if (isConfined(user) && customerId !== user.customerId) {
+    res.status(404).json({ error: "campaign not found" });
+    return;
+  }
+
+  const { rows, links } = await loadReturnList(customerId, campaignId);
+
+  const header = ["Package ID", "Status", "Reason"];
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Package Returns";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Return package list");
+  writeHeader(sheet, header);
+
+  for (const row of rows) {
+    const returned = row.status === "Returned";
+    const added = sheet.addRow([
+      row.sender_id,
+      row.status,
+      row.reason_label ? String(row.reason_label) : "",
+    ]);
+    added.eachCell({ includeEmpty: true }, (cell) => {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: returned ? RETURNED_FILL : RESENT_FILL },
+      };
+    });
+  }
+  sizeColumns(sheet, header);
+
+  // The pairings, on their own sheet and deliberately uncoloured: the two IDs and what happened are
+  // the whole content. `Returned ID` / `Reason` repeat because the resent package may have come back
+  // too, and its own result sits beside the ID it went out as.
+  const linkHeader = ["Returned ID", "Reason", "Resent ID", "Returned ID", "Reason"];
+  const linksSheet = workbook.addWorksheet("Resend links");
+  writeHeader(linksSheet, linkHeader);
+  for (const link of links) {
+    linksSheet.addRow([
+      link.returned_id,
+      link.reason ?? "",
+      link.resent_id,
+      link.returned_again_id ?? "",
+      link.returned_again_reason ?? "",
+    ]);
+  }
+  sizeColumns(linksSheet, linkHeader);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="return-package-list-${campaignId}-${fileSlug(campaign.name)}.xlsx"`
+  );
   res.setHeader("Content-Length", String(buffer.byteLength));
   res.end(Buffer.from(buffer));
 }

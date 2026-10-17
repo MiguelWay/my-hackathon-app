@@ -33,16 +33,18 @@ Labels are printed from the campaign list, and packages are sent via Correos Esp
 
 ## Step 4 — Package returns (capture and categorise)
 
-Each returned package carries the **original sender ID**. The user **manually types the sender ID** (no OCR, no photos), the app **validates it against the campaign**, and then **asks for the return reason**, from a dropdown of five: **tienda cerrada, ausente, dirección incorrecta, estacionada, otro**. **Campaign form fields: start date, stop date.**
+Each returned package carries the **original sender ID**. The user **manually types the sender ID** (no OCR, no photos), the app **validates it against the campaign**, and then **asks for the return reason**, one of five: **tienda cerrada, ausente, dirección incorrecta, estacionada, otro**. **Campaign form fields: start date, stop date.**
 
 - **Roles:** one **admin** role uploads files; returns are handled by a normal **user** role; **more than one** user is allowed.
 - **OCR:** removed from v1 (manual entry). Optional OCR / barcode scanning is deferred to v2.
 
 ## Step 5 — Resending of packages
 
-Returned packages can be **resent to other retailers**. After the sender ID is known and registered, a **new label with a new sender ID** is applied. The app must **register the new sender ID and associate it with the return package's original ID** — this is why **multiple sender-ID files can be uploaded per campaign**. Match scope is **within the campaign**. If the ID is not found, the package **cannot be resent**. Duplicates do not exist: the original sender ID is marked as a return, the package is reused with a new label, and the key point is linking the **original sender ID** to the **new sender ID** so the **Rasca y Gana codes** can be tracked. A resend is initiated by **uploading a new Excel sheet into the campaign**.
+Returned packages can be **resent to other retailers**. The new label carries a **new package ID**, and that ID **must already exist in the same campaign** — it normally arrives in another uploaded list of labels. The app links the two: the returned sender ID opens the chain and the new sender ID becomes the next attempt. **Nothing is created at resend time and no label data is copied**: the target keeps its own ID and its own address.
 
-- **Resend link:** every physical package gets **one permanent "Package Chain ID"**. Each time it is sent it takes a new sender ID, so the chain is simply the list of sender IDs for that one physical package, in order. Example: Chain `PKG-001` = sender ID **A** (returned: tienda cerrada) → sender ID **B** (returned: ausente) → sender ID **C** (delivered). In the app you can search any of A, B or C and see the whole chain; in the export each row shows `Package Chain ID` and `Resend Of` (the previous sender ID).
+- **Match scope is within the campaign.** If the ID is not in the campaign, the package cannot be resent. A package can be sent again only once (a chain is a line, not a fork), and a returned package cannot be used as a resend target.
+- **Resend link:** every physical package gets **one chain**. Each time it is sent it takes the next package ID, so the chain is simply the list of sender IDs for that one physical package, in order. Example: `ID_126` (returned: tienda cerrada) → `ID_204` (returned: ausente) → `ID_312` (delivered). In the app you can search any of them and see the whole chain, attempt by attempt; the export carries `Original ID`, `Resent as`, `Resent again as`, … on every row.
+- **Colours:** a returned package is **red**; a package used as a resend is **green**. A resent package that comes back turns **red**, and a returned package can never become green.
 
 ## Step 6 — Reporting
 
@@ -55,7 +57,7 @@ Reports on **return rates by category**, using graphs. Secondary to the main out
 
 The app produces an **Excel export of all rows, with returned packages clearly marked**, so those stores are not sent to again.
 
-- **Columns & marking:** keep all original columns unchanged; **append** `Return Status` (OK / RETURNED), `Return Reason`, `Resend Of`; **colour-fill returned rows light red**.
+- **Columns & marking:** keep all original columns unchanged; **append** `Return Status` (Sent / Returned / Resent), `Return Reason`, and the chain columns (`Original ID`, `Resent as`, `Resent again as`, …); **colour-fill returned rows light red and resent rows light green**. **Red wins:** a returned package that was also used as a resend stays red, because red never becomes green.
 - **Scope:** per campaign and per customer.
 - **Format:** **.xlsx**.
 
@@ -80,7 +82,7 @@ The operator removes closed stores from the source database, so the member count
 
 ## Data model
 
-Customer (1 master DB each) → Campaigns (many per customer) → campaign lists (multiple uploads) → store rows / packages → returns (reason; "closed" scoped per campaign) → resends (linked sender IDs, one Package Chain ID) → flagged export.
+Customer (1 master DB each) → Campaigns (many per customer) → campaign lists (multiple uploads) → store rows / packages → returns (reason; "closed" scoped per campaign) → resends (linked package IDs, one chain ordered by attempt) → flagged export.
 
 ## Known tech context (from setup, not part of the intent)
 

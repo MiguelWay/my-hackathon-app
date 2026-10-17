@@ -91,7 +91,7 @@ adminRouter.get(
               (SELECT COUNT(*) FROM packages p JOIN returns r ON r.package_id = p.id
                 WHERE p.campaign_id = c.id) AS return_count,
               (SELECT COUNT(*) FROM packages p
-                WHERE p.campaign_id = c.id AND p.created_via = 'resend') AS resend_count,
+                WHERE p.campaign_id = c.id AND p.attempt_no > 1) AS resend_count,
               (SELECT COUNT(*) FROM campaign_uploads u WHERE u.campaign_id = c.id) AS upload_count,
               (SELECT CAST(COALESCE(SUM(u.row_count), 0) AS UNSIGNED) FROM campaign_uploads u
                 WHERE u.campaign_id = c.id) AS total_rows

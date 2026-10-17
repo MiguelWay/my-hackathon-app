@@ -63,7 +63,7 @@ in one screen, with the campaign's count ticking up.
 | `/` | any | Redirects to `/customers`. Every role lands there. |
 
 **Nav.** A `user` sees exactly one item: **Customers**. A super-admin keeps `Customers · Campaigns ·
-Returned Packages`.
+Users`.
 
 **`Packages returns` comes off the menu for everyone** (decided). With the drill-down it has no campaign
 behind it, and the way in is Customers → campaign. It was put back in the menu only because the
@@ -90,7 +90,10 @@ Holds just that campaign's work, and nothing else:
 4. **The match** — exactly what the screen shows today: the sender ID, the campaign, a `closed store`
    chip, the chain as attempts, the uploaded columns, and either the recorded return or the reason
    buttons plus the optional note.
-5. **The resend form** — for a returned package, under the match.
+5. **The resend form** — for a returned package, directly under its card: the ID of a package that
+   already exists in this campaign, which becomes the next attempt of the chain. The outcome appears
+   beside the button — **Saved**, or the reason it was refused. The chain is ordered by attempt, so a
+   resend target may have a lower id than the package it replaces.
 
 **No customer picker, no campaign picker, no rail, no "All campaigns".** In this flow a search always
 has a campaign behind it. The state that goes with them (`customers`, `selectedCustomer`,
@@ -107,8 +110,8 @@ The campaign's own numbers, in the wording and shape the reports page already us
 ```
 
 - Scoped to **this campaign**, not the customer.
-- `sent` = packages in the campaign (resends included); `returns` = returns on its packages;
-  `resends` = its packages with `created_via = 'resend'`.
+- `sent` = every package row in the campaign; `returns` = returns on its packages;
+  `resends` = the packages used as a resend (`attempt_no > 1`).
 - Re-fetched after every recorded return and every saved resend, so the number moves as the operator
   works.
 

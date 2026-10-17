@@ -51,7 +51,7 @@ campaignsRouter.get(
               (SELECT COUNT(*) FROM packages p JOIN returns r ON r.package_id = p.id
                 WHERE p.campaign_id = c.id) AS return_count,
               (SELECT COUNT(*) FROM packages p
-                WHERE p.campaign_id = c.id AND p.created_via = 'resend') AS resend_count
+                WHERE p.campaign_id = c.id AND p.attempt_no > 1) AS resend_count
          FROM campaigns c
          LEFT JOIN campaign_uploads u ON u.campaign_id = c.id
         WHERE c.customer_id = ?

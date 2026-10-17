@@ -22,6 +22,7 @@ interface ChainRow extends RowDataPacket {
   id: number;
   sender_id: string;
   chain_id: number | null;
+  attempt_no: number;
   campaign_id: number;
   campaign_name: string;
   reason_label: string | null;
@@ -35,7 +36,7 @@ interface ChainRow extends RowDataPacket {
  */
 export async function loadChains(customerId: number | null): Promise<Chain[]> {
   const [rows] = await pool.query<ChainRow[]>(
-    `SELECT p.id, p.sender_id, p.chain_id, p.campaign_id, c.name AS campaign_name,
+    `SELECT p.id, p.sender_id, p.chain_id, p.attempt_no, p.campaign_id, c.name AS campaign_name,
             rr.label AS reason_label
        FROM packages p
        JOIN campaigns c ON c.id = p.campaign_id
@@ -51,7 +52,7 @@ export async function loadChains(customerId: number | null): Promise<Chain[]> {
             HAVING COUNT(*) > 1
           ) AS chained
         )
-      ORDER BY COALESCE(p.chain_id, p.id), p.id`,
+      ORDER BY COALESCE(p.chain_id, p.id), p.attempt_no, p.id`,
     [customerId, customerId]
   );
 

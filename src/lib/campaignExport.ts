@@ -45,6 +45,10 @@ export const adminCampaignExportUrl = (campaignId: number): string =>
 /** The chain report of the caller's own company: the original ID, then every resend. */
 export const chainsExportUrl = (): string => `${baseUrl}/returns/chains/export`;
 
+/** One campaign's return package list (returned and resent IDs), for use as a real link. */
+export const returnListExportUrl = (campaignId: number): string =>
+  `${baseUrl}/returns/campaigns/${campaignId}/return-list/export`;
+
 /** The name the server gives the chain report, so the save dialog can suggest it before it is built. */
 export const CHAINS_EXPORT_FILENAME = "resend-chains.xlsx";
 

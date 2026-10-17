@@ -20,6 +20,7 @@ import {
 } from "../lib/campaignExport";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { ReturnCounters } from "../components/ReturnCounters";
+import { ReturnPackageList } from "../components/ReturnPackageList";
 
 interface Customer {
   id: number;
@@ -69,6 +70,8 @@ export function CustomersPage() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [campaigns, setCampaigns] = useState<CustomerCampaign[] | null>(null);
   const [exporting, setExporting] = useState<number | null>(null);
+  // Which campaign's return package list is open inline under its row. One at a time.
+  const [listFor, setListFor] = useState<number | null>(null);
   // The open row, which can be below the fold.
   const expandRef = useRef<HTMLTableRowElement | null>(null);
   // Which row's data is allowed to land: a quick click on another customer must not show stale rows.
@@ -213,6 +216,16 @@ export function CustomersPage() {
             resends={camp.resend_count}
           />
         </Link>
+        {/* The list sits in the campaign's own row, before its way into returns: the IDs are what the
+            operator checks while the counters are still in view. */}
+        <button
+          type="button"
+          className="secondary campaign-list-toggle"
+          aria-expanded={listFor === camp.id}
+          onClick={() => setListFor(listFor === camp.id ? null : camp.id)}
+        >
+          {listFor === camp.id ? "Hide return package list" : "Return package list"}
+        </button>
         {/* An operator has no download accordion, so the way in is spelled out: the row is also a
             link, but a button is what it looks like. The administrator's view is unchanged. */}
         {!isSuperAdmin && (
@@ -251,6 +264,12 @@ export function CustomersPage() {
             </div>
             <SaveLocationHint />
           </details>
+        )}
+
+        {listFor === camp.id && (
+          <div className="campaign-list-panel">
+            <ReturnPackageList campaignId={camp.id} />
+          </div>
         )}
       </li>
     );

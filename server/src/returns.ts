@@ -4,7 +4,8 @@ import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
 import { loadChains } from "./chains";
-import { sendChainsExport } from "./export";
+import { loadReturnList } from "./returnList";
+import { sendChainsExport, sendReturnListExport } from "./export";
 import { normalizeSenderId } from "./senderId";
 import { chainRootId, parseResendBody } from "./resends";
 import { isConfined } from "./scope";
@@ -49,7 +50,7 @@ async function chainsFor(customerId: number | null, roots: number[]) {
   const grouped = new Map<number, RowDataPacket[]>();
   if (!roots.length) return grouped;
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT p.id, p.sender_id, p.chain_id, p.created_via, p.created_at,
+    `SELECT p.id, p.sender_id, p.chain_id, p.attempt_no, p.resent_at, p.created_via, p.created_at,
             c.name AS campaign_name,
             r.returned_at, r.note AS return_note,
             rr.label AS reason_label, rr.closed_store
@@ -58,7 +59,7 @@ async function chainsFor(customerId: number | null, roots: number[]) {
        LEFT JOIN returns r ON r.package_id = p.id
        LEFT JOIN return_reasons rr ON rr.id = r.reason_id
       WHERE p.customer_id = ? AND (p.id IN (?) OR p.chain_id IN (?))
-      ORDER BY p.id`,
+      ORDER BY p.attempt_no, p.id`,
     [customerId, roots, roots]
   );
   for (const row of rows) {
@@ -99,7 +100,7 @@ returnsRouter.get(
                  JOIN packages p ON p.id = r.package_id
                 WHERE p.campaign_id = c.id) AS return_count,
               (SELECT COUNT(*) FROM packages p
-                WHERE p.campaign_id = c.id AND p.created_via = 'resend') AS resend_count
+                WHERE p.campaign_id = c.id AND p.attempt_no > 1) AS resend_count
          FROM campaigns c
         WHERE c.customer_id = ?
         ORDER BY c.start_date DESC, c.id DESC`,
@@ -140,7 +141,7 @@ returnsRouter.get(
                  JOIN packages p ON p.id = r.package_id
                 WHERE p.campaign_id = c.id) AS returns,
               (SELECT COUNT(*) FROM packages p
-                WHERE p.campaign_id = c.id AND p.created_via = 'resend') AS resends
+                WHERE p.campaign_id = c.id AND p.attempt_no > 1) AS resends
          FROM campaigns c
          JOIN customers cu ON cu.id = c.customer_id
         WHERE c.id = ?`,
@@ -154,6 +155,52 @@ returnsRouter.get(
       returns: Number(campaign.returns),
       resends: Number(campaign.resends),
     });
+  })
+);
+
+// ---- every package of a campaign that came back or went out again ----
+// One row per package, so a package that is both returned and resent appears once — as a return, since
+// red wins in the report. Both roles may read it: it is the campaign the operator is already working in.
+returnsRouter.get(
+  "/campaigns/:id/return-list",
+  ah(async (req, res) => {
+    const campaignId = optionalPositiveInt(req.params.id);
+    if (campaignId === null || campaignId === undefined) {
+      return res.status(400).json({ error: "campaignId must be a positive number" });
+    }
+    const [campaigns] = await pool.query<
+      (RowDataPacket & { id: number; name: string; customer_id: number })[]
+    >("SELECT id, name, customer_id FROM campaigns WHERE id = ?", [campaignId]);
+    const campaign = campaigns[0];
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
+    // A tenant's own administrator may not leave its company; an operator and a platform super-admin
+    // reach whatever campaign a request names.
+    const caller = currentUser(res);
+    if (isConfined(caller) && Number(campaign.customer_id) !== caller.customerId) {
+      return res.status(404).json({ error: "campaign not found" });
+    }
+
+    const { rows, links } = await loadReturnList(Number(campaign.customer_id), campaignId);
+
+    res.json({
+      campaign: { id: campaign.id, name: campaign.name },
+      rows,
+      // One row per resend link: the package that came back, and the package it went out as next —
+      // with that package's own return, when it came back too.
+      links,
+    });
+  })
+);
+
+// The same rows as a one-sheet .xlsx, so the list can leave the screen.
+returnsRouter.get(
+  "/campaigns/:id/return-list/export",
+  ah(async (req, res) => {
+    const campaignId = optionalPositiveInt(req.params.id);
+    if (campaignId === null || campaignId === undefined) {
+      return res.status(400).json({ error: "campaignId must be a positive number" });
+    }
+    await sendReturnListExport(res, campaignId, currentUser(res));
   })
 );
 
@@ -175,7 +222,7 @@ returnsRouter.get(
       `SELECT
          (SELECT COUNT(*) FROM packages WHERE customer_id = ?) AS sent_count,
          (SELECT COUNT(*) FROM returns WHERE customer_id = ?) AS returns_count,
-         (SELECT COUNT(*) FROM packages WHERE customer_id = ? AND created_via = 'resend')
+         (SELECT COUNT(*) FROM packages WHERE customer_id = ? AND attempt_no > 1)
            AS resend_count`,
       [customerId, customerId, customerId]
     );
@@ -211,7 +258,7 @@ returnsRouter.get(
     const customerId = scope.customerId;
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT r.id, r.returned_at, r.note,
-              p.id AS package_id, p.sender_id, p.chain_id, p.extra_columns,
+              p.id AS package_id, p.sender_id, p.chain_id, p.attempt_no, p.extra_columns,
               c.id AS campaign_id, c.name AS campaign_name,
               rr.code AS reason_code, rr.label AS reason_label, rr.closed_store
          FROM returns r
@@ -234,9 +281,9 @@ returnsRouter.get(
     const resentAs = new Map<number, string>();
     for (const row of rows) {
       const root = chainRootId({ id: Number(row.package_id), chain_id: row.chain_id });
-      // chainsFor returns members in id order, so the first one after this package is its resend.
+      // chainsFor returns members in attempt order, so the first one after this package is its resend.
       const next = (chains.get(root) ?? []).find(
-        (member) => Number(member.id) > Number(row.package_id)
+        (member) => Number(member.attempt_no) > Number(row.attempt_no)
       );
       if (next) resentAs.set(Number(row.package_id), String(next.sender_id));
     }
@@ -293,7 +340,8 @@ returnsRouter.get(
       campaignId === undefined ? [customerId, senderId] : [customerId, senderId, campaignId];
 
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT p.id, p.sender_id, p.chain_id, p.created_via, p.extra_columns, p.source_row,
+      `SELECT p.id, p.sender_id, p.chain_id, p.attempt_no, p.resent_at, p.created_via,
+              p.extra_columns, p.source_row,
               c.id AS campaign_id, c.name AS campaign_name,
               r.id AS return_id, r.returned_at, r.note AS return_note,
               rr.code AS reason_code, rr.label AS reason_label, rr.closed_store
@@ -355,19 +403,20 @@ returnsRouter.post(
     if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
     const { packageId, newSenderId, campaignId: requestedCampaign } = parsed.value;
 
-    // The package names its own customer, and every query below is scoped to that one.
+    // The package being replaced.
     const [orig] = await pool.query<
       (RowDataPacket & {
         id: number;
+        sender_id: string;
         chain_id: number | null;
+        attempt_no: number;
         campaign_id: number;
         customer_id: number;
         campaign_name: string;
         return_id: number | null;
-        extra_columns: unknown;
       })[]
     >(
-      `SELECT p.id, p.chain_id, p.campaign_id, p.customer_id, p.extra_columns,
+      `SELECT p.id, p.sender_id, p.chain_id, p.attempt_no, p.campaign_id, p.customer_id,
               c.name AS campaign_name, r.id AS return_id
          FROM packages p
          JOIN campaigns c ON c.id = p.campaign_id
@@ -401,44 +450,50 @@ returnsRouter.post(
       });
     }
 
+    // The package it goes out as next already exists in this campaign — its own ID and its own label
+    // (address) are the ones printed next, so nothing is invented and nothing is copied forward.
+    const [target] = await pool.query<
+      (RowDataPacket & { id: number; chain_id: number | null; return_id: number | null })[]
+    >(
+      `SELECT p.id, p.chain_id, r.id AS return_id
+         FROM packages p
+         LEFT JOIN returns r ON r.package_id = p.id
+        WHERE p.customer_id = ? AND p.campaign_id = ? AND p.sender_id = ?`,
+      [customerId, campaignId, newSenderId]
+    );
+    if (!target[0]) {
+      return res.status(404).json({ error: "no package with that ID in this campaign" });
+    }
+    if (target[0].id === orig[0].id) {
+      return res.status(400).json({ error: "a package cannot be resent as itself" });
+    }
+    if (target[0].chain_id !== null) {
+      return res.status(409).json({ error: "that package is already part of a resend chain" });
+    }
+    if (target[0].return_id !== null) {
+      return res.status(409).json({ error: "that package has already been returned" });
+    }
+
     const root = chainRootId(orig[0]);
 
-    // One resend per package: a chain is a line, so each attempt may be sent again only once. The
-    // next attempt in the same chain is this package's successor, and its presence means this one
-    // has already gone out again.
+    // One resend per package: a chain is a line, so each attempt may be sent again only once. A later
+    // attempt in the same chain means this one has already gone out again.
     const [successor] = await pool.query<(RowDataPacket & { id: number })[]>(
-      "SELECT id FROM packages WHERE customer_id = ? AND chain_id = ? AND id > ? LIMIT 1",
-      [customerId, root, orig[0].id]
+      "SELECT id FROM packages WHERE customer_id = ? AND chain_id = ? AND attempt_no > ? LIMIT 1",
+      [customerId, root, orig[0].attempt_no]
     );
     if (successor[0]) {
       return res.status(409).json({ error: "this package has already been resent" });
     }
 
-    const [dupe] = await pool.query<RowDataPacket[]>(
-      "SELECT id FROM packages WHERE customer_id = ? AND campaign_id = ? AND sender_id = ?",
-      [customerId, campaignId, newSenderId]
-    );
-    if (dupe[0]) {
-      return res.status(409).json({ error: "that package ID is already used in that campaign" });
-    }
-
-    // A resend is the same label with a new package ID, so it carries the original's label columns
-    // forward. Without this the resend's own card has nothing to show and the export leaves them blank.
-    const extra =
-      orig[0].extra_columns === null || orig[0].extra_columns === undefined
-        ? "{}"
-        : typeof orig[0].extra_columns === "string"
-          ? orig[0].extra_columns
-          : JSON.stringify(orig[0].extra_columns);
-
-    const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO packages
-         (customer_id, campaign_id, upload_id, source_row, sender_id, chain_id, created_via, extra_columns)
-       VALUES (?, ?, NULL, NULL, ?, ?, 'resend', ?)`,
-      [customerId, campaignId, newSenderId, root, extra]
+    await pool.query(
+      `UPDATE packages
+          SET chain_id = ?, attempt_no = ?, resent_at = NOW()
+        WHERE id = ? AND customer_id = ?`,
+      [root, orig[0].attempt_no + 1, target[0].id, customerId]
     );
     res.status(201).json({
-      id: result.insertId,
+      id: target[0].id,
       senderId: newSenderId,
       chainId: root,
       campaignId,

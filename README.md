@@ -1,7 +1,8 @@
 # Package Returns & Store Traceability App
 
 Web app to track packages sent to retail stores (via Correos España), record returns by reason, link
-resends, and export a clearly-flagged list so closed stores are not sent to again.
+resends, and export the original list with returned rows in **red** and resent rows in **green**, so
+closed stores are not sent to again.
 
 **Stack:** React + Vite (SPA) · Node.js + Express (API) · MySQL / MariaDB. No Supabase.
 
