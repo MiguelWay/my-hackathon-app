@@ -72,13 +72,6 @@ export function CampaignsPage() {
   // Which campaign's list-upload is open. A plain toggle, not an accordion: the form appears in the
   // card itself rather than hidden behind a disclosure header.
   const [uploadingFor, setUploadingFor] = useState<number | null>(null);
-  // Which campaign's return package list is open inline. One at a time, like the upload above.
-  const [listFor, setListFor] = useState<number | null>(null);
-
-  // Switching company closes the list, so another company's campaigns always start with it closed.
-  useEffect(() => {
-    setListFor(null);
-  }, [customerId]);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [finishDate, setFinishDate] = useState("");
@@ -373,14 +366,6 @@ export function CampaignsPage() {
                     >
                       {uploadingFor === c.id ? "Close" : "Add a list"}
                     </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      aria-expanded={listFor === c.id}
-                      onClick={() => setListFor(listFor === c.id ? null : c.id)}
-                    >
-                      {listFor === c.id ? "Hide return package list" : "Return package list"}
-                    </button>
                   </div>
                 )}
 
@@ -390,7 +375,7 @@ export function CampaignsPage() {
                   </div>
                 )}
 
-                {listFor === c.id && <ReturnPackageList campaignId={c.id} />}
+                <ReturnPackageList campaignId={c.id} />
 
                 {/* The campaign's own results file, as an accordion inside the campaign: the download
                     belongs to the campaign rather than sitting beside it. */}

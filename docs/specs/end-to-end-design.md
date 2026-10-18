@@ -160,13 +160,14 @@ If the package went out again, the resend row sits directly under its card — s
 (`/campaigns/:id/returns`) holds, top to bottom:
 
 1. the **three counters** — packages sent · returned packages (`n% of sent`) · Resent (`n% of sent`);
-2. **Return package list** — a button beside the counters opens, inline, one table of every package of
-   the campaign that came back or was used as a resend: `Package ID · Status · Reason`. A returned row is
-   red, a resent row is green, and a package that is both appears once as a return (red wins). Below it,
-   **Resend links**: `Returned ID · Reason · Resent ID · Returned ID · Reason`, one row per return → resend
-   pair, with the resent package's own return in the last two columns when it came back too; uncoloured.
-   Both tables download as one workbook, one sheet each. Both roles have the button here; on an
-   administrator's Campaigns screen the same button sits in each campaign card;
+2. **Return package list** — a collapsed accordion directly under the find row: opened, it holds one
+   table of every package of the campaign that came back or was used as a resend: `Package ID · Status ·
+   Reason`.
+   A returned row is red, a resent row is green, and a package that is both appears once as a return
+   (red wins). Below it, **Resend links**: `Returned ID · Reason · Resent ID · Returned ID · Reason`, one
+   row per return → resend pair, with the resent package's own return in the last two columns when it
+   came back too; uncoloured. Both tables download as one workbook, one sheet each. Both roles have the
+   accordion here; on an administrator's Campaigns screen the same accordion sits in each campaign card;
 3. the package lookup, the reason buttons and the resend form — the operator's work;
 4. the **linking table** for that campaign: Original ID · Resent as · Resent again as · return reason
    *(no campaign column: on a campaign's own screen it would repeat the same name on every row)*;
@@ -368,9 +369,9 @@ they are written down, and every task must be checked against them.
    packages sent · returned packages · Resent (`attempt_no > 1`), the last two with their share of what
    was sent — read off the same component (`src/components/ReturnCounters.tsx`). **No dates, and no
    separate "Record returns" text**: the row itself opens the campaign's returns screen. Each row also
-   carries **Return package list**, which opens the two tables inline under that row. For a super-admin
-   the `.xlsx` download controls sit beside each campaign (*Download .xlsx*, and *Save as…* where the
-   browser allows it). This list is how a campaign is reached, and it stays.
+   carries a collapsed **Return package list** accordion, which opens the two tables under that row. For
+   a super-admin the `.xlsx` download controls sit beside each campaign (*Download .xlsx*, and *Save as…*
+   where the browser allows it). This list is how a campaign is reached, and it stays.
 2. **Creating a campaign always names the customer.** The *New campaign* form keeps its **Company**
    selector, listing every customer. Only a platform super-admin may use it; an account attached to a
    company is pinned to its own, and naming another is refused. Neither half may be dropped: a campaign

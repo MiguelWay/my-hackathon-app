@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { downloadExport, returnListExportUrl } from "../lib/campaignExport";
 
@@ -18,14 +18,14 @@ interface Link {
 }
 
 /**
- * A campaign's return package list: every package that came back or was used as a resend, one row
- * each. A package that is both is shown once, as a return — red wins, the same rule as the export.
+ * A campaign's return package list, as a collapsed accordion.
  *
- * Under it, the resend links: one row per return → resend pair, with the resent package's own return
- * beside it when it came back too. That table is deliberately uncoloured.
+ * Opened, it shows every package that came back or was used as a resend, one row each, with returned
+ * rows red and resent rows green (red wins). Under it, the resend links: one row per return → resend
+ * pair, with the resent package's own return beside it when it came back too — uncoloured.
  *
- * The panel loads when it is shown. `refreshToken` makes it reload after a return or resend is saved
- * while it is open.
+ * The list is fetched the first time it is opened and refreshed on every later open, or when
+ * `refreshToken` changes while it is open, so a closed accordion costs nothing.
  */
 export function ReturnPackageList({
   campaignId,
@@ -39,26 +39,32 @@ export function ReturnPackageList({
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const loading = useRef(false);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
 
-  useEffect(() => {
-    let live = true;
+  const load = useCallback(async () => {
+    if (loading.current) return;
+    loading.current = true;
     setRows(null);
     setLinks([]);
     setError(null);
-    api
-      .get<{ rows: Row[]; links: Link[] }>(`/returns/campaigns/${campaignId}/return-list`)
-      .then((res) => {
-        if (!live) return;
-        setRows(res.rows);
-        setLinks(res.links);
-      })
-      .catch((err) => {
-        if (live) setError(err instanceof Error ? err.message : "Could not load the list");
-      });
-    return () => {
-      live = false;
-    };
-  }, [campaignId, refreshToken]);
+    try {
+      const res = await api.get<{ rows: Row[]; links: Link[] }>(
+        `/returns/campaigns/${campaignId}/return-list`
+      );
+      setRows(res.rows);
+      setLinks(res.links);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load the list");
+    } finally {
+      loading.current = false;
+    }
+  }, [campaignId]);
+
+  // Reload when a return or resend is saved while the accordion is open.
+  useEffect(() => {
+    if (detailsRef.current?.open) void load();
+  }, [refreshToken, load]);
 
   async function download() {
     setError(null);
@@ -78,8 +84,15 @@ export function ReturnPackageList({
   }
 
   return (
-    <div className="card return-list-panel">
-      <h2>Return package list</h2>
+    <details
+      ref={detailsRef}
+      className="card return-list-panel"
+      onToggle={(e) => {
+        if (e.currentTarget.open) void load();
+      }}
+    >
+      <summary>Return package list</summary>
+
       {error && <p className="error">{error}</p>}
       {rows === null && !error && <p className="muted">Loading…</p>}
       {rows !== null && rows.length === 0 && (
@@ -113,7 +126,7 @@ export function ReturnPackageList({
 
           {links.length > 0 && (
             <>
-              <h2>Resend links</h2>
+              <h3>Resend links</h3>
               <div className="scroll">
                 <table className="grid">
                   <thead>
@@ -150,6 +163,6 @@ export function ReturnPackageList({
           {notice && <p className="ok">{notice}</p>}
         </>
       )}
-    </div>
+    </details>
   );
 }

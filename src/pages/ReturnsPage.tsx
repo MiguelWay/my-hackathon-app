@@ -91,14 +91,8 @@ export function ReturnsPage() {
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [resends, setResends] = useState<Record<number, ResendForm>>({});
-  // The return package list opens inline, under the counters.
-  const [listOpen, setListOpen] = useState(false);
+  // Bumped after a return or resend, so an open return package list reloads.
   const [listRefresh, setListRefresh] = useState(0);
-
-  // Another campaign always starts with the list closed.
-  useEffect(() => {
-    setListOpen(false);
-  }, [campaignId]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The outcome of a resend save, shown beside the button that was pressed.
@@ -278,23 +272,7 @@ export function ReturnsPage() {
 
       {error && <p className="error">{error}</p>}
 
-      {head && (
-        <div className="stats-row">
-          <ReturnCounters sent={head.sent} returns={head.returns} resends={head.resends} />
-          <button
-            type="button"
-            className="secondary return-list-toggle"
-            aria-expanded={listOpen}
-            onClick={() => setListOpen((open) => !open)}
-          >
-            {listOpen ? "Hide return package list" : "Return package list"}
-          </button>
-        </div>
-      )}
-
-      {head && listOpen && (
-        <ReturnPackageList campaignId={Number(campaignId)} refreshToken={listRefresh} />
-      )}
+      {head && <ReturnCounters sent={head.sent} returns={head.returns} resends={head.resends} />}
 
       <form className="card inline" onSubmit={search}>
         <label>
@@ -312,6 +290,10 @@ export function ReturnsPage() {
         </button>
         {confirmation && <p className="ok confirmation">✓ {confirmation}</p>}
       </form>
+
+      {head && (
+        <ReturnPackageList campaignId={Number(campaignId)} refreshToken={listRefresh} />
+      )}
 
       {matches !== null && matches.length === 0 && (
         <p className="muted">No package with that ID in this campaign.</p>

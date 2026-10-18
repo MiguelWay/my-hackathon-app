@@ -565,24 +565,6 @@ details.campaign-archive {
   color: var(--muted);
 }
 
-/* The counters and the return-list button share one row; the list itself opens underneath. */
-.stats-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.stats-row .stats {
-  flex: 1 1 auto;
-  margin-bottom: 0;
-}
-
-.stats-row .return-list-toggle {
-  margin-left: auto;
-  flex: 0 0 auto;
-}
-
 /* The list's rows carry the same marking as the .xlsx: returned red, resent green, red winning. */
 table.grid tr.row-returned > td {
   background: #ffc7ce;
@@ -692,10 +674,11 @@ ul.campaign-list details.campaign-download {
   margin-top: 4px;
 }
 
-/* The return package list opens under the campaign's own row, full width. */
-ul.campaign-list .campaign-list-panel {
+/* The return package list is an accordion of its own, on a line under the campaign's row. */
+ul.campaign-list details.return-list-panel,
+.campaign-block details.return-list-panel {
   flex: 1 1 100%;
-  margin-top: 8px;
+  margin: 8px 0 0;
 }
 
 button.campaign-choice,
@@ -787,32 +770,16 @@ button.campaign-choice .stats {
     line-height: 1.25;
   }
 
-  /* The returns screen: the list button takes a line of its own under the counters. */
-  .stats-row {
-    flex-wrap: wrap;
-  }
-
-  .stats-row .stats {
-    flex: 1 1 100%;
-  }
-
-  .stats-row .return-list-toggle {
-    width: 100%;
-    margin-left: 0;
-  }
-
-  /* A campaign row: its card on one line, its two actions on the next. */
+  /* A campaign row: its card on one line, its actions under it. */
   ul.campaign-list a.campaign-choice {
     flex: 1 1 100%;
   }
 
   /* The list opens inside a table cell; let it shrink so its tables scroll, not the page. */
-  .campaign-list-panel,
   .return-list-panel {
     min-width: 0;
   }
 
-  ul.campaign-list button.campaign-list-toggle,
   ul.campaign-list a.button {
     flex: 1 1 0;
     min-width: 0;

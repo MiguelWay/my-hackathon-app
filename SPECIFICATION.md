@@ -33,9 +33,10 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 4. **Report** — Return rate by category (bar) per campaign, and resend volume.
 5. **Export** — .xlsx of all rows: returned rows light-red, resent rows light-green (red wins), with the
    status, reason and chain columns, per campaign and per customer.
-6. **Return package list** — beside a campaign's counters, one table of the campaign's returned and
-   resent package IDs (Status + Reason; red/green rows), and a second uncoloured **Resend links** table
-   (Returned ID · Reason · Resent ID · Returned ID · Reason); both downloadable, one sheet each.
+6. **Return package list** — below the Find package row, one table of the campaign's returned and resent
+   package IDs (Status + Reason; red/green rows), and a second uncoloured **Resend links** table
+   (Returned ID · Reason · Resent ID · Returned ID · Reason); a collapsed accordion, both tables
+   downloadable, one sheet each.
 
 ## 4. Features
 **Must-have (v1)**
@@ -48,8 +49,9 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
   of the chain; one resend per package; a returned package cannot be a resend target.
 - **Return package list**: a campaign's returned and resent package IDs (Status + Reason, red/green),
   plus a second, uncoloured **Resend links** table (`Returned ID · Reason · Resent ID · Returned ID ·
-  Reason`); opened inline beside the counters, in the campaign's row on Customers, and in each campaign
-  card on Campaigns; downloadable as a workbook with one sheet each; available to both roles.
+  Reason`); opened as a **collapsed accordion** below the Find package row, in the campaign's row on
+  Customers, and in each campaign card on Campaigns; downloadable as a workbook with one sheet each;
+  available to both roles.
 - Reporting: return rate by category (bar, per campaign) + resend volume.
 - Export .xlsx: original columns unchanged + `Return Status` (Sent / Returned / Resent), `Return Reason`,
   `Original ID`, `Resent as`, `Resent again as`, …; returned rows light-red, resent rows light-green,
