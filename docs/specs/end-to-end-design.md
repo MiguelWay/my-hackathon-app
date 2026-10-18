@@ -96,6 +96,11 @@ still allows it everything. *(This replaced the *Process returns* top-level menu
 **Changing a password** is an ordinary setting: `/account/password`, reached from the top bar, asks for the
 current password and then signs out every *other* session on the account (`POST /auth/password`).
 
+**A session ends after 30 minutes without use.** Every authenticated request stamps
+`sessions.last_seen_at`, and the API refuses a session whose stamp is older; the SPA signs out at the
+same moment, with activity in any tab keeping all of them alive, and the login screen says why. This is
+an idle limit, separate from the 30-day absolute expiry. `SESSION_IDLE_MINUTES` sets it (default 30).
+
 **Getting back in when that is not possible** does not go through the login page — anything reachable from
 that page is only available while that page works. `npm run recover` (`server/src/scripts/account.ts`)
 talks straight to the database: it lists the logins, resets a password (ending that account's sessions),

@@ -58,17 +58,34 @@ async function createSession(userId: number): Promise<{ token: string; expiresAt
 
 export async function getUserFromToken(token: string | undefined): Promise<AuthUser | null> {
   if (!token) return null;
+  const tokenHash = hashToken(token);
   const [rows] = await pool.query<
     (RowDataPacket & { id: number; customer_id: number | null; email: string; role: Role })[]
   >(
     `SELECT u.id, u.customer_id, u.email, u.role
        FROM sessions s
        JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = ? AND s.expires_at > NOW() AND u.is_active = 1`,
-    [hashToken(token)]
+      WHERE s.token_hash = ? AND s.expires_at > NOW() AND u.is_active = 1
+        AND s.last_seen_at > NOW() - INTERVAL ? MINUTE`,
+    [tokenHash, config.sessionIdleMinutes]
   );
   const r = rows[0];
-  return r ? { id: r.id, customerId: r.customer_id, email: r.email, role: r.role } : null;
+  if (!r) {
+    // Drop a cookie that points at a session which is expired or has been idle too long, so the row
+    // does not linger. An unknown token is untouched.
+    await pool
+      .query(
+        `DELETE FROM sessions
+          WHERE token_hash = ?
+            AND (expires_at <= NOW() OR last_seen_at <= NOW() - INTERVAL ? MINUTE)`,
+        [tokenHash, config.sessionIdleMinutes]
+      )
+      .catch(() => undefined);
+    return null;
+  }
+  // Using the app keeps the session alive; the stamp is the idle clock the next request reads.
+  await pool.query("UPDATE sessions SET last_seen_at = NOW() WHERE token_hash = ?", [tokenHash]);
+  return { id: r.id, customerId: r.customer_id, email: r.email, role: r.role };
 }
 
 export const authRouter = Router();

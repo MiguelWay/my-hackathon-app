@@ -209,3 +209,47 @@ describe("campaign dates are mandatory", () => {
     );
   });
 });
+
+// A session is not permanent: thirty minutes without a request ends it, even inside the absolute
+// 30-day expiry. The clock is `sessions.last_seen_at`, stamped by every authenticated request.
+describe("a session ends after 30 minutes of inactivity", () => {
+  it("refuses an idle session before its absolute expiry", async () => {
+    const client = newClient(server.baseUrl);
+    await client.login(ADMIN_EMAIL, ADMIN_PASSWORD);
+    expect((await client.get("/campaigns")).status).toBe(200);
+
+    const { pool } = await import("../../server/src/db");
+    await pool.query(
+      `UPDATE sessions s JOIN users u ON u.id = s.user_id
+          SET s.last_seen_at = NOW() - INTERVAL 31 MINUTE
+        WHERE u.email = ?`,
+      [ADMIN_EMAIL]
+    );
+
+    expect((await client.get("/campaigns")).status).toBe(401);
+  });
+
+  it("keeps a session that is being used, and moves its idle clock forward", async () => {
+    const client = newClient(server.baseUrl);
+    await client.login(ADMIN_EMAIL, ADMIN_PASSWORD);
+
+    const { pool } = await import("../../server/src/db");
+    await pool.query(
+      `UPDATE sessions s JOIN users u ON u.id = s.user_id
+          SET s.last_seen_at = NOW() - INTERVAL 29 MINUTE
+        WHERE u.email = ?`,
+      [ADMIN_EMAIL]
+    );
+
+    expect((await client.get("/campaigns")).status).toBe(200);
+
+    const [rows] = await pool.query(
+      `SELECT TIMESTAMPDIFF(SECOND, s.last_seen_at, NOW()) AS age
+         FROM sessions s JOIN users u ON u.id = s.user_id
+        WHERE u.email = ?`,
+      [ADMIN_EMAIL]
+    );
+    const age = Number((rows as { age: number }[])[0]?.age);
+    expect(age).toBeLessThan(60);
+  });
+});

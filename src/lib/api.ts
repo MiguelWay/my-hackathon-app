@@ -23,6 +23,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const text = await res.text();
   const data: unknown = text ? JSON.parse(text) : null;
   if (!res.ok) {
+    // A session that ran out (absolute expiry or the idle timeout) ends the screen; the auth screens
+    // are excluded so a failed login email/password does not trigger it.
+    if (res.status === 401 && !path.startsWith("/auth/")) {
+      window.dispatchEvent(new Event("auth:expired"));
+    }
     const message =
       data && typeof data === "object" && "error" in data
         ? String((data as { error: unknown }).error)

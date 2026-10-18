@@ -44,6 +44,8 @@ safe, and the accepted risks. Two defaults worth knowing:
 
 - **Self-signup is off in production** (`ALLOW_SELF_SIGNUP`) — create customers with the platform
   super-admin instead.
+- **Sessions end after 30 minutes without use** (`SESSION_IDLE_MINUTES`) — enforced by the API on every
+  request and by the SPA, which signs out at the same point.
 - **Auth endpoints are rate limited** — 10 failed attempts per IP per 15 minutes.
 
 `npm test` resets a dedicated test database, so the API suites run one file at a time

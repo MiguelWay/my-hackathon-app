@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { PasswordInput } from "../components/PasswordInput";
+import { IDLE_MINUTES } from "../lib/idle";
 
 /** The login screen's two doors. Both check the same credentials; a door only picks the view. */
 type Door = "administrator" | "operator";
@@ -9,6 +10,8 @@ type Door = "administrator" | "operator";
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const timedOut = params.get("timeout") === "1";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +38,11 @@ export function LoginPage() {
     <div className="auth-wrap">
       <form className="card auth-card" onSubmit={onSubmit}>
         <h1>Log in</h1>
+        {timedOut && !error && (
+          <p className="ok">
+            You were signed out after {IDLE_MINUTES} minutes without activity.
+          </p>
+        )}
         <label>
           Email
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />

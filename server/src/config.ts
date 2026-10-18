@@ -27,6 +27,9 @@ export const config = {
   // SERVE_SPA=false if a web server (e.g. Plesk's Apache) serves the static files instead.
   serveSpa: (process.env.SERVE_SPA ?? String(isProduction)) === "true",
   sessionTtlDays: num(["SESSION_TTL_DAYS"], 30),
+  // A session ends after this many minutes without a request. The SPA mirrors the default (30) so it
+  // can sign out at the same moment; changing it here also needs the client constant updated.
+  sessionIdleMinutes: num(["SESSION_IDLE_MINUTES"], 30),
   // Self-signup creates a whole new tenant, so it is closed in production unless opened deliberately.
   allowSelfSignup: (process.env.ALLOW_SELF_SIGNUP ?? String(!isProduction)) === "true",
   // Only needed if the SPA is served from a different origin than the API.

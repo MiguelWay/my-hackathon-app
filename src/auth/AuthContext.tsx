@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import { useIdleLogout } from "../lib/idle";
 
 export type Role = "superadmin" | "user";
 
@@ -35,6 +37,7 @@ const AuthContext = createContext<AuthValue | null>(null);
 const VIEW_KEY = "pkgreturns.asUser";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [asUser, setAsUser] = useState(() => sessionStorage.getItem(VIEW_KEY) === "1");
@@ -56,6 +59,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+
+  // Any authenticated request that comes back 401 means the session is gone — expired, or idle too
+  // long. Leave the protected screen instead of showing an error on top of stale data.
+  useEffect(() => {
+    const expired = () => {
+      setView(false);
+      setUser(null);
+      navigate("/login?timeout=1", { replace: true });
+    };
+    window.addEventListener("auth:expired", expired);
+    return () => window.removeEventListener("auth:expired", expired);
+  }, [navigate]);
 
   const login = async (email: string, password: string, asOperator = false) => {
     const me = await api.post<User>("/auth/login", { email, password });
@@ -83,6 +98,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setView(false);
     setUser(null);
   };
+
+  // Thirty minutes without a click, key or scroll — in any tab — signs out. The server enforces the
+  // same window, so this only makes the moment visible rather than letting the screen sit on data.
+  useIdleLogout(user !== null, () => {
+    void api.post("/auth/logout").catch(() => undefined);
+    setView(false);
+    setUser(null);
+    navigate("/login?timeout=1", { replace: true });
+  });
 
   const isAdmin = user?.role === "superadmin" && !asUser;
 
