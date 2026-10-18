@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
+import { useAuth } from "../auth/AuthContext";
 import { PasswordInput } from "../components/PasswordInput";
 
 interface Account {
@@ -12,20 +13,13 @@ interface Account {
   customer_name: string | null;
 }
 
-interface CustomerRef {
-  id: number;
-  name: string;
-}
-
 interface NewUserForm {
-  customerId: string;
   email: string;
   password: string;
   role: "superadmin" | "user";
 }
 
 const emptyForm = (): NewUserForm => ({
-  customerId: "",
   email: "",
   password: "",
   role: "superadmin",
@@ -38,8 +32,8 @@ const emptyForm = (): NewUserForm => ({
  * whether they may sign in. The Customers screen is about customers and their campaigns, not accounts.
  */
 export function UsersPage() {
+  const { user } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [customers, setCustomers] = useState<CustomerRef[]>([]);
   const [form, setForm] = useState<NewUserForm>(emptyForm());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +42,8 @@ export function UsersPage() {
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    const [list, customerList] = await Promise.all([
-      api.get<Account[]>("/admin/users"),
-      api.get<CustomerRef[]>("/admin/customers"),
-    ]);
+    const list = await api.get<Account[]>("/admin/users");
     setAccounts(list);
-    setCustomers(customerList);
   }, []);
 
   useEffect(() => {
@@ -68,7 +58,13 @@ export function UsersPage() {
     setNotice(null);
     setBusy(true);
     try {
-      const created = await api.post<Account>(`/admin/customers/${form.customerId}/users`, {
+      // A platform super-admin creates accounts with no company of their own; a company super-admin's
+      // new accounts belong to its company. The screen no longer asks for a customer either way.
+      const path =
+        user?.customerId == null
+          ? "/admin/users"
+          : `/admin/customers/${user.customerId}/users`;
+      const created = await api.post<Account>(path, {
         email: form.email,
         password: form.password,
         role: form.role,
@@ -121,9 +117,9 @@ export function UsersPage() {
     <div>
       <h1>Users</h1>
       <p className="muted">
-        Every account that can sign in, and the customer it belongs to. Emails are unique across the
-        platform, and a new account can sign in straight away. An account with no customer — a platform
-        super-admin — is created from the command line (<code>npm run create:superadmin</code>).
+        Every account that can sign in. Emails are unique across the platform, and a new account can
+        sign in straight away. An operator already reaches every customer, so an account created here
+        needs no customer of its own; a company super-admin's new accounts stay inside its company.
       </p>
 
       {error && <p className="error">{error}</p>}
@@ -132,21 +128,6 @@ export function UsersPage() {
       <details className="card" open>
         <summary>New user</summary>
         <form className="customer-row" onSubmit={addUser}>
-          <label>
-            Customer
-            <select
-              value={form.customerId}
-              onChange={(e) => setForm({ ...form, customerId: e.target.value })}
-              required
-            >
-              <option value="">Choose a customer…</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
           <label>
             Email
             <input

@@ -244,7 +244,7 @@ lower id than the package it replaces.
 | Log in | `/login` | anyone | — |
 | **Change password** | `/account/password` | both | Your own setting: needs the password you have now, and signs out every other session on the account |
 | **Customers** | `/customers` | both | The home screen. Each row opens (accordion) to its **Campaigns** |
-| **Users** | `/users` | super-admin | Every account on the platform in one place, with the customer it belongs to: create one, activate or deactivate it, delete it. The only screen that administers users |
+| **Users** | `/users` | super-admin | Every account on the platform in one place: create one, activate or deactivate it, delete it. Creating an account asks for no customer — an operator already reaches every customer, and a company super-admin's new accounts stay inside its company. The only screen that administers users |
 | **Campaigns** | `/campaigns` | super-admin | Every company's campaigns in one list, each named with its company; create a campaign for a company; every list under its campaign |
 | **Campaign page** | `/campaigns/:id` | super-admin | One campaign: edit its name/window, upload its lists |
 | **Campaign returns** | `/campaigns/:id/returns` | both | The operator's desk *and* that campaign's report: the counters, the lookup, the reason, the resend, the linking table and its `.xlsx` |

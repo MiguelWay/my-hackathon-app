@@ -215,8 +215,6 @@ async function problemWith(
 
 // Activate or deactivate one account. A deactivated account cannot log in, and its open sessions end
 // immediately, because every authenticated request checks users.is_active.
-// Every account on the platform, with the customer it belongs to. The Users screen is the one place
-// accounts are administered, so it needs the whole set rather than one customer at a time.
 adminRouter.get(
   "/users",
   ah(async (_req, res) => {
@@ -228,6 +226,92 @@ adminRouter.get(
         ORDER BY u.is_active DESC, c.name, u.email`
     );
     res.json(rows);
+  })
+);
+
+interface CreatedAccount {
+  id: number;
+  email: string;
+  role: "superadmin" | "user";
+  customerId: number | null;
+}
+
+type CreateAccountResult =
+  | { ok: true; account: CreatedAccount }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Validates and inserts one account, attached to `customerId` or to no company at all.
+ *
+ * The Users screen no longer asks which customer an account belongs to: an operator already reaches
+ * every customer, and a platform super-admin runs every campaign. A company super-admin's new
+ * accounts stay inside its own company, which the route below enforces.
+ */
+async function createAccount(body: unknown, customerId: number | null): Promise<CreateAccountResult> {
+  const { email, password, role } = (body ?? {}) as {
+    email?: unknown;
+    password?: unknown;
+    role?: unknown;
+  };
+  if (!isValidEmail(email)) return { ok: false, status: 400, error: "a valid email is required" };
+  const pwProblem = passwordProblem(password);
+  if (pwProblem) return { ok: false, status: 400, error: pwProblem };
+  if (role !== "superadmin" && role !== "user") {
+    return { ok: false, status: 400, error: "role must be superadmin or user" };
+  }
+  const newEmail = String(email).trim();
+
+  if (customerId !== null) {
+    const [cust] = await pool.query<RowDataPacket[]>("SELECT id FROM customers WHERE id = ?", [
+      customerId,
+    ]);
+    if (!cust[0]) return { ok: false, status: 404, error: "customer not found" };
+  }
+
+  const [existing] = await pool.query<RowDataPacket[]>("SELECT id FROM users WHERE email = ?", [
+    newEmail,
+  ]);
+  if (existing[0]) return { ok: false, status: 409, error: "email already registered" };
+
+  const hash = await bcrypt.hash(String(password), 12);
+  const [result] = await pool.query<ResultSetHeader>(
+    "INSERT INTO users (customer_id, email, password_hash, role) VALUES (?, ?, ?, ?)",
+    [customerId, newEmail, hash, role]
+  );
+  return {
+    ok: true,
+    account: { id: result.insertId, email: newEmail, role, customerId },
+  };
+}
+
+// Accounts created from the platform Users screen have no company of their own. Only a platform
+// super-admin may create those; a company super-admin creating a customer-less account would be
+// handing out access beyond its own company.
+adminRouter.post(
+  "/users",
+  ah(async (req, res) => {
+    const caller = res.locals.user as AuthUser;
+    if (caller.customerId !== null) {
+      return res.status(403).json({
+        error: "only a platform super-admin can create an account without a customer",
+      });
+    }
+    const result = await createAccount(req.body, null);
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    res.status(201).json(result.account);
+  })
+);
+
+adminRouter.post(
+  "/customers/:id/users",
+  ah(async (req, res) => {
+    const customerId = Number(req.params.id);
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      return res.status(404).json({ error: "customer not found" });
+    }
+    const result = await createAccount(req.body, customerId);
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    res.status(201).json(result.account);
   })
 );
 
@@ -276,38 +360,5 @@ adminRouter.delete(
       throw err;
     }
     res.json({ ok: true, id: user.id, email: user.email });
-  })
-);
-
-adminRouter.post(
-  "/customers/:id/users",
-  ah(async (req, res) => {
-    const customerId = Number(req.params.id);
-    const { email, password, role } = req.body ?? {};
-    if (!isValidEmail(email)) return res.status(400).json({ error: "a valid email is required" });
-    const pwProblem = passwordProblem(password);
-    if (pwProblem) return res.status(400).json({ error: pwProblem });
-    if (role !== "superadmin" && role !== "user") {
-      return res.status(400).json({ error: "role must be superadmin or user" });
-    }
-    const newEmail = String(email).trim();
-    const [cust] = await pool.query<RowDataPacket[]>("SELECT id FROM customers WHERE id = ?", [
-      customerId,
-    ]);
-    if (!cust[0]) return res.status(404).json({ error: "customer not found" });
-
-    const [existing] = await pool.query<RowDataPacket[]>("SELECT id FROM users WHERE email = ?", [
-      newEmail,
-    ]);
-    if (existing[0]) return res.status(409).json({ error: "email already registered" });
-
-    const hash = await bcrypt.hash(String(password), 12);
-    const [result] = await pool.query<ResultSetHeader>(
-      "INSERT INTO users (customer_id, email, password_hash, role) VALUES (?, ?, ?, ?)",
-      [customerId, newEmail, hash, role]
-    );
-    res
-      .status(201)
-      .json({ id: result.insertId, email: newEmail, role, customerId });
   })
 );

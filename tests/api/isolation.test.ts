@@ -1380,6 +1380,34 @@ describe("a customer starts with no campaigns", () => {
       expect.arrayContaining(["alpha.xlsx", "beta.xlsx"])
     );
   });
+
+  it("creates a platform account with no customer, and it reaches every campaign", async () => {
+    const created = await superadmin.post<{
+      id: number;
+      role: string;
+      customerId: number | null;
+    }>("/admin/users", {
+      email: "platform-operator@test.local",
+      password: "password123",
+      role: "user",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ role: "user", customerId: null });
+
+    const operator = newClient(server.baseUrl);
+    await operator.login("platform-operator@test.local", "password123");
+    expect((await operator.get(`/campaigns/${alphaCampaign}`)).status).toBe(200);
+  });
+
+  it("refuses a company super-admin the customer-less account route", async () => {
+    const res = await alpha.post("/admin/users", {
+      email: "escalate@test.local",
+      password: "password123",
+      role: "superadmin",
+    });
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ error: expect.stringContaining("platform super-admin") });
+  });
 });
 
 // One name, one customer (migration 008). The collation ignores case, and treats an accent as equal to
