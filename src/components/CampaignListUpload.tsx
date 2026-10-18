@@ -122,11 +122,6 @@ export function CampaignListUpload({
     <>
       <div className="upload-input">
         <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} />
-        <p className="muted">
-          One campaign can hold several lists; package IDs must be unique within the campaign. Every
-          row also needs a store ID (the company&rsquo;s unique store reference, usually &ldquo;Ref.
-          2&rdquo;).
-        </p>
       </div>
 
       {error && <p className="error">{error}</p>}

@@ -48,6 +48,10 @@ DB_PASSWORD=<the password from step 1>
 DB_NAME=package_returns
 SESSION_TTL_DAYS=30
 SERVE_SPA=true
+APP_URL=https://example.com
+SMTP_HOST=localhost
+SMTP_PORT=25
+SMTP_FROM=no-reply@example.com
 EOF
 chmod 600 .env
 ```
@@ -57,19 +61,26 @@ Notes:
 - `API_PORT` is not needed either; Plesk sets `PORT` and the app honours it (the app prefers `API_PORT`
   when it is set, which is why local dev uses it).
 - `NODE_ENV=production` is set by Plesk's *Application mode* setting (step 5). Do not put it in `.env`.
+- `APP_URL` is the public HTTPS address; the **Forgot password** link is built from it.
+- `SMTP_HOST=localhost` + `SMTP_PORT=25` uses Plesk's own mail server. Set `SMTP_USER`/`SMTP_PASSWORD`
+  only if your server requires authentication.
 
 ## 4. Install, build, migrate
 
 ```sh
-npm ci                 # devDependencies are required by the SPA build step
+npm ci --include=dev   # devDependencies are required by the SPA build step
 npm run build          # writes dist/  (reads .env.production: VITE_API_BASE_URL=/api)
 npm run db:migrate     # applies db/migrations/*.sql, tracked in schema_migrations
-npm run create:superadmin -- you@example.com 'a-strong-password' 'Your Company Name'
+npm run create:superadmin -- you@example.com 'a-strong-password'
 ```
 
-The third argument is optional but useful: it attaches the account to a company (created if it does
-not exist), which is what lets that login **create campaigns and upload lists**. Without it the account
-is a pure platform owner that can only manage companies. Pass an existing company id or name.
+Use `--include=dev` even in production mode: if the shell has `NODE_ENV=production`, a plain `npm ci`
+skips TypeScript and Vite, and `npm run build` then fails.
+
+Without the optional third argument, the account is the **platform owner**: it can manage every
+company, create campaigns, upload lists, process returns and export. With a company id or name, the
+account is a **company super-admin**, confined to that company. For a fresh install, the platform
+owner is the simplest choice; create companies and their campaigns in the UI afterwards.
 
 `npm run db:migrate` and `npm run create:superadmin` must be run **from the application root** (they
 resolve `db/migrations` relative to the working directory).
@@ -80,13 +91,19 @@ Plesk → your domain → **Node.js**:
 
 | Setting | Value |
 |---|---|
-| Document root | the folder containing `package.json` |
-| Application root | same folder |
+| Document root | the folder containing `package.json` — or `dist/`, see the note below |
+| Application root | the folder containing `package.json` |
 | Application startup file | `server/start.mjs` |
 | Application mode | production |
 | Node.js version | 24.x (or 26.x) |
 
 Then **Restart App**.
+
+> **Document root:** the repo root also contains Vite's **source** `index.html`. If your web server
+> serves static files before passing misses to Node, a request for `/` may return that source page
+> instead of the built app. If that happens, set the document root to `dist/` (the built app) and keep
+> `SERVE_SPA=true`; nginx serves the files it finds there, and Passenger hands `/api` and deep links to
+> Node, which still returns the SPA fallback.
 
 `server/start.mjs` registers the tsx loader and loads the TypeScript server, so production runs the
 same source as development with no separate compiled artifact. `tsx` is a normal runtime dependency
@@ -115,15 +132,18 @@ Then in a browser:
 
 1. Open the site, sign in as administrator → you land on **Customers**.
 2. Hard-refresh on a deep link (e.g. `https://your-domain.example/returns`) → the page loads, not a 404.
-3. Upload an `.xlsx` to a campaign, confirm the sender-ID column.
+3. Upload an `.xlsx` to a campaign and confirm the **package ID** and **store ID** columns (the app
+   guesses `Ref. 1` and `Ref. 2`), then import.
 4. Sign in through **Enter as operator**, then record a return: Customers → open a customer → open its campaign.
 5. Download the `.xlsx` and check the returned rows are shaded.
+6. Open **Forgot password** on the login screen and confirm the reset email arrives (check the spam
+   folder; the link uses `APP_URL`).
 
 ## Updating the app
 
 ```sh
 git pull
-npm ci
+npm ci --include=dev
 npm run build
 npm run db:migrate      # only applies new files
 ```

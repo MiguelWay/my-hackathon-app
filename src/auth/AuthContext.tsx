@@ -26,7 +26,6 @@ interface AuthValue {
    * landing somewhere else.
    */
   login: (email: string, password: string, asOperator?: boolean) => Promise<void>;
-  register: (customerName: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -87,12 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me);
   };
 
-  const register = async (customerName: string, email: string, password: string) => {
-    const me = await api.post<User>("/auth/register", { customerName, email, password });
-    setView(false);
-    setUser(me);
-  };
-
   const logout = async () => {
     await api.post("/auth/logout");
     setView(false);
@@ -118,7 +111,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         asUser,
         isAdmin,
         login,
-        register,
         logout,
       }}
     >

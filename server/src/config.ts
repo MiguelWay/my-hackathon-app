@@ -34,6 +34,18 @@ export const config = {
   allowSelfSignup: (process.env.ALLOW_SELF_SIGNUP ?? String(!isProduction)) === "true",
   // Only needed if the SPA is served from a different origin than the API.
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
+  // Absolute URL of the app, used in password-reset links.
+  appUrl: (process.env.APP_URL ?? "http://localhost:4000").replace(/\/+$/, ""),
+  // SMTP is only used for "Forgot password". Without a host, the link is written to the server log
+  // instead (useful in local development, not in production).
+  smtp: {
+    host: process.env.SMTP_HOST ?? "",
+    port: num(["SMTP_PORT"], 587),
+    secure: (process.env.SMTP_SECURE ?? "false") === "true",
+    user: process.env.SMTP_USER ?? "",
+    password: process.env.SMTP_PASSWORD ?? "",
+    from: process.env.SMTP_FROM ?? "no-reply@localhost",
+  },
   rateLimit: {
     // General ceiling per IP across /api.
     apiMax: num(["RATE_LIMIT_API_MAX"], 300),

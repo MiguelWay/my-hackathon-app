@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import { pool } from "./db";
 import { config } from "./config";
+import { sendPasswordReset } from "./mailer";
 import {
   boundedString,
   isValidEmail,
@@ -203,43 +204,88 @@ authRouter.get(
   })
 );
 
-// Changing your own password. It needs the current one, so a borrowed session cannot lock the owner
-// out, and it ends every *other* session on the account — a new password should evict whoever else had
-// the old one — while leaving the caller's own session open.
-//
-authRouter.post(
-  "/password",
-  ah(async (req, res) => {
-    const token = req.cookies?.[COOKIE];
-    const me = await getUserFromToken(token);
-    if (!me || !token) return res.status(401).json({ error: "not authenticated" });
+// ---- Forgot password ----
+// The response is deliberately the same whether or not the account exists, so this cannot be used to
+// discover who has a login. A link is emailed only when an active account matches.
+const RESET_MINUTES = 30;
+const resetHash = (token: string) => crypto.createHash("sha256").update(token).digest("hex");
 
-    const { currentPassword, newPassword } = req.body ?? {};
-    // Reject an over-long password before hashing (see MAX_PASSWORD_LENGTH).
-    if (typeof currentPassword !== "string" || currentPassword.length > MAX_PASSWORD_LENGTH) {
-      return res.status(401).json({ error: "current password is incorrect" });
+authRouter.post(
+  "/forgot",
+  ah(async (req, res) => {
+    const { email } = req.body ?? {};
+    if (isValidEmail(email)) {
+      const address = String(email).trim();
+      const [users] = await pool.query<(RowDataPacket & { id: number })[]>(
+        "SELECT id FROM users WHERE email = ? AND is_active = 1",
+        [address]
+      );
+      const account = users[0];
+      if (account) {
+        // One live link per account: asking again invalidates the previous one.
+        await pool.query("DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL", [
+          account.id,
+        ]);
+        const token = crypto.randomBytes(32).toString("hex");
+        await pool.query(
+          `INSERT INTO password_resets (user_id, token_hash, expires_at)
+           VALUES (?, ?, NOW() + INTERVAL ? MINUTE)`,
+          [account.id, resetHash(token), RESET_MINUTES]
+        );
+        const link = `${config.appUrl}/reset-password?token=${token}`;
+        // Sent in the background: waiting for SMTP would make an existing account noticeably slower to
+        // answer than an unknown one, which is exactly the enumeration this endpoint avoids. A mail
+        // failure must not reveal whether the account exists either, so it is only logged.
+        void sendPasswordReset(address, link).catch((err: unknown) => {
+          console.error("[auth] could not send the password-reset email:", err);
+        });
+      }
+    }
+    res.json({ ok: true });
+  })
+);
+
+authRouter.post(
+  "/reset",
+  ah(async (req, res) => {
+    const { token, newPassword } = req.body ?? {};
+    if (typeof token !== "string" || !/^[a-f0-9]{64}$/i.test(token)) {
+      return res.status(400).json({ error: "that reset link is invalid or has expired" });
     }
     const problem = passwordProblem(newPassword);
     if (problem) return res.status(400).json({ error: problem });
 
-    const [rows] = await pool.query<(RowDataPacket & { password_hash: string })[]>(
-      "SELECT password_hash FROM users WHERE id = ?",
-      [me.id]
-    );
-    // Always run a comparison, so the response does not reveal whether the account still exists.
-    const currentOk = await bcrypt.compare(currentPassword, rows[0]?.password_hash ?? DUMMY_HASH);
-    if (!rows[0] || !currentOk) {
-      console.warn(`[security] failed password change for user ${me.id}`);
-      return res.status(401).json({ error: "current password is incorrect" });
-    }
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [rows] = await conn.query<(RowDataPacket & { id: number; user_id: number })[]>(
+        `SELECT pr.id, pr.user_id
+           FROM password_resets pr
+           JOIN users u ON u.id = pr.user_id
+          WHERE pr.token_hash = ? AND pr.used_at IS NULL AND pr.expires_at > NOW()
+            AND u.is_active = 1
+          FOR UPDATE`,
+        [resetHash(token)]
+      );
+      const reset = rows[0];
+      if (!reset) {
+        await conn.rollback();
+        return res.status(400).json({ error: "that reset link is invalid or has expired" });
+      }
 
-    const hash = await bcrypt.hash(newPassword as string, 12);
-    await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [hash, me.id]);
-    await pool.query("DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?", [
-      me.id,
-      hashToken(token),
-    ]);
-    res.json({ ok: true });
+      const hash = await bcrypt.hash(newPassword as string, 12);
+      await conn.query("UPDATE users SET password_hash = ? WHERE id = ?", [hash, reset.user_id]);
+      await conn.query("UPDATE password_resets SET used_at = NOW() WHERE id = ?", [reset.id]);
+      // A new password evicts every existing session, including a stolen one.
+      await conn.query("DELETE FROM sessions WHERE user_id = ?", [reset.user_id]);
+      await conn.commit();
+      res.json({ ok: true });
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
   })
 );
 

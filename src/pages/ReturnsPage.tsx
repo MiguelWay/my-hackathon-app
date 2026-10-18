@@ -244,6 +244,9 @@ export function ReturnsPage() {
   const createdCard = lastResend?.card ?? null;
   const createdExtra = createdCard ? parseExtra(createdCard.extra_columns) : {};
 
+  // Label columns of the single package on screen, when it has any.
+  const matchedExtra = onlyMatch ? parseExtra(onlyMatch.extra_columns) : {};
+
   /** A campaign that is not there says so, rather than showing an empty screen to work in. */
   if (!head && error) {
     return (
@@ -337,57 +340,19 @@ export function ReturnsPage() {
         </div>
       )}
 
-      {matches?.map((m) => {
-        const extra = parseExtra(m.extra_columns);
-        const returned = m.return_id !== null;
-        return (
-          <div className="card" key={m.id}>
-            <div className="match-head">
-              <strong>{m.sender_id}</strong>
-              {m.attempt_no > 1 && <span className="badge">resend</span>}
-              {returned && m.closed_store === 1 && <span className="chip">closed store</span>}
-            </div>
-
-            {m.chain.length > 1 && (
-              <ol className="chain">
-                {m.chain.map((n) => (
-                  <li key={n.id} className={n.id === m.id ? "now" : ""}>
-                    <span className="k">Attempt {n.attempt_no}</span>
-                    <span>{n.sender_id}</span>
-                    <span className="muted">{n.campaign_name}</span>
-                    <span className="muted">
-                      {n.returned_at
-                        ? `returned ${n.returned_at} · ${n.reason_label}`
-                        : "not returned yet"}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
-
-            {Object.keys(extra).length > 0 && (
-              <details className="section label-details">
-                <summary>Label details</summary>
-                <div className="kv">
-                  {Object.entries(extra).map(([k, v]) => (
-                    <div key={k}>
-                      <span className="k">{k}</span>
-                      <span>{v}</span>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
-
-            {!returned && m.attempt_no > 1 && (
-              <p className="muted">
-                Resent {m.resent_at ?? ""}
-                {m.chain.length > 1 ? ` — replaces ${m.chain[0].sender_id}` : ""}
-              </p>
-            )}
+      {matches !== null && matches.length === 1 && Object.keys(matchedExtra).length > 0 && (
+        <details className="card label-details">
+          <summary>Label details</summary>
+          <div className="kv">
+            {Object.entries(matchedExtra).map(([k, v]) => (
+              <div key={k}>
+                <span className="k">{k}</span>
+                <span>{v}</span>
+              </div>
+            ))}
           </div>
-        );
-      })}
+        </details>
+      )}
 
       {/* The resend action, directly under the package it is about. One resend per package, so once
           the package has a later attempt the row keeps what was saved and offers no second save. */}
@@ -435,8 +400,7 @@ export function ReturnsPage() {
         </div>
       )}
 
-      {/* The package the resend created, under the row that created it. The card above already shows
-          the chain, so this one only needs what is new: the ID and its label columns. */}
+      {/* The package the resend was sent as, shown under the row that saved it. */}
       {createdCard && (
         <div className="card">
           <div className="match-head">

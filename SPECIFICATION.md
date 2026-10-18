@@ -44,7 +44,8 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 
 ## 4. Features
 **Must-have (v1)**
-- Auth + roles (Admin, User), with every request scoped to the one customer it names.
+- Auth + roles (Admin, User), with every request scoped to the one customer it names. Self-signup is
+  closed in production; **Forgot password** emails a single-use, 30-minute reset link.
 - Excel upload per campaign (multiple uploads per campaign); **package ID and store ID column**
   auto-detect + confirm; both are required.
 - Store every row with all columns; one row = one package. The store ID is the company's own unique
@@ -53,6 +54,8 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
   (tienda cerrada, ausente, dirección incorrecta, estacionada, otro); one return per package.
 - Resend linking: the returned package → an existing package of the same campaign, as the next attempt
   of the chain; one resend per package; a returned package cannot be a resend target.
+- Admin deletion: a super-admin can delete a campaign (with its uploads, packages and returns) and a
+  customer (with its campaigns); a customer with accounts attached is refused until they are moved.
 - **Return package list**: a campaign's returned and resent package IDs (Status + Reason, red/green),
   plus a second, uncoloured **Resend links** table (`Returned ID · Reason · Resent ID · Returned ID ·
   Reason`); opened as a **collapsed accordion** below the Find package row, in the campaign's row on

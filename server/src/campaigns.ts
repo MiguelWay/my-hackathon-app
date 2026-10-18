@@ -210,3 +210,16 @@ campaignsRouter.patch(
     });
   })
 );
+
+// Deleting a campaign removes its uploads, packages and returns: the foreign keys cascade from here.
+campaignsRouter.delete(
+  "/:id",
+  requireSuperAdmin,
+  ah(async (req, res) => {
+    const campaign = await scopedCampaign(req.params.id, currentUser(res));
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
+
+    await pool.query("DELETE FROM campaigns WHERE id = ?", [campaign.id]);
+    res.json({ ok: true, id: campaign.id, name: campaign.name });
+  })
+);

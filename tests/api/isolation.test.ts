@@ -1408,10 +1408,123 @@ describe("a customer starts with no campaigns", () => {
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ error: expect.stringContaining("platform super-admin") });
   });
+
+  it("lists customers A to Z for the administrator and for the operator", async () => {
+    const sources = [
+      { client: superadmin, path: "/admin/customers" },
+      { client: alphaUser, path: "/returns/customers" },
+    ];
+    for (const { client, path } of sources) {
+      const res = await client.get<{ name: string }[]>(path);
+      expect(res.status).toBe(200);
+      const names = res.body.map((c) => c.name);
+      expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    }
+  });
 });
 
-// One name, one customer (migration 008). The collation ignores case, and treats an accent as equal to
-// the plain letter, so a name differing only in case or accent is the same name.
+// Deleting a campaign or a customer: the admin's destructive actions. Campaigns cascade to their
+// uploads, packages and returns; a customer's campaigns are removed with it, but its accounts are not.
+describe("deleting campaigns and customers", () => {
+  const window = { startDate: "2026-08-01", finishDate: "2026-08-31" };
+
+  async function makeCustomer(name: string): Promise<number> {
+    const res = await superadmin.post<{ id: number }>("/admin/customers", { name });
+    expect(res.status).toBe(201);
+    return res.body.id;
+  }
+
+  async function makeCampaign(customerId: number | null, name: string): Promise<number> {
+    const res = await superadmin.post<{ id: number }>("/campaigns", {
+      ...window,
+      name,
+      ...(customerId === null ? {} : { customerId }),
+    });
+    expect(res.status).toBe(201);
+    return res.body.id;
+  }
+
+  async function upload(campaignId: number, sender: string): Promise<void> {
+    const res = await superadmin.post(`/campaigns/${campaignId}/packages`, {
+      filename: "delete-test.xlsx",
+      columns: COLUMNS,
+      senderColumn: 2,
+      storeColumn: STORE_COLUMN,
+      rows: [row(sender, "Madrid")],
+    });
+    expect(res.status).toBe(201);
+  }
+
+  it("deletes a campaign with its packages, leaving the customer", async () => {
+    const customerId = await makeCustomer("Campaign Delete Co");
+    const campaignId = await makeCampaign(customerId, "Disposable campaign");
+    await upload(campaignId, "PQDELETE0001ES");
+
+    const res = await superadmin.delete<{ id: number }>(`/campaigns/${campaignId}`);
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(campaignId);
+    expect((await superadmin.get(`/campaigns/${campaignId}`)).status).toBe(404);
+
+    // The customer is still there.
+    const customers = await superadmin.get<{ id: number }[]>("/admin/customers");
+    expect(customers.body.some((c) => c.id === customerId)).toBe(true);
+    await superadmin.delete(`/admin/customers/${customerId}`);
+  });
+
+  it("deletes a customer with its campaigns and packages", async () => {
+    const customerId = await makeCustomer("Customer Delete Co");
+    const campaignId = await makeCampaign(customerId, "Goes with the customer");
+    await upload(campaignId, "PQDELETE0002ES");
+
+    const res = await superadmin.delete<{ deletedCampaigns: number }>(
+      `/admin/customers/${customerId}`
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.deletedCampaigns).toBe(1);
+
+    const customers = await superadmin.get<{ id: number }[]>("/admin/customers");
+    expect(customers.body.some((c) => c.id === customerId)).toBe(false);
+    expect((await superadmin.get(`/campaigns/${campaignId}`)).status).toBe(404);
+  });
+
+  it("lets a company super-admin delete a campaign in its own company", async () => {
+    const created = await alpha.post<{ id: number }>("/campaigns", {
+      ...window,
+      name: "Alpha disposable",
+    });
+    expect(created.status).toBe(201);
+    expect((await alpha.delete(`/campaigns/${created.body.id}`)).status).toBe(200);
+  });
+
+  it("refuses a company super-admin deleting a customer", async () => {
+    const res = await alpha.delete(`/admin/customers/${alphaCustomerId}`);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "only a platform super-admin can delete a customer" });
+  });
+
+  it("refuses an operator both deletions", async () => {
+    expect((await alphaUser.delete(`/campaigns/${alphaCampaign}`)).status).toBe(403);
+    expect((await alphaUser.delete(`/admin/customers/${alphaCustomerId}`)).status).toBe(403);
+  });
+
+  it("refuses a customer that still has an account attached", async () => {
+    const customerId = await makeCustomer("Has Accounts Co");
+    const made = await superadmin.post<{ id: number }>(`/admin/customers/${customerId}/users`, {
+      email: "attached@test.local",
+      password: "password123",
+      role: "user",
+    });
+    expect(made.status).toBe(201);
+
+    const blocked = await superadmin.delete<{ error: string }>(`/admin/customers/${customerId}`);
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error).toContain("accounts attached");
+
+    // Once the account is gone, the customer can go.
+    expect((await superadmin.delete(`/admin/users/${made.body.id}`)).status).toBe(200);
+    expect((await superadmin.delete(`/admin/customers/${customerId}`)).status).toBe(200);
+  });
+});
 describe("one customer name, one customer", () => {
   it("refuses a name that is already taken, whatever its case", async () => {
     const first = await superadmin.post("/admin/customers", { name: "Duplicado SA" });

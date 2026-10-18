@@ -21,7 +21,6 @@ export function Layout({ children }: { children: ReactNode }) {
             <span>{user.email}</span>
             <span className={`badge role-${user.role}`}>{user.role}</span>
             {asUser && <span className="chip">user view</span>}
-            <Link to="/account/password">Change password</Link>
             <button
               onClick={async () => {
                 await logout();

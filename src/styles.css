@@ -498,6 +498,11 @@ details.section[open] > summary {
   gap: 12px;
 }
 
+/* Pushes the campaign's Delete control to the right end of its heading row. */
+.campaign-delete {
+  margin-left: auto;
+}
+
 ul.upload-list {
   list-style: none;
   margin: 10px 0 0;
@@ -612,6 +617,13 @@ table.grid tr.customer-head.open > td {
 
 td.disclosure-cell {
   width: 1%;
+  text-align: right;
+}
+
+/* The row's destructive action, kept apart from the disclosure that opens the row. */
+td.row-actions {
+  width: 1%;
+  white-space: nowrap;
   text-align: right;
 }
 

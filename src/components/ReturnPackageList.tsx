@@ -153,7 +153,11 @@ export function ReturnPackageList({
               </div>
             </>
           )}
+        </>
+      )}
 
+      {rows !== null && (
+        <>
           <div className="btn-row">
             <button type="button" className="secondary" disabled={downloading} onClick={download}>
               {downloading ? "Preparing…" : "Download .xlsx"}

@@ -21,6 +21,8 @@ import {
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { ReturnCounters } from "../components/ReturnCounters";
 import { ReturnPackageList } from "../components/ReturnPackageList";
+import { StoreIdReport } from "../components/StoreIdReport";
+import { isClosed, localToday } from "../lib/campaignDates";
 
 interface Customer {
   id: number;
@@ -39,24 +41,12 @@ interface CustomerCampaign {
   resend_count: number;
 }
 
-/** The machine's local date as YYYY-MM-DD, so the comparison cannot shift by a timezone. */
-function localToday(): string {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
-}
-
-/** Closed once its finish date is before today. An upcoming campaign, or one with no finish date, is open. */
-function isClosed(campaign: CustomerCampaign, todayIso: string): boolean {
-  return campaign.finish_date !== null && campaign.finish_date < todayIso;
-}
-
 export function CustomersPage() {
   // The admin controls render for a super-admin, and are hidden while a super-admin is in the
   // operator's view — which is what makes this screen look like what a `user` sees. One page, two
   // roles: the only difference is which controls render.
-  const { isAdmin: isSuperAdmin } = useAuth();
+  const { user, isAdmin: isSuperAdmin } = useAuth();
+  const canDeleteCustomers = isSuperAdmin && user?.customerId == null;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const wantedCustomer = searchParams.get("customer") ?? "";
@@ -64,6 +54,8 @@ export function CustomersPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The customer whose delete has been armed, so deleting is never one careless click.
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
   // The customer whose row is open. Its campaigns are all this row holds; accounts live on the
   // Users screen.
@@ -102,6 +94,24 @@ export function CustomersPage() {
       navigate(`/campaigns?customer=${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create");
+    }
+  }
+
+  /** Deletes a customer and, with it, every campaign and package it owns. */
+  async function removeCustomer(customer: Customer) {
+    setError(null);
+    setNotice(null);
+    try {
+      await api.delete(`/admin/customers/${customer.id}`);
+      setNotice(`Deleted ${customer.name} and its campaigns.`);
+      setConfirmDelete(null);
+      if (openId === customer.id) {
+        setOpenId(null);
+        setCampaigns(null);
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete that customer");
     }
   }
 
@@ -255,6 +265,7 @@ export function CustomersPage() {
         )}
 
         <ReturnPackageList campaignId={camp.id} />
+        <StoreIdReport campaignId={camp.id} />
       </li>
     );
   }
@@ -262,11 +273,9 @@ export function CustomersPage() {
   return (
     <div>
       <h1>Customers</h1>
-      <p className="muted">
-        {isSuperAdmin
-          ? "Each customer is a separate company. Their data never mixes with another customer's. Open a row for its campaigns."
-          : "Pick a customer to see its campaigns, then a campaign to record its returns."}
-      </p>
+      {!isSuperAdmin && (
+        <p className="muted">Pick a customer to see its campaigns, then a campaign to record its returns.</p>
+      )}
 
       {isSuperAdmin && (
         <details className="card">
@@ -278,10 +287,6 @@ export function CustomersPage() {
             </label>
             <button>Create</button>
           </form>
-          <p className="muted">
-            Creating a customer takes you to the campaign form with it already chosen, so you can set up
-            its first campaign straight away.
-          </p>
         </details>
       )}
 
@@ -299,6 +304,7 @@ export function CustomersPage() {
             <tr>
               <th>ID</th>
               <th>Name</th>
+              {canDeleteCustomers && <th></th>}
               <th></th>
             </tr>
           </thead>
@@ -313,6 +319,44 @@ export function CustomersPage() {
                   >
                     <td>{c.id}</td>
                     <td>{c.name}</td>
+                    {canDeleteCustomers && (
+                      <td className="row-actions">
+                        {confirmDelete === c.id ? (
+                          <div className="btn-row">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void removeCustomer(c);
+                              }}
+                            >
+                              Confirm delete
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDelete(null);
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDelete(c.id);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </td>
+                    )}
                     <td className="disclosure-cell">
                       <button
                         type="button"
@@ -332,7 +376,7 @@ export function CustomersPage() {
 
                   {open && (
                     <tr className="expand" id={`customer-${c.id}-panel`} ref={expandRef}>
-                      <td colSpan={3}>
+                      <td colSpan={canDeleteCustomers ? 4 : 3}>
                         <section className="customer-group">
                           <h2 className="group-title">Campaigns</h2>
                           {campaigns === null ? (

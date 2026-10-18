@@ -93,16 +93,20 @@ takes a **fresh login**. This is a **view, not a permission**: the account stays
 still allows it everything. *(This replaced the *Process returns* top-level menu item, removed along with
 *Returned Packages* on 2026-10-16.)*
 
-**Changing a password** is an ordinary setting: `/account/password`, reached from the top bar, asks for the
-current password and then signs out every *other* session on the account (`POST /auth/password`).
+**Forgot password** is a link on the login screen (`/forgot-password`). It always answers the same way:
+if the address belongs to an active account, a single-use link is emailed and expires after 30 minutes
+(`POST /auth/forgot`, `/reset-password?token=…`, `POST /auth/reset`). Only a SHA-256 of the token is
+stored, resetting ends every existing session, and the request is rate limited. There is no self-service
+sign-up and no in-app “change password” screen.
 
 **A session ends after 30 minutes without use.** Every authenticated request stamps
 `sessions.last_seen_at`, and the API refuses a session whose stamp is older; the SPA signs out at the
 same moment, with activity in any tab keeping all of them alive, and the login screen says why. This is
 an idle limit, separate from the 30-day absolute expiry. `SESSION_IDLE_MINUTES` sets it (default 30).
 
-**Getting back in when that is not possible** does not go through the login page — anything reachable from
-that page is only available while that page works. `npm run recover` (`server/src/scripts/account.ts`)
+**Getting back in when that is not possible** (no email, or the account is deactivated) does not go
+through the login page — anything reachable from that page is only available while that page works.
+`npm run recover` (`server/src/scripts/account.ts`)
 talks straight to the database: it lists the logins, resets a password (ending that account's sessions),
 renames a login, and restores an account to an active platform super-admin. It works with the app stopped,
 with the account deactivated, with the password lost, and while the login rate limit is in force. On the
@@ -241,11 +245,12 @@ lower id than the package it replaces.
 
 | Screen | URL | Who | Purpose |
 |---|---|---|---|
-| Log in | `/login` | anyone | — |
-| **Change password** | `/account/password` | both | Your own setting: needs the password you have now, and signs out every other session on the account |
-| **Customers** | `/customers` | both | The home screen. Each row opens (accordion) to its **Campaigns** |
+| Log in | `/login` | anyone | Email + password, with the two doors; a **Forgot password?** link |
+| **Forgot password** | `/forgot-password` | anyone | Asks for the email and always answers generically |
+| **Reset password** | `/reset-password?token=…` | anyone with the emailed link | Sets a new password; the link is single-use and expires after 30 minutes |
+| **Customers** | `/customers` | both | The home screen. Each row opens (accordion) to its **Campaigns**; a platform super-admin also gets **Delete** beside each customer |
 | **Users** | `/users` | super-admin | Every account on the platform in one place: create one, activate or deactivate it, delete it. Creating an account asks for no customer — an operator already reaches every customer, and a company super-admin's new accounts stay inside its company. The only screen that administers users |
-| **Campaigns** | `/campaigns` | super-admin | Every company's campaigns in one list, each named with its company; create a campaign for a company; every list under its campaign |
+| **Campaigns** | `/campaigns` | super-admin | Every company's campaigns in one list, each named with its company; create a campaign for a company; every list under its campaign; **Delete** beside each campaign |
 | **Campaign page** | `/campaigns/:id` | super-admin | One campaign: edit its name/window, upload its lists |
 | **Campaign returns** | `/campaigns/:id/returns` | both | The operator's desk *and* that campaign's report: the counters, the lookup, the reason, the resend, the linking table and its `.xlsx` |
 

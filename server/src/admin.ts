@@ -32,7 +32,7 @@ adminRouter.get(
               (SELECT COUNT(*) FROM users u WHERE u.customer_id = c.id) AS user_count,
               (SELECT COUNT(*) FROM users u WHERE u.customer_id = c.id AND u.is_active = 1)
                 AS active_user_count
-         FROM customers c ORDER BY c.id DESC`
+         FROM customers c ORDER BY c.name, c.id`
     );
     res.json(rows);
   })
@@ -63,6 +63,57 @@ adminRouter.post(
         return res.status(409).json({ error: `a customer called "${customerName}" already exists` });
       }
       throw err;
+    }
+  })
+);
+
+// Deleting a customer removes its campaigns (and their uploads, packages and returns) first, because
+// the foreign key from campaigns does not cascade. Accounts attached to the customer are not deleted:
+// the transaction rolls back and the caller is told to remove or move them first.
+adminRouter.delete(
+  "/customers/:id",
+  ah(async (req, res) => {
+    const caller = res.locals.user as AuthUser;
+    if (caller.customerId !== null) {
+      return res.status(403).json({ error: "only a platform super-admin can delete a customer" });
+    }
+    const customerId = Number(req.params.id);
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      return res.status(404).json({ error: "customer not found" });
+    }
+
+    const [rows] = await pool.query<(RowDataPacket & { id: number; name: string })[]>(
+      "SELECT id, name FROM customers WHERE id = ?",
+      [customerId]
+    );
+    const customer = rows[0];
+    if (!customer) return res.status(404).json({ error: "customer not found" });
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [campaigns] = await conn.query<ResultSetHeader>(
+        "DELETE FROM campaigns WHERE customer_id = ?",
+        [customer.id]
+      );
+      await conn.query("DELETE FROM customers WHERE id = ?", [customer.id]);
+      await conn.commit();
+      res.json({
+        ok: true,
+        id: customer.id,
+        name: customer.name,
+        deletedCampaigns: campaigns.affectedRows,
+      });
+    } catch (err) {
+      await conn.rollback();
+      if ((err as { code?: string }).code === "ER_ROW_IS_REFERENCED_2") {
+        return res.status(409).json({
+          error: "this customer still has accounts attached; remove or move them first",
+        });
+      }
+      throw err;
+    } finally {
+      conn.release();
     }
   })
 );

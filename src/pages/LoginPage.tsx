@@ -67,7 +67,7 @@ export function LoginPage() {
           </button>
         </div>
         <p className="muted">
-          No account? <Link to="/signup">Sign up</Link>
+          <Link to="/forgot-password">Forgot password?</Link>
         </p>
       </form>
     </div>

@@ -3,14 +3,14 @@ import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
-import { SignupPage } from "./pages/SignupPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { CampaignsPage } from "./pages/CampaignsPage";
 import { CampaignDetailPage } from "./pages/CampaignDetailPage";
 import { ReturnsPage } from "./pages/ReturnsPage";
 import { RecentReturnsPage } from "./pages/RecentReturnsPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { UsersPage } from "./pages/UsersPage";
-import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -40,7 +40,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       {/* Every role lands on the customers: it is the one screen both of them use. */}
       <Route path="/" element={<Navigate to="/customers" replace />} />
       <Route
@@ -59,15 +60,6 @@ export default function App() {
             <SuperAdminOnly>
               <UsersPage />
             </SuperAdminOnly>
-          </Protected>
-        }
-      />
-      {/* Changing your own password: a plain setting, so both roles have it. */}
-      <Route
-        path="/account/password"
-        element={
-          <Protected>
-            <ChangePasswordPage />
           </Protected>
         }
       />

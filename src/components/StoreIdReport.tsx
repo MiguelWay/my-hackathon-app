@@ -88,32 +88,34 @@ export function StoreIdReport({
         <p className="muted">No return has been sent again in this campaign yet.</p>
       )}
       {rows !== null && rows.length > 0 && (
-        <>
-          <div className="scroll">
-            <table className="grid">
-              <thead>
-                <tr>
-                  <th>Store ID</th>
-                  <th>Return package ID</th>
-                  <th>Reason</th>
-                  <th>Store ID</th>
-                  <th>Resend package ID</th>
+        <div className="scroll">
+          <table className="grid">
+            <thead>
+              <tr>
+                <th>Store ID</th>
+                <th>Return package ID</th>
+                <th>Reason</th>
+                <th>Store ID</th>
+                <th>Resend package ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.resend_id}>
+                  <td>{row.returned_store_id}</td>
+                  <td>{row.returned_id}</td>
+                  <td>{row.reason ?? <span className="muted">—</span>}</td>
+                  <td>{row.resend_store_id}</td>
+                  <td>{row.resend_id}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.resend_id}>
-                    <td>{row.returned_store_id}</td>
-                    <td>{row.returned_id}</td>
-                    <td>{row.reason ?? <span className="muted">—</span>}</td>
-                    <td>{row.resend_store_id}</td>
-                    <td>{row.resend_id}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
+      {rows !== null && (
+        <>
           <div className="btn-row">
             <button type="button" className="secondary" disabled={downloading} onClick={download}>
               {downloading ? "Preparing…" : "Download .xlsx"}

@@ -91,6 +91,14 @@ const authLimiter = rateLimit({
 });
 api.use("/auth/login", authLimiter);
 api.use("/auth/register", authLimiter);
+// Password reset is counted on every request: even a generic 200 sends an email, so success must
+// not be free to repeat. The two paths get separate budgets so a retry after a typo cannot exhaust
+// the other one.
+api.use(
+  "/auth/forgot",
+  rateLimit({ name: "password-forgot", max: 10, windowMs: 15 * 60_000 })
+);
+api.use("/auth/reset", rateLimit({ name: "password-reset", max: 10, windowMs: 15 * 60_000 }));
 
 api.use("/auth", authRouter);
 api.use("/customers", customersRouter);
