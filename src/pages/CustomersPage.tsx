@@ -190,14 +190,15 @@ export function CustomersPage() {
     expandRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [openId]);
 
-  // Arriving from a campaign's returns screen: open that customer's row straight away.
+  // Arriving from a campaign's returns screen: open that customer's row straight away. Administrators
+  // no longer expand customer rows, so this only applies to the operator.
   const openedFromUrl = useRef(false);
   useEffect(() => {
-    if (openedFromUrl.current || !wantedCustomer || items.length === 0) return;
+    if (isSuperAdmin || openedFromUrl.current || !wantedCustomer || items.length === 0) return;
     openedFromUrl.current = true;
     const id = Number(wantedCustomer);
     if (items.some((c) => c.id === id)) void toggle(id);
-  }, [wantedCustomer, items]);
+  }, [isSuperAdmin, wantedCustomer, items]);
 
   // An operator's list is split by date: a campaign whose finish date has passed is closed and moves
   // into an accordion directly under the open ones. An upcoming campaign is still open. The
@@ -305,7 +306,7 @@ export function CustomersPage() {
               <th>ID</th>
               <th>Name</th>
               {canDeleteCustomers && <th></th>}
-              <th></th>
+              {!isSuperAdmin && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -314,8 +315,8 @@ export function CustomersPage() {
               return (
                 <Fragment key={c.id}>
                   <tr
-                    className={`customer-head${open ? " open" : ""}`}
-                    onClick={() => void toggle(c.id)}
+                    className={isSuperAdmin ? "" : `customer-head${open ? " open" : ""}`}
+                    onClick={isSuperAdmin ? undefined : () => void toggle(c.id)}
                   >
                     <td>{c.id}</td>
                     <td>{c.name}</td>
@@ -357,24 +358,26 @@ export function CustomersPage() {
                         )}
                       </td>
                     )}
-                    <td className="disclosure-cell">
-                      <button
-                        type="button"
-                        className="disclosure"
-                        aria-expanded={open}
-                        aria-controls={`customer-${c.id}-panel`}
-                        aria-label={`${open ? "Hide" : "Show"} the campaigns of ${c.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void toggle(c.id);
-                        }}
-                      >
-                        <span aria-hidden="true">{open ? "▾" : "▸"}</span>
-                      </button>
-                    </td>
+                    {!isSuperAdmin && (
+                      <td className="disclosure-cell">
+                        <button
+                          type="button"
+                          className="disclosure"
+                          aria-expanded={open}
+                          aria-controls={`customer-${c.id}-panel`}
+                          aria-label={`${open ? "Hide" : "Show"} the campaigns of ${c.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void toggle(c.id);
+                          }}
+                        >
+                          <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+                        </button>
+                      </td>
+                    )}
                   </tr>
 
-                  {open && (
+                  {!isSuperAdmin && open && (
                     <tr className="expand" id={`customer-${c.id}-panel`} ref={expandRef}>
                       <td colSpan={canDeleteCustomers ? 4 : 3}>
                         <section className="customer-group">
