@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import { downloadExport, returnListExportUrl } from "../lib/campaignExport";
+import {
+  canChooseSaveLocation,
+  downloadExport,
+  returnListExportUrl,
+  saveExportAs,
+  saveNotice,
+} from "../lib/campaignExport";
+import { SaveLocationHint } from "./SaveLocationHint";
 
 interface Row {
   sender_id: string;
@@ -38,6 +45,7 @@ export function ReturnPackageList({
   const [links, setLinks] = useState<Link[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const loading = useRef(false);
   const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -80,6 +88,20 @@ export function ReturnPackageList({
       setError(err instanceof Error ? err.message : "Could not download the list");
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function saveAs() {
+    setError(null);
+    setNotice(null);
+    setSaving(true);
+    try {
+      const result = await saveExportAs(returnListExportUrl(campaignId), "return-package-list.xlsx");
+      setNotice(saveNotice(result));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open a save dialog");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -159,10 +181,21 @@ export function ReturnPackageList({
       {rows !== null && (
         <>
           <div className="btn-row">
-            <button type="button" className="secondary" disabled={downloading} onClick={download}>
+            <button type="button" className="secondary" disabled={downloading || saving} onClick={download}>
               {downloading ? "Preparing…" : "Download .xlsx"}
             </button>
+            {canChooseSaveLocation() && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={downloading || saving}
+                onClick={saveAs}
+              >
+                {saving ? "Preparing…" : "Save as…"}
+              </button>
+            )}
           </div>
+          <SaveLocationHint />
           <p className="muted">Both tables, one sheet each.</p>
           {notice && <p className="ok">{notice}</p>}
         </>

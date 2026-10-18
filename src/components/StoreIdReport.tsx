@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import { downloadExport, storeReportExportUrl } from "../lib/campaignExport";
+import {
+  canChooseSaveLocation,
+  downloadExport,
+  saveExportAs,
+  saveNotice,
+  storeReportExportUrl,
+} from "../lib/campaignExport";
+import { SaveLocationHint } from "./SaveLocationHint";
 
 /** One return → resend link, with the store behind each package in the pair. */
 interface Row {
@@ -31,6 +38,7 @@ export function StoreIdReport({
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const loading = useRef(false);
   const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -69,6 +77,20 @@ export function StoreIdReport({
       setError(err instanceof Error ? err.message : "Could not download the report");
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function saveAs() {
+    setError(null);
+    setNotice(null);
+    setSaving(true);
+    try {
+      const result = await saveExportAs(storeReportExportUrl(campaignId), "returns-store-id.xlsx");
+      setNotice(saveNotice(result));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open a save dialog");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -117,10 +139,21 @@ export function StoreIdReport({
       {rows !== null && (
         <>
           <div className="btn-row">
-            <button type="button" className="secondary" disabled={downloading} onClick={download}>
+            <button type="button" className="secondary" disabled={downloading || saving} onClick={download}>
               {downloading ? "Preparing…" : "Download .xlsx"}
             </button>
+            {canChooseSaveLocation() && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={downloading || saving}
+                onClick={saveAs}
+              >
+                {saving ? "Preparing…" : "Save as…"}
+              </button>
+            )}
           </div>
+          <SaveLocationHint />
           <p className="muted">One row per return and the resend that followed it.</p>
           {notice && <p className="ok">{notice}</p>}
         </>
