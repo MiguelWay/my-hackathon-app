@@ -295,6 +295,11 @@ select {
   background: #fff7d6;
 }
 
+/* The second chosen upload column (the store ID), so the two mappings are told apart in the preview. */
+.hl2 {
+  background: #e3f2ff;
+}
+
 .ok {
   color: #1b7f3b;
   font-size: 13px;

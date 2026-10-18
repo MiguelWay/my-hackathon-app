@@ -3,6 +3,8 @@
 
 /** Matches `packages.sender_id` (VARCHAR(128)). */
 export const MAX_SENDER_ID_LENGTH = 128;
+/** Matches `packages.store_id` (VARCHAR(128)). */
+export const MAX_STORE_ID_LENGTH = 128;
 /** Matches the VARCHAR(255) name columns. */
 export const MAX_NAME_LENGTH = 255;
 export const MAX_EMAIL_LENGTH = 254;

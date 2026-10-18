@@ -5,7 +5,8 @@ import { pool } from "./db";
 import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
 import { loadChains } from "./chains";
 import { loadReturnList } from "./returnList";
-import { sendChainsExport, sendReturnListExport } from "./export";
+import { sendChainsExport, sendReturnListExport, sendStoreReportExport } from "./export";
+import { loadStoreReport } from "./storeReport";
 import { normalizeSenderId } from "./senderId";
 import { chainRootId, parseResendBody } from "./resends";
 import { isConfined } from "./scope";
@@ -201,6 +202,46 @@ returnsRouter.get(
       return res.status(400).json({ error: "campaignId must be a positive number" });
     }
     await sendReturnListExport(res, campaignId, currentUser(res));
+  })
+);
+
+// ---- the separate "Returns + Store ID" report ----
+// One row per return → resend link, with the store ID of each package in the pair. The existing
+// Return package list is deliberately untouched: this is its own report, with its own download.
+returnsRouter.get(
+  "/campaigns/:id/store-report",
+  ah(async (req, res) => {
+    const campaignId = optionalPositiveInt(req.params.id);
+    if (campaignId === null || campaignId === undefined) {
+      return res.status(400).json({ error: "campaignId must be a positive number" });
+    }
+    const [campaigns] = await pool.query<
+      (RowDataPacket & { id: number; name: string; customer_id: number })[]
+    >("SELECT id, name, customer_id FROM campaigns WHERE id = ?", [campaignId]);
+    const campaign = campaigns[0];
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
+    const caller = currentUser(res);
+    if (isConfined(caller) && Number(campaign.customer_id) !== caller.customerId) {
+      return res.status(404).json({ error: "campaign not found" });
+    }
+
+    const rows = await loadStoreReport(Number(campaign.customer_id), campaignId);
+
+    res.json({
+      campaign: { id: campaign.id, name: campaign.name },
+      rows,
+    });
+  })
+);
+
+returnsRouter.get(
+  "/campaigns/:id/store-report/export",
+  ah(async (req, res) => {
+    const campaignId = optionalPositiveInt(req.params.id);
+    if (campaignId === null || campaignId === undefined) {
+      return res.status(400).json({ error: "campaignId must be a positive number" });
+    }
+    await sendStoreReportExport(res, campaignId, currentUser(res));
   })
 );
 

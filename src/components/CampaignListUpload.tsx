@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import { guessSenderColumn } from "../lib/senderColumn";
+import { guessStoreColumn } from "../lib/storeColumn";
 
 export interface ImportResult {
   uploadId: number;
@@ -10,6 +11,7 @@ export interface ImportResult {
   skipped: number;
   columns: string[];
   senderColumn: { index: number; name: string };
+  storeColumn: { index: number; name: string };
 }
 
 /**
@@ -27,6 +29,7 @@ export function CampaignListUpload({
   const [rows, setRows] = useState<string[][]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [senderIdx, setSenderIdx] = useState(-1);
+  const [storeIdx, setStoreIdx] = useState(-1);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -38,6 +41,7 @@ export function CampaignListUpload({
     setRows([]);
     setFileName(null);
     setSenderIdx(-1);
+    setStoreIdx(-1);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -63,7 +67,9 @@ export function CampaignListUpload({
       setHeaders(hdrs);
       setRows(data);
       setFileName(file.name);
-      setSenderIdx(guessSenderColumn(hdrs));
+      const guessedSender = guessSenderColumn(hdrs);
+      setSenderIdx(guessedSender);
+      setStoreIdx(guessStoreColumn(hdrs, guessedSender));
     } catch (err) {
       reset();
       setError(err instanceof Error ? err.message : "Could not read the file");
@@ -75,6 +81,14 @@ export function CampaignListUpload({
       setError("Pick the package ID column.");
       return;
     }
+    if (storeIdx < 0) {
+      setError("Pick the store ID column.");
+      return;
+    }
+    if (storeIdx === senderIdx) {
+      setError("The store ID column must be a different column from the package ID.");
+      return;
+    }
     setError(null);
     setNotice(null);
     setImporting(true);
@@ -83,6 +97,7 @@ export function CampaignListUpload({
         filename: fileName,
         columns: headers,
         senderColumn: senderIdx,
+        storeColumn: storeIdx,
         rows,
       });
       // Rows with no package ID are left out rather than refused, so say so instead of hiding it.
@@ -91,6 +106,7 @@ export function CampaignListUpload({
         : "";
       setNotice(
         `Imported ${result.imported} lines · package ID column: "${result.senderColumn.name}" · ` +
+          `store ID column: "${result.storeColumn.name}" · ` +
           `${result.columns.length} columns kept verbatim${skipped}.`
       );
       reset();
@@ -107,7 +123,9 @@ export function CampaignListUpload({
       <div className="upload-input">
         <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} />
         <p className="muted">
-          One campaign can hold several lists; package IDs must be unique within the campaign.
+          One campaign can hold several lists; package IDs must be unique within the campaign. Every
+          row also needs a store ID (the company&rsquo;s unique store reference, usually &ldquo;Ref.
+          2&rdquo;).
         </p>
       </div>
 
@@ -128,8 +146,19 @@ export function CampaignListUpload({
                 ))}
               </select>
             </label>
+            <label>
+              Choose store ID column
+              <select value={storeIdx} onChange={(e) => setStoreIdx(Number(e.target.value))}>
+                {storeIdx < 0 && <option value={-1}>— select a column —</option>}
+                {headers.map((h, i) => (
+                  <option key={i} value={i} disabled={i === senderIdx}>
+                    {h || `(column ${i + 1})`}
+                  </option>
+                ))}
+              </select>
+            </label>
             <span className="muted">{rows.length} lines</span>
-            <button type="button" onClick={confirm} disabled={importing}>
+            <button type="button" onClick={confirm} disabled={importing || senderIdx < 0 || storeIdx < 0 || storeIdx === senderIdx}>
               {importing ? "Importing…" : "Confirm mapping & import"}
             </button>
           </div>
@@ -140,6 +169,17 @@ export function CampaignListUpload({
               below shows the first rows so you can spot the right one.
             </p>
           )}
+          {storeIdx < 0 && (
+            <p className="muted">
+              Couldn&rsquo;t tell which column holds the store ID — choose it above.
+            </p>
+          )}
+          {storeIdx >= 0 && storeIdx === senderIdx && (
+            <p className="muted">
+              The package ID and the store ID must be two different columns — choose another store
+              column above.
+            </p>
+          )}
 
           <h2>Preview (first 10 rows)</h2>
           <div className="scroll">
@@ -147,7 +187,7 @@ export function CampaignListUpload({
               <thead>
                 <tr>
                   {headers.map((h, i) => (
-                    <th key={i} className={i === senderIdx ? "hl" : ""}>
+                    <th key={i} className={i === senderIdx ? "hl" : i === storeIdx ? "hl2" : ""}>
                       {h || `(column ${i + 1})`}
                     </th>
                   ))}
@@ -157,7 +197,7 @@ export function CampaignListUpload({
                 {rows.slice(0, 10).map((r, ri) => (
                   <tr key={ri}>
                     {r.map((c, ci) => (
-                      <td key={ci} className={ci === senderIdx ? "hl" : ""}>
+                      <td key={ci} className={ci === senderIdx ? "hl" : ci === storeIdx ? "hl2" : ""}>
                         {c}
                       </td>
                     ))}

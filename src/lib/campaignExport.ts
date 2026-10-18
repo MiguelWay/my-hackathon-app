@@ -49,6 +49,10 @@ export const chainsExportUrl = (): string => `${baseUrl}/returns/chains/export`;
 export const returnListExportUrl = (campaignId: number): string =>
   `${baseUrl}/returns/campaigns/${campaignId}/return-list/export`;
 
+/** One campaign's separate "Returns + Store ID" report, for use as a real link. */
+export const storeReportExportUrl = (campaignId: number): string =>
+  `${baseUrl}/returns/campaigns/${campaignId}/store-report/export`;
+
 /** The name the server gives the chain report, so the save dialog can suggest it before it is built. */
 export const CHAINS_EXPORT_FILENAME = "resend-chains.xlsx";
 

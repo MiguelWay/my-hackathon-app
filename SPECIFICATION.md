@@ -22,7 +22,8 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
 ## 3. Core user flows
 1. **Upload** — Admin picks customer + campaign (form fields: customer name, campaign name, start
    date, finish date) and uploads an Excel campaign list (thousands of store rows). The app
-   auto-detects the sender-ID column and asks for a one-click confirm; existing column names are
+   auto-detects the **package ID** column and the **store ID** column (usually `Ref. 2`) and asks for a
+   one-click confirm; both are required and must be different columns. Existing column names are
    never changed.
 2. **Return capture** — The user **manually types the sender ID** from the returned package. The app
    validates it against the campaign, then shows a dropdown of return reasons.
@@ -37,12 +38,17 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
    package IDs (Status + Reason; red/green rows), and a second uncoloured **Resend links** table
    (Returned ID · Reason · Resent ID · Returned ID · Reason); a collapsed accordion, both tables
    downloadable, one sheet each.
+7. **Returns + Store ID** — a separate collapsed accordion (and separate download) on the same screen:
+   one row per return → resend link, with each package's store ID (`Store ID · Return package ID ·
+   Reason · Store ID · Resend package ID`). The existing reports above are untouched.
 
 ## 4. Features
 **Must-have (v1)**
 - Auth + roles (Admin, User), with every request scoped to the one customer it names.
-- Excel upload per campaign (multiple uploads per campaign); sender-ID column auto-detect + confirm.
-- Store every row with all columns; one row = one store = one sender ID = one package.
+- Excel upload per campaign (multiple uploads per campaign); **package ID and store ID column**
+  auto-detect + confirm; both are required.
+- Store every row with all columns; one row = one package. The store ID is the company's own unique
+  store reference and may repeat across packages.
 - Return capture: **manual sender-ID entry** → validate against the campaign → reason choice
   (tienda cerrada, ausente, dirección incorrecta, estacionada, otro); one return per package.
 - Resend linking: the returned package → an existing package of the same campaign, as the next attempt
@@ -52,6 +58,8 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
   Reason`); opened as a **collapsed accordion** below the Find package row, in the campaign's row on
   Customers, and in each campaign card on Campaigns; downloadable as a workbook with one sheet each;
   available to both roles.
+- **Returns + Store ID**: a separate report and download for the campaign, one row per return → resend
+  link (`Store ID · Return package ID · Reason · Store ID · Resend package ID`); available to both roles.
 - Reporting: return rate by category (bar, per campaign) + resend volume.
 - Export .xlsx: original columns unchanged + `Return Status` (Sent / Returned / Resent), `Return Reason`,
   `Original ID`, `Resent as`, `Resent again as`, …; returned rows light-red, resent rows light-green,
@@ -71,10 +79,13 @@ As implemented in `db/migrations/`:
 - `users(id, customer_id, email, password_hash, role ∈ {superadmin, user}, is_active, created_at)`.
 - `sessions(id, user_id, token_hash, expires_at, …)` — server sessions, httpOnly cookie.
 - `campaigns(id, customer_id, name, start_date, finish_date, created_at)`.
-- `campaign_uploads(id, customer_id, campaign_id, filename, columns json, row_count, created_at)`.
-- `packages(id, customer_id, campaign_id, upload_id, source_row, sender_id, chain_id, attempt_no,
-  resent_at, created_via ∈ {upload, resend}, extra_columns json, created_at)` — unique `sender_id` per
-  campaign; one row = one store = one package. `chain_id` points at the chain's first package;
+- `campaign_uploads(id, customer_id, campaign_id, filename, columns json, store_column, row_count,
+  created_at)`.
+- `packages(id, customer_id, campaign_id, upload_id, source_row, sender_id, store_id, chain_id,
+  attempt_no, resent_at, created_via ∈ {upload, resend}, extra_columns json, created_at)` — unique
+  `sender_id` per campaign; one row = one package. `store_id` is required and never changes after the
+  upload (no route updates it); it is the company's unique store reference and may repeat across
+  packages. `chain_id` points at the chain's first package;
   `attempt_no` is 1 as uploaded and N for the package used as the Nth attempt; `resent_at` marks a
   package used as a resend.
 - `returns(id, customer_id, package_id, reason_id, note, recorded_by, returned_at)` — one per package.

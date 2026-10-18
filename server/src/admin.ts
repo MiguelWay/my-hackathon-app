@@ -105,9 +105,9 @@ adminRouter.get(
   })
 );
 
-// Every campaign on the platform, named with its company: the Campaigns screen needs one list that
-// a platform super-admin (no company of its own) can create into. The tenant route `/campaigns` is
-// deliberately untouched — it stays scoped to the caller's own company.
+// Every campaign on the platform, named with its company, with the counters the Campaigns screen
+// shows. The tenant route `/campaigns` is deliberately untouched — it stays scoped to the caller's own
+// company.
 adminRouter.get(
   "/campaigns",
   ah(async (_req, res) => {
@@ -115,7 +115,12 @@ adminRouter.get(
       `SELECT c.id, c.customer_id, cu.name AS customer_name, c.name, c.start_date, c.finish_date,
               c.created_at,
               COUNT(u.id) AS upload_count,
-              CAST(COALESCE(SUM(u.row_count), 0) AS UNSIGNED) AS total_rows
+              CAST(COALESCE(SUM(u.row_count), 0) AS UNSIGNED) AS total_rows,
+              (SELECT COUNT(*) FROM packages p WHERE p.campaign_id = c.id) AS package_count,
+              (SELECT COUNT(*) FROM packages p JOIN returns r ON r.package_id = p.id
+                WHERE p.campaign_id = c.id) AS return_count,
+              (SELECT COUNT(*) FROM packages p
+                WHERE p.campaign_id = c.id AND p.attempt_no > 1) AS resend_count
          FROM campaigns c
          JOIN customers cu ON cu.id = c.customer_id
          LEFT JOIN campaign_uploads u ON u.campaign_id = c.id
@@ -126,8 +131,8 @@ adminRouter.get(
   })
 );
 
-// The uploaded lists of every campaign. `?customerId=` narrows it to one customer, which is what the
-// Campaigns screen asks for: without it this is the platform-wide list, used nowhere in the app.
+// The uploaded lists of every campaign. `?customerId=` narrows it to one customer; without it this is
+// the platform-wide list, which is what the Campaigns screen asks for.
 adminRouter.get(
   "/campaigns/uploads",
   ah(async (req, res) => {

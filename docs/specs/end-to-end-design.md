@@ -121,7 +121,7 @@ graph TD
     C --> D[Redirect to the campaign page]
     D --> E[Name the campaign and set its window]
     E --> F[Upload the .xlsx list]
-    F --> G[Confirm the package ID column]
+    F --> G[Confirm the package ID and store ID columns]
     G --> H[Packages imported]
     H --> I[Record returns]
     H --> J[Download the flagged .xlsx]
@@ -139,8 +139,9 @@ graph TD
 4. On the page: the campaign's **name** and **window** are shown and **editable**, and *Add a list to
    this campaign* is open. *The rename/date editor is new — the API for it already exists and no screen
    uses it today.*
-5. **Pick the `.xlsx`**, confirm which column holds the package ID, **import**. The page reports
-   `N lines imported`.
+5. **Pick the `.xlsx`**, confirm which column holds the **package ID** and which holds the **store ID**
+   (usually `Ref. 2`; both required, and they must be different columns), **import**. A row with no
+   store ID is refused and names its sheet line. The page reports `N lines imported`.
 6. From there: **Record returns →** (`/campaigns/:id/returns`) or **Download the flagged `.xlsx`**.
 
 ### Flow 2 — a campaign for a customer that already exists *(your point 3)*
@@ -173,10 +174,14 @@ If the package went out again, the resend row sits directly under its card — s
    row per return → resend pair, with the resent package's own return in the last two columns when it
    came back too; uncoloured. Both tables download as one workbook, one sheet each. Both roles have the
    accordion here; on an administrator's Campaigns screen the same accordion sits in each campaign card;
-3. the package lookup, the reason buttons and the resend form — the operator's work;
-4. the **linking table** for that campaign: Original ID · Resent as · Resent again as · return reason
+3. **Returns + Store ID** — a separate collapsed accordion and its own download, on this screen only:
+   one row per return → resend link, `Store ID · Return package ID · Reason · Store ID · Resend package
+   ID`. The left pair is the package that came back, the right pair the package it went out as next;
+   both store IDs are read from those package rows. The two reports above are unchanged;
+4. the package lookup, the reason buttons and the resend form — the operator's work;
+5. the **linking table** for that campaign: Original ID · Resent as · Resent again as · return reason
    *(no campaign column: on a campaign's own screen it would repeat the same name on every row)*;
-5. **Download `.xlsx`** for that table, and for the campaign's whole list: the uploaded columns exactly,
+6. **Download `.xlsx`** for that table, and for the campaign's whole list: the uploaded columns exactly,
    plus `Return Status`, `Return Reason` and the chain columns (`Original ID`, `Resent as`, `Resent again
    as`, …). Returned rows are filled light red and resent rows light green — see Flow 5.
 
@@ -185,8 +190,9 @@ If the package went out again, the resend row sits directly under its card — s
 ### Flow 5 — the resend, and what turns red or green
 
 A resend does **not** create a package and does **not** copy a label. The parcel goes out again **as a
-package that already exists in the same campaign**: that package's own ID and its own address (its label
-columns) are the ones used. It is uploaded like any other package, in any list of the campaign.
+package that already exists in the same campaign**: that package's own ID, its own store ID and its own
+address (its label columns) are the ones used. It is uploaded like any other package, in any list of the
+campaign.
 
 1. Find the returned package. Under its card, **New package ID** takes the ID of the package the parcel
    goes out as next — it must already exist in this campaign, and the app says so beside the button when
@@ -239,7 +245,7 @@ lower id than the package it replaces.
 | **Change password** | `/account/password` | both | Your own setting: needs the password you have now, and signs out every other session on the account |
 | **Customers** | `/customers` | both | The home screen. Each row opens (accordion) to its **Campaigns** |
 | **Users** | `/users` | super-admin | Every account on the platform in one place, with the customer it belongs to: create one, activate or deactivate it, delete it. The only screen that administers users |
-| **Campaigns** | `/campaigns` | super-admin | Create a campaign for a company; every list under its campaign |
+| **Campaigns** | `/campaigns` | super-admin | Every company's campaigns in one list, each named with its company; create a campaign for a company; every list under its campaign |
 | **Campaign page** | `/campaigns/:id` | super-admin | One campaign: edit its name/window, upload its lists |
 | **Campaign returns** | `/campaigns/:id/returns` | both | The operator's desk *and* that campaign's report: the counters, the lookup, the reason, the resend, the linking table and its `.xlsx` |
 

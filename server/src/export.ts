@@ -6,6 +6,7 @@ import type { Worksheet } from "exceljs";
 import { pool } from "./db";
 import { loadChains } from "./chains";
 import { loadReturnList } from "./returnList";
+import { loadStoreReport } from "./storeReport";
 import { requireAuth, requireSuperAdmin, type AuthUser } from "./auth";
 import { isConfined } from "./scope";
 import { optionalPositiveInt } from "./validate";
@@ -365,6 +366,65 @@ export async function sendReturnListExport(
   res.setHeader(
     "Content-Disposition",
     `attachment; filename="return-package-list-${campaignId}-${fileSlug(campaign.name)}.xlsx"`
+  );
+  res.setHeader("Content-Length", String(buffer.byteLength));
+  res.end(Buffer.from(buffer));
+}
+
+/**
+ * The new "Returns + Store ID" report, as a one-sheet .xlsx.
+ *
+ * One row per return → resend link. The left pair (Store ID, Return package ID) belongs to the package
+ * that came back; the right pair (Store ID, Resend package ID) belongs to the package it went out as
+ * next. Both store IDs are read from the package rows themselves, never copied between them.
+ */
+export async function sendStoreReportExport(
+  res: Response,
+  campaignId: number,
+  user: AuthUser
+): Promise<void> {
+  const [campaigns] = await pool.query<
+    (RowDataPacket & { id: number; name: string; customer_id: number })[]
+  >("SELECT id, name, customer_id FROM campaigns WHERE id = ?", [campaignId]);
+  const campaign = campaigns[0];
+  if (!campaign) {
+    res.status(404).json({ error: "campaign not found" });
+    return;
+  }
+  const customerId = Number(campaign.customer_id);
+  if (isConfined(user) && customerId !== user.customerId) {
+    res.status(404).json({ error: "campaign not found" });
+    return;
+  }
+
+  const rows = await loadStoreReport(customerId, campaignId);
+
+  const header = ["Store ID", "Return package ID", "Reason", "Store ID", "Resend package ID"];
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Package Returns";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Returns + Store ID");
+  writeHeader(sheet, header);
+
+  for (const row of rows) {
+    sheet.addRow([
+      row.returned_store_id,
+      row.returned_id,
+      row.reason ?? "",
+      row.resend_store_id,
+      row.resend_id,
+    ]);
+  }
+  sizeColumns(sheet, header);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="returns-store-id-${campaignId}-${fileSlug(campaign.name)}.xlsx"`
   );
   res.setHeader("Content-Length", String(buffer.byteLength));
   res.end(Buffer.from(buffer));

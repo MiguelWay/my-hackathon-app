@@ -24,8 +24,10 @@ const USER_RESEND_2 = "PQUSERRESEND04ES";
 const SENDER_B = "PQB000001ES";
 const BETA_RESEND = "PQCROSS001ES";
 
-const COLUMNS = ["Fecha de envío", "Dirección", "ID de envío"];
-const row = (sender: string, city: string) => ["2026-03-01", city, sender];
+const COLUMNS = ["Fecha de envío", "Dirección", "ID de envío", "Ref. 2"];
+const STORE_COLUMN = 3;
+const storeOf = (sender: string) => `ST-${sender}`;
+const row = (sender: string, city: string) => ["2026-03-01", city, sender, storeOf(sender)];
 
 interface CampaignRow {
   id: number;
@@ -95,6 +97,7 @@ beforeAll(async () => {
     filename: "alpha.xlsx",
     columns: COLUMNS,
     senderColumn: 2,
+    storeColumn: STORE_COLUMN,
     rows: [
       row(SENDER_A, "Cádiz"),
       row(SENDER_A_RETURNED, "Málaga"),
@@ -125,6 +128,7 @@ beforeAll(async () => {
     filename: "beta.xlsx",
     columns: COLUMNS,
     senderColumn: 2,
+    storeColumn: STORE_COLUMN,
     rows: [row(SENDER_B, "Bilbao"), row(BETA_RESEND, "Vigo")],
   });
   const betaPackages = await beta.get<PackageRow[]>(`/campaigns/${betaCampaign}/packages`);
@@ -236,6 +240,7 @@ describe("customer A can never write customer B's data", () => {
       filename: "hack.xlsx",
       columns: COLUMNS,
       senderColumn: 2,
+      storeColumn: STORE_COLUMN,
       rows: [row("PQHACK001ES", "Nowhere")],
     });
     expect(attempt.status).toBe(404);
@@ -378,6 +383,7 @@ describe("roles", () => {
           filename: "x.xlsx",
           columns: COLUMNS,
           senderColumn: 2,
+          storeColumn: STORE_COLUMN,
           rows: [row("PQNOPE001ES", "Nowhere")],
         })
       ).status
@@ -588,6 +594,7 @@ describe("narrowing a lookup to one campaign", () => {
       filename: "reprise.xlsx",
       columns: COLUMNS,
       senderColumn: 2,
+      storeColumn: STORE_COLUMN,
       rows: [row(SENDER_A, "Cádiz")],
     });
   });
@@ -1271,12 +1278,23 @@ describe("a customer starts with no campaigns", () => {
 
   it("lists every campaign on the platform, each with the company it belongs to", async () => {
     const res = await superadmin.get<
-      { name: string; customer_id: number; customer_name: string }[]
+      {
+        name: string;
+        customer_id: number;
+        customer_name: string;
+        package_count: number;
+        return_count: number;
+        resend_count: number;
+      }[]
     >("/admin/campaigns");
     expect(res.status).toBe(200);
     expect(res.body.find((c) => c.name === "Zeta launch")).toMatchObject({
       customer_id: newCustomerId,
       customer_name: "Zeta Co",
+      // The Campaigns screen draws the same counters as a campaign's own screen.
+      package_count: 0,
+      return_count: 0,
+      resend_count: 0,
     });
     // The tenant route is unchanged: a platform super-admin has no company, so it still reads empty.
     expect((await superadmin.get<unknown[]>("/campaigns")).body).toEqual([]);
@@ -1404,6 +1422,7 @@ describe("a platform super-admin fills in a campaign it is not attached to", () 
       filename: "platform.xlsx",
       columns: COLUMNS,
       senderColumn: 2,
+      storeColumn: STORE_COLUMN,
       rows: [row("PQAPLATFORM01ES", "Lugo")],
     });
     expect(res.status).toBe(201);
@@ -1432,6 +1451,7 @@ describe("a platform super-admin fills in a campaign it is not attached to", () 
           filename: "x.xlsx",
           columns: COLUMNS,
           senderColumn: 2,
+          storeColumn: STORE_COLUMN,
           rows: [row("PQNOPE004ES", "Nowhere")],
         })
       ).status
@@ -1561,5 +1581,82 @@ describe("a campaign's return package list", () => {
       | { fgColor?: { argb?: string } }
       | undefined;
     expect(linkFill?.fgColor?.argb).toBeUndefined();
+  });
+});
+
+// The separate returns + store ID report: one row per return → resend link, with each package's store.
+describe("a campaign's returns + store ID report", () => {
+  interface StoreRow {
+    returned_store_id: string;
+    returned_id: string;
+    reason: string | null;
+    resend_store_id: string;
+    resend_id: string;
+  }
+  interface Body {
+    campaign: { id: number; name: string };
+    rows: StoreRow[];
+  }
+
+  it("pairs each returned package with the store of its resend", async () => {
+    const res = await alpha.get<Body>(`/returns/campaigns/${alphaCampaign}/store-report`);
+    expect(res.status).toBe(200);
+    expect(res.body.campaign).toEqual({ id: alphaCampaign, name: "Alpha March" });
+    expect(res.body.rows).toHaveLength(4);
+    expect(res.body.rows[0]).toEqual({
+      returned_store_id: storeOf(SENDER_A_RETURNED),
+      returned_id: SENDER_A_RETURNED,
+      reason: "estacionada",
+      resend_store_id: storeOf(SENDER_A_RESEND),
+      resend_id: SENDER_A_RESEND,
+    });
+    expect(res.body.rows[3]).toEqual({
+      returned_store_id: storeOf(USER_RESEND_1),
+      returned_id: USER_RESEND_1,
+      reason: "ausente",
+      resend_store_id: storeOf(USER_RESEND_2),
+      resend_id: USER_RESEND_2,
+    });
+  });
+
+  it("is open to an operator, and closed to another company", async () => {
+    expect(
+      (await alphaUser.get(`/returns/campaigns/${alphaCampaign}/store-report`)).status
+    ).toBe(200);
+    expect((await beta.get(`/returns/campaigns/${alphaCampaign}/store-report`)).status).toBe(404);
+    expect(
+      (await beta.get(`/returns/campaigns/${alphaCampaign}/store-report/export`)).status
+    ).toBe(404);
+  });
+
+  it("wants a real campaign", async () => {
+    expect((await alpha.get("/returns/campaigns/999999/store-report")).status).toBe(404);
+    expect((await alpha.get("/returns/campaigns/abc/store-report")).status).toBe(400);
+  });
+
+  it("downloads as one plain sheet with both pairs of columns", async () => {
+    const res = await alphaUser.raw(`/returns/campaigns/${alphaCampaign}/store-report/export`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("spreadsheetml");
+    expect(res.headers.get("content-disposition")).toContain("returns-store-id");
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.buffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Returns + Store ID"]);
+    const sheet = wb.worksheets[0];
+    expect(sheet.getRow(1).values.slice(1)).toEqual([
+      "Store ID",
+      "Return package ID",
+      "Reason",
+      "Store ID",
+      "Resend package ID",
+    ]);
+    expect(sheet.getRow(2).values.slice(1)).toEqual([
+      storeOf(SENDER_A_RETURNED),
+      SENDER_A_RETURNED,
+      "estacionada",
+      storeOf(SENDER_A_RESEND),
+      SENDER_A_RESEND,
+    ]);
   });
 });

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { ReturnCounters } from "../components/ReturnCounters";
 import { ReturnPackageList } from "../components/ReturnPackageList";
+import { StoreIdReport } from "../components/StoreIdReport";
 
 interface Reason {
   id: number;
@@ -293,6 +294,10 @@ export function ReturnsPage() {
 
       {head && (
         <ReturnPackageList campaignId={Number(campaignId)} refreshToken={listRefresh} />
+      )}
+
+      {head && (
+        <StoreIdReport campaignId={Number(campaignId)} refreshToken={listRefresh} />
       )}
 
       {matches !== null && matches.length === 0 && (

@@ -1,13 +1,14 @@
 // Validation + normalisation for a campaign-list import payload.
 // Pure (no DB, no Express) so the many failure branches can be unit-tested.
 
-import { MAX_SENDER_ID_LENGTH } from "./validate";
+import { MAX_SENDER_ID_LENGTH, MAX_STORE_ID_LENGTH } from "./validate";
 
 export const MAX_ROWS = 20_000;
 
 export interface ParsedRow {
   sourceRow: number; // 1-based row in the source file (row 1 is the header)
   sender: string;
+  store: string;
   cells: string[];
 }
 
@@ -15,6 +16,7 @@ export interface ParsedImport {
   filename: string | null;
   columns: string[];
   senderIndex: number;
+  storeIndex: number;
   records: ParsedRow[];
   /** Rows left out because they carried no package ID. */
   skipped: number;
@@ -31,6 +33,7 @@ export function parseImportBody(body: unknown): ParseResult {
     filename?: unknown;
     columns?: unknown;
     senderColumn?: unknown;
+    storeColumn?: unknown;
     rows?: unknown;
   };
 
@@ -47,6 +50,17 @@ export function parseImportBody(body: unknown): ParseResult {
   const idx = Number(b.senderColumn);
   if (!Number.isInteger(idx) || idx < 0 || idx >= cols.length) {
     return fail(400, "senderColumn must be a valid column index");
+  }
+
+  // ---- which column holds the store ID ("Ref. 2") ----
+  // Required, and never the same column as the package ID: the store ID is a second, independent
+  // reference that every package must carry.
+  const storeIdx = Number(b.storeColumn);
+  if (!Number.isInteger(storeIdx) || storeIdx < 0 || storeIdx >= cols.length) {
+    return fail(400, "storeColumn must be a valid column index");
+  }
+  if (storeIdx === idx) {
+    return fail(400, "storeColumn must be a different column from senderColumn");
   }
 
   // ---- rows ----
@@ -66,6 +80,7 @@ export function parseImportBody(body: unknown): ParseResult {
   const records: ParsedRow[] = rawRows.map((r, i) => ({
     sourceRow: i + 2,
     sender: String(r[idx] ?? "").trim(),
+    store: String(r[storeIdx] ?? "").trim(),
     cells: r.map((c) => String(c ?? "")),
   }));
 
@@ -90,6 +105,29 @@ export function parseImportBody(body: unknown): ParseResult {
       400,
       `package ID is longer than ${MAX_SENDER_ID_LENGTH} characters on row(s): ${sample}${
         tooLong.length > 5 ? ", …" : ""
+      }`
+    );
+  }
+
+  // A store ID is required on every imported row. Unlike a blank package ID (a separator row), a
+  // missing store ID means the operator picked the wrong column or the list is incomplete, so the row
+  // is refused and names its own sheet line.
+  const missingStore = imported.filter((rec) => rec.store === "");
+  if (missingStore.length) {
+    const sample = missingStore.slice(0, 5).map((x) => x.sourceRow).join(", ");
+    return fail(
+      400,
+      `store ID is missing on row(s): ${sample}${missingStore.length > 5 ? ", …" : ""}`
+    );
+  }
+
+  const storeTooLong = imported.filter((rec) => rec.store.length > MAX_STORE_ID_LENGTH);
+  if (storeTooLong.length) {
+    const sample = storeTooLong.slice(0, 5).map((x) => x.sourceRow).join(", ");
+    return fail(
+      400,
+      `store ID is longer than ${MAX_STORE_ID_LENGTH} characters on row(s): ${sample}${
+        storeTooLong.length > 5 ? ", …" : ""
       }`
     );
   }
@@ -121,6 +159,7 @@ export function parseImportBody(body: unknown): ParseResult {
       filename,
       columns: cols,
       senderIndex: idx,
+      storeIndex: storeIdx,
       records: imported,
       skipped: records.length - imported.length,
     },

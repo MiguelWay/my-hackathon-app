@@ -80,9 +80,8 @@ export function CampaignsPage() {
   // Which campaign's results file is being prepared, so only its own accordion says "Preparing…".
   const [exporting, setExporting] = useState<number | null>(null);
 
-  // Another customer's campaigns are never even fetched. With a company chosen the request names it, and
-  // with nothing chosen there is nothing to ask for. A company super-admin stays on its own scoped
-  // routes, which only ever carry its own data.
+  // Every campaign, with the company it belongs to. A platform super-admin runs every customer's
+  // campaigns from one list; a company super-admin stays on its own scoped routes.
   const load = useCallback(async () => {
     if (!picksCompany) {
       const [campaigns, lists] = await Promise.all([
@@ -93,18 +92,13 @@ export function CampaignsPage() {
       setUploads(lists);
       return;
     }
-    if (!customerId) {
-      setItems([]);
-      setUploads([]);
-      return;
-    }
     const [campaigns, lists] = await Promise.all([
-      api.get<Campaign[]>(`/admin/customers/${customerId}/campaigns`),
-      api.get<Upload[]>(`/admin/campaigns/uploads?customerId=${customerId}`),
+      api.get<Campaign[]>("/admin/campaigns"),
+      api.get<Upload[]>("/admin/campaigns/uploads"),
     ]);
     setItems(campaigns);
     setUploads(lists);
-  }, [picksCompany, customerId]);
+  }, [picksCompany]);
 
   useEffect(() => {
     load().catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
@@ -203,20 +197,11 @@ export function CampaignsPage() {
 
   const ownCompany = customers.find((c) => c.id === user?.customerId);
 
-  // One company's campaigns at a time. A platform super-admin picks the company in the form above, and
-  // until they do there is no list at all — never a view that mixes customers. A company super-admin
-  // only ever has its own, so its list is unchanged either way.
-  const visible = picksCompany
-    ? customerId
-      ? items.filter((c) => String(c.customer_id) === customerId)
-      : []
-    : items;
+  // Every campaign, whichever company it belongs to. The Company selector inside *New campaign* is the
+  // only place a company is named, and it decides who the campaign is created for — not what is listed.
+  const visible = items;
 
-  const emptyMessage = picksCompany
-    ? customerId
-      ? "This customer has no campaigns yet."
-      : "Pick a customer above to see its campaigns."
-    : "No campaigns yet.";
+  const emptyMessage = "No campaigns yet.";
 
   return (
     <div>
@@ -295,25 +280,7 @@ export function CampaignsPage() {
       )}
 
       <details className="card" open>
-        <summary>{isSuperAdmin ? "A customer's campaigns" : "Campaigns"}</summary>
-
-        {/* The customer whose campaigns are listed below. The create form above shares this choice, so
-            the page can never show two different customers at once. */}
-        {picksCompany && (
-          <div className="customer-row">
-            <label>
-              Customer
-              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                <option value="">Choose a customer…</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        )}
+        <summary>{picksCompany ? "All campaigns" : "Campaigns"}</summary>
 
         {visible.length === 0 ? (
           <p className="muted">{emptyMessage}</p>

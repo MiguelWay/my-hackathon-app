@@ -64,7 +64,7 @@ packagesRouter.post(
 
     const parsed = parseImportBody(req.body);
     if (!parsed.ok) return res.status(parsed.status).json({ error: parsed.error });
-    const { filename, columns: cols, senderIndex: idx, records, skipped } = parsed.value;
+    const { filename, columns: cols, senderIndex: idx, storeIndex, records, skipped } = parsed.value;
 
     // The packages belong to the campaign's customer, which is not necessarily the caller's: a platform
     // super-admin has no company of its own and is filling in somebody else's campaign.
@@ -93,9 +93,9 @@ packagesRouter.post(
     try {
       await conn.beginTransaction();
       const [upload] = await conn.query<ResultSetHeader>(
-        `INSERT INTO campaign_uploads (customer_id, campaign_id, filename, columns, row_count)
-         VALUES (?, ?, ?, ?, ?)`,
-        [customerId, campaignId, filename, JSON.stringify(cols), records.length]
+        `INSERT INTO campaign_uploads (customer_id, campaign_id, filename, columns, store_column, row_count)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [customerId, campaignId, filename, JSON.stringify(cols), cols[storeIndex], records.length]
       );
 
       for (let i = 0; i < records.length; i += INSERT_CHUNK) {
@@ -110,11 +110,12 @@ packagesRouter.post(
             upload.insertId,
             rec.sourceRow,
             rec.sender,
+            rec.store,
             JSON.stringify(extra),
           ];
         });
         await conn.query(
-          `INSERT INTO packages (customer_id, campaign_id, upload_id, source_row, sender_id, extra_columns)
+          `INSERT INTO packages (customer_id, campaign_id, upload_id, source_row, sender_id, store_id, extra_columns)
            VALUES ?`,
           [values]
         );
@@ -126,6 +127,7 @@ packagesRouter.post(
         campaignId,
         filename,
         senderColumn: { index: idx, name: cols[idx] },
+        storeColumn: { index: storeIndex, name: cols[storeIndex] },
         columns: cols,
         imported: records.length,
         skipped,

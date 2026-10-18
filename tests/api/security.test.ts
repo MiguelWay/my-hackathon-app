@@ -16,7 +16,7 @@ import {
   type TestServer,
 } from "./helpers";
 
-const COLUMNS = ["Fecha de envío", "ID de envío"];
+const COLUMNS = ["Fecha de envío", "ID de envío", "Ref. 2"];
 
 const WINDOW = { startDate: "2026-05-01", finishDate: "2026-05-31" };
 
@@ -119,7 +119,8 @@ describe("input validation happens at the boundary", () => {
       filename: "x.xlsx",
       columns: COLUMNS,
       senderColumn: 1,
-      rows: [["2026-03-01", "P".repeat(200)]],
+      storeColumn: 2,
+      rows: [["2026-03-01", "P".repeat(200), "STORE1"]],
     });
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({
@@ -155,7 +156,8 @@ describe("input validation happens at the boundary", () => {
       filename: "x.xlsx",
       columns: COLUMNS,
       senderColumn: 1,
-      rows: [["2026-03-01", "P".repeat(128)]],
+      storeColumn: 2,
+      rows: [["2026-03-01", "P".repeat(128), "STORE1"]],
     });
     expect(res.status).toBe(201);
   });
@@ -246,7 +248,9 @@ describe("a session ends after 30 minutes of inactivity", () => {
     const [rows] = await pool.query(
       `SELECT TIMESTAMPDIFF(SECOND, s.last_seen_at, NOW()) AS age
          FROM sessions s JOIN users u ON u.id = s.user_id
-        WHERE u.email = ?`,
+        WHERE u.email = ?
+        ORDER BY s.last_seen_at DESC
+        LIMIT 1`,
       [ADMIN_EMAIL]
     );
     const age = Number((rows as { age: number }[])[0]?.age);
