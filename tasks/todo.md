@@ -1,7 +1,9 @@
 # Task List: Package Returns & Store Traceability App
 
 Task list target for this project. Index and rationale: `tasks/plan.md`. Spec: `SPECIFICATION.md`.
-Stack: React + Vite (SPA on Plesk) · Node + Express API *(pending language)* · MySQL/MariaDB · no Supabase.
+Stack: React + Vite (SPA on Plesk) · Node + Express API · MySQL/MariaDB · no Supabase.
+Current state (2026-10-19): Spanish by default with an ES/EN switch, an editable administrator
+**Traducciones** table, 272 tests, and a one-command Plesk deployment script.
 
 ---
 
@@ -1479,4 +1481,49 @@ stylesheet.
 **Files:** `server/src/{admin,campaigns}.ts`, `src/pages/{CampaignsPage,CustomersPage}.tsx`,
 `src/App.tsx`, `src/components/Layout.tsx`, `src/styles.css`, `tests/api/isolation.test.ts`,
 `docs/specs/user-profile-drilldown.md`, `tasks/{plan,todo}.md`
+**Scope:** Large
+
+---
+
+## Spanish UI and editable translations (2026-10-19)
+
+**Description:** The owner asked to display the app in Spanish while keeping the original English for
+easy updating: a translation table with both languages, every text shown per role and screen, and the
+list editable. Confirmed decisions: Spanish default for everyone; an **ES / EN** switch in the header;
+only administrators can open the editor; both columns editable; server API error messages left out of
+this pass.
+
+**Implementation:**
+
+- `shared/translations.ts` — a catalog of **321 texts** (key, screen, role, context, English, Spanish)
+  across 17 screen groups. It seeds the table and is the client's fallback.
+- `db/migrations/013_translations.sql` — the `translations` table. `npm run db:migrate` inserts missing
+  keys, preserves existing edits (`INSERT IGNORE`), and prunes keys the code no longer asks for.
+- `GET /api/translations` — public read for the login screen. `GET/PUT /api/admin/translations` —
+  administrator-only list and bulk save; both columns are validated.
+- `src/i18n/runtime.ts` + `src/i18n/I18nContext.tsx` — module-level language/dictionary, `t()`/`translate()`,
+  `localStorage` persistence, `<html lang>` and document title updates, and a `refresh()` after saves.
+- `src/components/LanguageSwitch.tsx` — ES/EN control in the header and on the auth screens.
+- `src/pages/TranslationsPage.tsx` — the editor: grouped by screen, role badges, search, screen filter,
+  dirty-row highlighting, and one **Guardar cambios** action.
+- Every page and shared component now asks for copy through `t()`; layouts, permissions and flows are
+  unchanged.
+- `scripts/deploy-plesk.sh` — one-command deploy (preflight, install, build, API typecheck, migrate,
+  optional super-admin, Passenger restart).
+
+**Verification:**
+
+- `npm test` — **272 tests** (147 isolation, 5 translation API, 2 catalog/source-key, plus unit/security).
+- `npx tsc --noEmit`, `npm run typecheck:api`, `npm run build` clean.
+- Browser: Spanish default on login, Customers, Campaigns, campaign returns and Users; ES/EN switch
+  changes the copy and the document title; an operator is redirected from `/translations` and gets
+  `403` from the admin API; an administrator edited a text, saw it apply immediately, and restored it.
+- `bash scripts/deploy-plesk.sh --check` passes locally; the script has not yet been run against the
+  real Plesk server.
+
+**Files:** `shared/translations.ts`, `db/migrations/013_translations.sql`,
+`server/src/{translations,translationsRoutes,migrations,app}.ts`, `src/i18n/*`, `src/App.tsx`, `src/main.tsx`,
+`src/components/*`, `src/pages/*`, `src/styles.css`, `tests/api/translations.test.ts`,
+`tests/translationsCatalog.test.ts`, `scripts/deploy-plesk.sh`, `README.md`, `SPECIFICATION.md`,
+`SECURITY.md`, `docs/**`, `tasks/{plan,todo}.md`
 **Scope:** Large

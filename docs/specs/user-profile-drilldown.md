@@ -1,6 +1,6 @@
 # Spec: User profile — customer → campaign → returns
 
-**Status:** implemented (Tasks 13–15; see `tasks/todo.md`)
+**Status:** implemented (Tasks 13–15; see `tasks/todo.md`); current-state note added 2026-10-19
 **Owner:** Miguel
 **Date:** 2026-10-15
 **Builds on:** `SPECIFICATION.md` (app-level PRD), `SECURITY.md`, `tasks/plan.md`
@@ -8,6 +8,12 @@
 The operator's flow was agreed with the owner in an interview on 2026-10-15. This spec turns that
 agreed intent into something buildable. It does not design the reports, the chains or the exports
 beyond taking them away from a `user`.
+
+> **Current state (2026-10-19).** The scope's “Out” list is historical: the campaign's **Return package
+> list**, the **Returned packages by category** chart and the reports were added later. Downloads are
+> **administrator-only**; the operator reads every table and chart but has no Download / Save as. The
+> administrator nav also includes **Traducciones** (`/translations`); the operator nav is still
+> **Customers** alone. The app opens in **Spanish**, with an **ES / EN** switch in the header.
 
 ---
 
@@ -63,16 +69,15 @@ in one screen, with the campaign's count ticking up.
 | `/` | any | Redirects to `/customers`. Every role lands there. |
 
 **Nav.** A `user` sees exactly one item: **Customers**. A super-admin keeps `Customers · Campaigns ·
-Users`.
+Users · Translations` (in Spanish: `Clientes · Campañas · Usuarios · Traducciones`).
 
 **`Packages returns` comes off the menu for everyone** (decided). With the drill-down it has no campaign
 behind it, and the way in is Customers → campaign. It was put back in the menu only because the
 processing screen could not be found otherwise, and that reason is gone.
 
-**A campaign row** — on the customers page, and for either role — shows its name, its
-`start_date → finish_date`, and its counts: **`N packages · M returns`** (decided; see section 6 for the
-field). The admin row additionally keeps `lines` and its export controls, which an operator does not
-get.
+**A campaign row** — on the operator's customers page — shows its name and the same three counters as
+the campaign screen: **packages sent · returned packages (`n% of sent`) · Resent (`n% of sent`)**. The
+administrator no longer expands customer rows; its Customers table is **ID · Name · Delete** only.
 
 **One screen for both roles.** The super-admin's campaign link opens `/campaigns/:id/returns` too —
 one implementation, not two.
@@ -87,9 +92,9 @@ Holds just that campaign's work, and nothing else:
    a way back to that customer's campaigns (`/customers?customer=<id>`).
 2. **The counters** — see section 5.
 3. **The input** — the package-ID box and *Find package*.
-4. **The match** — exactly what the screen shows today: the sender ID, the campaign, a `closed store`
-   chip, the chain as attempts, the uploaded columns, and either the recorded return or the reason
-   buttons plus the optional note.
+4. **The match** — the package's **label details** accordion, either the recorded return or the reason
+   buttons plus the optional note, and the resend row directly under the package. The old package card
+   and attempt lines were removed.
 5. **The resend form** — for a returned package, directly under its card: the ID of a package that
    already exists in this campaign, which becomes the next attempt of the chain. The outcome appears
    beside the button — **Saved**, or the reason it was refused. The chain is ordered by attempt, so a

@@ -1,7 +1,8 @@
 # Design: the app end to end — set up a customer, run its campaigns, record returns
 
-**Status: draft, awaiting your approval. No code has been written from this document.**
-Date: 2026-10-16 · Supersedes nothing; `SPECIFICATION.md` remains the original PRD.
+**Status: implemented.** This is the 2026-10-16 design record; the current implementation is
+summarized in §1a. Date: 2026-10-16 (current-state note added 2026-10-19). `SPECIFICATION.md` remains
+the original PRD.
 
 ---
 
@@ -15,7 +16,36 @@ started to disagree with each other. It ends with where each question stands.
 
 ---
 
+## 1a. Current implementation (2026-10-19)
+
+The flows below are the design record; this is what the app does now.
+
+- **Languages:** the app opens in **Spanish**. An **ES / EN** switch in the header keeps the original
+  English available. Administrators edit both columns in **Traducciones** (`/translations`), grouped by
+  screen and role; the live copy is in MySQL `translations`, seeded from `shared/translations.ts`.
+  Operators cannot open the editor. Server API error messages remain English.
+- **Customers:** an administrator sees **ID · Name · Delete** only (no row expansion). An operator's
+  row expands to its campaigns, with **Record returns** and the **Return package list** accordion.
+- **Campaigns:** the administrator screen has an independent customer selector, active campaigns first,
+  a **Closed campaigns (n)** accordion, and per campaign: lists, **Return package list** (with the
+  category chart), **Returns + Store ID**, and **Results file download**. The campaign page currently
+  shows the campaign and its upload; the name/window editor described in §7 is still a pending design
+  item.
+- **Campaign returns screen:** counters, package lookup, reason picker, label details and resend row;
+  **Return package list** (two tables + **Returned packages by category** chart) for both roles;
+  **Returns + Store ID** for administrators only.
+- **Downloads:** administrator only. Operators can read every table and chart but have no Download or
+  Save as controls; the export routes return **403** for a `user` role.
+- **Navigation:** administrator view `Clientes · Campañas · Usuarios · Traducciones`; operator view
+  `Clientes` only. The login door chooses the view; the account role does not change.
+- **Verification:** 272 tests, `npm run typecheck:api`, `npx tsc --noEmit`, `npm run build`.
+
+---
+
 ## 2. The finding that decides everything else
+
+> **Historical note:** this finding and the Model A decision below are from 2026-10-16. Model A is
+> implemented; see §1a for the current state.
 
 You created **`plátano de canarias 2026`** just now (customer 12). The app did the right thing and
 created its first campaign with it (campaign 10). Then that campaign could not be opened:
@@ -74,8 +104,8 @@ customer. Everything works again immediately.
 
 | Role | Who | What they may do |
 |---|---|---|
-| `superadmin` | you, and each customer's manager | Customers, accounts, campaigns, uploads, the returns screen, the reports and the `.xlsx` |
-| `user` | a store-side operator | The customers → campaign → returns screen only. No customer or account administration, no campaigns, no uploads, no downloads |
+| `superadmin` | you, and each customer's manager | Customers, accounts, campaigns, uploads, the returns screen, the reports, the `.xlsx`, and **Traducciones** |
+| `user` | a store-side operator | The customers → campaign → returns screen only. No customer or account administration, no campaigns, no uploads, no downloads, no Traducciones |
 
 Two more facts that matter for the design:
 
@@ -88,7 +118,8 @@ Two more facts that matter for the design:
 **view**, never the role. A super-admin may use either; an **operator account** (the `user` role) may only
 use the operator's, and the administrator's door is **refused with the reason** rather than quietly
 downgraded. Entering as operator hides the admin items and every admin control, so the nav is
-**`Customers` alone**, and a `user view` chip marks where you are; getting back to the super-admin view
+**`Customers` alone**, and a `user view` chip marks where you are; the administrator view is
+**`Customers · Campaigns · Users · Traducciones`**. Getting back to the super-admin view
 takes a **fresh login**. This is a **view, not a permission**: the account stays a super-admin and the API
 still allows it everything. *(This replaced the *Process returns* top-level menu item, removed along with
 *Returned Packages* on 2026-10-16.)*
@@ -120,10 +151,10 @@ UI.
 
 ```mermaid
 graph TD
-    A[Customers] --> B[New customer: name, first campaign, dates]
-    B --> C[Customer and its first campaign created]
-    C --> D[Redirect to the campaign page]
-    D --> E[Name the campaign and set its window]
+    A[Customers] --> B[New customer: name]
+    B --> C[Customer created]
+    C --> D[Campaigns with that customer selected]
+    D --> E[New campaign: company, name, dates]
     E --> F[Upload the .xlsx list]
     F --> G[Confirm the package ID and store ID columns]
     G --> H[Packages imported]
@@ -131,29 +162,29 @@ graph TD
     H --> J[Download the flagged .xlsx]
 ```
 
-### Flow 1 — a new customer and its first list *(your point 2)*
+### Flow 1 — a new customer and its first list
 
-> **Settled — R1, option (iii).** The campaign is created with the customer, then you name it and date it
-> on its own page before uploading. So the New customer form asks for the **customer's name only**.
+> **Current implementation (2026-10-19).** Customer creation and campaign creation are separate: the
+> New customer form asks for the **customer's name only**, then opens Campaigns with that customer
+> selected and the New campaign form ready.
 
 1. **Customers → *New customer*.** One field: **Name**. Nothing else — no campaign name, no dates.
-2. **Create.** The customer and its first campaign are created together, in one request; the campaign
-   starts named after the customer and dated today.
-3. **You land on that campaign's page** (`/campaigns/:id`). *This redirect is new.*
-4. On the page: the campaign's **name** and **window** are shown and **editable**, and *Add a list to
-   this campaign* is open. *The rename/date editor is new — the API for it already exists and no screen
-   uses it today.*
-5. **Pick the `.xlsx`**, confirm which column holds the **package ID** and which holds the **store ID**
-   (usually `Ref. 2`; both required, and they must be different columns), **import**. A row with no
-   store ID is refused and names its sheet line. The page reports `N lines imported`.
-6. From there: **Record returns →** (`/campaigns/:id/returns`) or **Download the flagged `.xlsx`**.
+2. **Create.** The customer is created; the app takes you to `/campaigns?customer=<id>` with the New
+   campaign form open.
+3. Fill the campaign's **name**, **start date** and **finish date**; **Create**.
+4. The campaign card shows its lists and accordions. **Add a list**, pick the `.xlsx`, confirm which
+   column holds the **package ID** and which holds the **store ID** (usually `Ref. 2`; both required,
+   and they must be different columns), then **import**.
+5. From the card: **Return package list** (two tables + category chart), **Returns + Store ID**, the
+   results file download, or open **Record returns** on the campaign screen.
 
-### Flow 2 — a campaign for a customer that already exists *(your point 3)*
+### Flow 2 — a campaign for a customer that already exists
 
 1. **Campaigns → *New campaign*.** Fields: **Company** (a platform super-admin chooses from every
    customer; a company super-admin is fixed to its own), **Name**, **Start date**, **Finish date**.
-2. **Create.** It appears in the list, with its company named beside it.
-3. **Click it** → the campaign page of Flow 1, step 4. *(Today this is a 404 — section 2.)*
+2. **Create.** It appears in the selected customer's list, with its company named beside it.
+3. The campaign's own card is the way in: lists, **Return package list**, **Returns + Store ID** and
+   the results download.
 
 ### Flow 3 — the operator records a return
 
@@ -176,18 +207,20 @@ If the package went out again, the resend row sits directly under its card — s
    A returned row is red, a resent row is green, and a package that is both appears once as a return
    (red wins). Below it, **Resend links**: `Returned ID · Reason · Resent ID · Returned ID · Reason`, one
    row per return → resend pair, with the resent package's own return in the last two columns when it
-   came back too; uncoloured. Both tables download as one workbook, one sheet each. Both roles have the
-   accordion here; on an administrator's Campaigns screen the same accordion sits in each campaign card;
-3. **Returns + Store ID** — a separate collapsed accordion and its own download, on this screen only:
-   one row per return → resend link, `Store ID · Return package ID · Reason · Store ID · Resend package
-   ID`. The left pair is the package that came back, the right pair the package it went out as next;
-   both store IDs are read from those package rows. The two reports above are unchanged;
-4. the package lookup, the reason buttons and the resend form — the operator's work;
-5. the **linking table** for that campaign: Original ID · Resent as · Resent again as · return reason
-   *(no campaign column: on a campaign's own screen it would repeat the same name on every row)*;
-6. **Download `.xlsx`** for that table, and for the campaign's whole list: the uploaded columns exactly,
-   plus `Return Status`, `Return Reason` and the chain columns (`Original ID`, `Resent as`, `Resent again
-   as`, …). Returned rows are filled light red and resent rows light green — see Flow 5.
+   came back too; uncoloured. Under both, **Returned packages by category** lists the five seeded
+   reasons and counts the returned packages, zeroes included, as a bar chart. The administrator's
+   workbook has one sheet per table plus **Returns by category**; operators have no download. Both roles
+   have the accordion here; on an administrator's Campaigns screen the same accordion sits in each
+   campaign card, and on an operator's Customers expansion;
+3. **Returns + Store ID** — a separate collapsed accordion and its own administrator download, on this
+   screen and in each campaign card on Campaigns: one row per return → resend link, `Store ID · Return
+   package ID · Reason · Store ID · Resend package ID`. The left pair is the package that came back, the
+   right pair the package it went out as next; both store IDs are read from those package rows;
+4. the package lookup, the reason buttons and the resend form — the operator's work. The operator's
+   reason card sits **above** the reports; the administrator's sits below them;
+5. **Download `.xlsx`** for the campaign's whole list: the uploaded columns exactly, plus `Return
+   Status`, `Return Reason` and the chain columns (`Original ID`, `Resent as`, `Resent again as`, …).
+   Returned rows are filled light red and resent rows light green — see Flow 5. Administrator only.
 
 *The company-wide “Returned Packages” page is retired — see R3.*
 
@@ -248,21 +281,24 @@ lower id than the package it replaces.
 | Log in | `/login` | anyone | Email + password, with the two doors; a **Forgot password?** link |
 | **Forgot password** | `/forgot-password` | anyone | Asks for the email and always answers generically |
 | **Reset password** | `/reset-password?token=…` | anyone with the emailed link | Sets a new password; the link is single-use and expires after 30 minutes |
-| **Customers** | `/customers` | both | The home screen. Each row opens (accordion) to its **Campaigns**; a platform super-admin also gets **Delete** beside each customer |
+| **Customers** | `/customers` | both | The home screen. An administrator sees **ID · Name · Delete** only; an operator's row opens (accordion) to its **Campaigns** and **Record returns** |
 | **Users** | `/users` | super-admin | Every account on the platform in one place: create one, activate or deactivate it, delete it. Creating an account asks for no customer — an operator already reaches every customer, and a company super-admin's new accounts stay inside its company. The only screen that administers users |
-| **Campaigns** | `/campaigns` | super-admin | Every company's campaigns in one list, each named with its company; create a campaign for a company; every list under its campaign; **Delete** beside each campaign |
-| **Campaign page** | `/campaigns/:id` | super-admin | One campaign: edit its name/window, upload its lists |
-| **Campaign returns** | `/campaigns/:id/returns` | both | The operator's desk *and* that campaign's report: the counters, the lookup, the reason, the resend, the linking table and its `.xlsx` |
+| **Campaigns** | `/campaigns` | super-admin | Choose a customer to list its campaigns; create a campaign for a company; active campaigns first and a **Closed campaigns (n)** accordion; per campaign: lists, **Return package list** (with the category chart), **Returns + Store ID**, results download, **Delete** |
+| **Campaign page** | `/campaigns/:id` | super-admin | One campaign: its name/window and its lists/upload (the name/window editor is not built yet) |
+| **Campaign returns** | `/campaigns/:id/returns` | both | The operator's desk *and* that campaign's report: the counters, the lookup, the reason, the resend, the return package list with the category chart, and the administrator-only `.xlsx` |
+| **Translations** | `/translations` | super-admin | An editable table of every static UI text, grouped by screen and role, English and Spanish |
 
-A super-admin's nav is **`Customers · Campaigns · Users`**; in the operator's view it is **`Customers`
-alone**. The way into either view is the **login screen's two doors** (§4) — *Process returns* and
+A super-admin's nav is **`Clientes · Campañas · Usuarios · Traducciones`**; in the operator's view it is
+**`Clientes` alone**. The way into either view is the **login screen's two doors** (§4) — *Process returns* and
 *Returned Packages* left the nav on 2026-10-16.
 
 ---
 
-## 7. What changes from today
+## 7. Design history — what changed from the 2026-10-16 state
 
-| Area | Today | Proposed |
+This table records the decisions made at that point; see §1a for the current implementation.
+
+| Area | Then | Proposed |
 |---|---|---|
 | New customer | Creates the customer + its first campaign, named after it, and stays on the list | Asks for the **customer's name only**, then **redirects to the new campaign's page** |
 | Campaign page | Name and window are read-only; no rename, no re-date | **Editable**, and a *Record returns →* link |
@@ -270,8 +306,8 @@ alone**. The way into either view is the **login screen's two doors** (§4) — 
 | Uploading a list, as a platform super-admin | **403** | Imports into the campaign's own customer (Model A) |
 | Campaigns list → click a campaign | 404 for a platform super-admin | Opens the campaign page |
 | `← Campaigns` link on the campaign page | Points at `/`, which is now the customers — **a live bug from the last change** | Points at `/campaigns` |
-| *Returned Packages* in the menu | A report page that shows a platform super-admin nothing at all | **Removed from the nav** (2026-10-16); the route stays but is now unreachable. The report itself still moves onto each campaign's results screen (R3, not started). |
-| Customer names | Two customers may differ only by case; that is how `Plátano de Canarias 2026` and `plátano de canarias 2026` both existed | **One name per customer.** `customers.name` has no unique index today; a duplicate must be refused with a friendly `409` |
+| *Returned Packages* in the menu | A report page that shows a platform super-admin nothing at all | **Removed from the nav** (2026-10-16); the route stays but is now unreachable. The report itself moved onto each campaign's results screen (R3 — implemented later; see §1a). |
+| Customer names | Two customers could differ only by case; that is how `Plátano de Canarias 2026` and `plátano de canarias 2026` both existed | **One name per customer.** Implemented in migration `008_customer_name_unique.sql`; a duplicate is refused with a friendly `409` |
 | A super-admin acting as an operator | Not possible at all | **Built:** two doors on the login screen — *Enter as administrator* / *Enter as operator* — the second opening the operator's view (customer list, then campaign, then the package return functionality), admin items hidden, a `user view` chip shown; back via a **fresh login**. An operator account may not use the administrator's door. The old *Process returns* menu item is gone |
 | Campaign results counters | Exist: packages sent · returned packages (`n% of sent`) · Resent (`n% of sent`) | **Unchanged** — confirmed |
 

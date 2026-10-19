@@ -1,11 +1,12 @@
 # Security review
 
-Reviewed: 2026-10-15 · Re-reviewed: 2026-10-18 · Scope: the whole app (`server/src`, `src`, migrations, tests, dependencies).
+Reviewed: 2026-10-15 · Re-reviewed: 2026-10-19 · Scope: the whole app (`server/src`, `src`, `shared`, migrations, tests, dependencies).
 
 ## Threat model
 
 **Assets:** tenant data (store lists, sender IDs, return reasons, notes), user credentials, session
-tokens, and the ability to act as a full-access account for a customer.
+tokens, the ability to act as a full-access account for a customer, and the platform-wide UI copy in
+the `translations` table.
 
 **Trust boundaries** — everything below is attacker-controlled input:
 
@@ -15,10 +16,12 @@ tokens, and the ability to act as a full-access account for a customer.
 | Uploaded `.xlsx` | Parsed in the *browser*, but the parsed rows are posted as JSON — so the client is untrusted and the server re-validates |
 | The browser session | A user controls their own requests and can craft any payload |
 | Generated `.xlsx` export | Contains data that came from an uploaded file, and is opened in Excel by staff |
+| Translation editor (`/api/admin/translations`) | Administrator-controlled text stored in MySQL and rendered by every screen; the client is untrusted |
 
 **Primary abuse cases:** read or write another customer's data; brute-force a login; create a tenant
 without permission; exhaust CPU/storage; get code or a formula to execute on a colleague's machine
-from the exported file; learn whether an account exists.
+from the exported file; learn whether an account exists; deface the UI or inject HTML/script through a
+translation.
 
 ## Fixed
 
@@ -40,11 +43,12 @@ from the exported file; learn whether an account exists.
 |---|---|---|---|
 | 9 | **Spreadsheet formula injection** — exported cells are opened in Excel, and the values come from an uploaded file | Wrote `=1+1`, `@SUM(1)`, `+2+3`, `-2+3`, `=cmd\|'/c calc'!A0` through ExcelJS, read the workbook back, and inspected the raw sheet XML | ExcelJS writes them as **shared strings** (`t="s"`), with no `<f>` formula element — Excel shows them as text and does not evaluate them. Not exploitable |
 | 10 | SQL injection | Reviewed every statement in `server/src`; all use placeholders. The only interpolated SQL is `LIMIT ${RECENT_LIMIT}`, a module constant | Not exploitable |
-| 11 | Broken access control / IDOR | `tests/api/isolation.test.ts` — 98 tests covering the per-request customer scope, anonymous access to every endpoint, and role gating | Not exploitable for a request that names no customer (it stays in the caller's own company). Returns are deliberately open across customers — see 21 |
+| 11 | Broken access control / IDOR | `tests/api/isolation.test.ts` — 147 tests covering the per-request customer scope, anonymous access to every endpoint, and role gating | Not exploitable for a request that names no customer (it stays in the caller's own company). Returns are deliberately open across customers — see 21 |
 | 12 | XSS | `grep` for `dangerouslySetInnerHTML`, `innerHTML`, `eval(` across `src/` and `server/src/` | None present; React auto-escaping is intact |
 | 13 | Secrets in git history | `git log --full-history -- .env`, plus a grep of **every blob in history** for the DB password, test passwords, key material and vendor tokens | `.env` was never committed. One historical commit accidentally included Playwright page snapshots (test account emails only, no credentials or tokens) |
 | 14 | Session handling | Code + tests | httpOnly + `SameSite=Lax` + `Secure` (production); only a SHA-256 token hash is stored; absolute expiry enforced in the query; **a 30-minute idle window** (`sessions.last_seen_at`, stamped by every authenticated request); logout deletes the server-side session |
 | 15 | Stack traces / internals leaked to users | Code review | The central error handler logs server-side and returns a generic `internal error` |
+| 24 | Translation editing or script injection | `tests/api/translations.test.ts` and `tests/translationsCatalog.test.ts`: anonymous `401`, operator `403`, admin `200`, validation of both columns, and every `t()` key checked against the catalog. React renders translation values as text; no `dangerouslySetInnerHTML`/`innerHTML` exists | Public read returns only static UI copy; edits are administrator-only; stored strings are not interpreted as HTML |
 
 ## Accepted, with reasons
 
@@ -58,6 +62,7 @@ from the exported file; learn whether an account exists.
 | 20 | Expired session rows are never garbage-collected | Housekeeping only — an expired or idle row cannot authenticate (`expires_at > NOW()` and the idle window are in the query), and the row is deleted when its cookie is presented again. Rows whose cookie is never presented linger | Add a periodic `DELETE FROM sessions WHERE expires_at < NOW() OR last_seen_at < NOW() - INTERVAL 30 MINUTE` |
 | 21 | **Returns are processed across customers, by design.** `GET /returns/*`, `POST /returns` and `POST /returns/resend` take the customer the request names rather than the caller's own, and `/returns/customers` lists every client company. So any signed-in account can read and write the returns — and see the directory — of every customer. | Deliberate, on request, and it is the point of the tool: one operator team receives returned parcels for every client it ships for, so it must pick the customer, then the campaign. The isolation guarantee became *per request*: a response only ever contains the one customer it names, a write lands in the customer the named package belongs to, and a request naming nobody stays in the caller's own company. Admin actions stay super-admin only, and so do the company-wide reports: the recent-returns list, the counters, the chains and the chains download. The drill-down gives a `user` the customer directory and one campaign's own read, and nothing wider. | Before handing a login to anyone outside the operating team, or if a client ever gets a login that must not see the others. Then gate `/returns/customers` behind an entitlement and make the scope default to the account's own company. |
 | 22 | **The returns request scope is not confined for a company super-admin.** `scopeOf()` (`server/src/returns.ts:32`) honours any `customerId` in the request; `GET /returns/campaigns/:id` and `GET /returns/customers/:id/campaigns` take an id with no `isConfined` check. An account that is **both** super-admin and attached to a company can therefore read another company's summary, recent returns (label columns included), lookup matches, chains and chain export, list its campaigns, and record a return against its packages by sender ID. Proven on 2026-10-18 with a temporary company-27 administrator reading customer 12's summary and campaign 10 (the account was deleted afterwards). | **Accepted by the owner on 2026-10-18 — not fixed.** The intended users today are platform super-admins (no company) and operators (`user`), neither of which is confined, so no live account can exercise it; the customer-manager role that would is not in use. The cross-customer returns workflow for the operating team is deliberate (finding 21). Two isolation tests currently encode the behaviour (“scopes a lookup to the customer it names”, “counts each customer separately”); a future fix must move them to the platform/operator clients and add 404 assertions for a company admin. | Before a company administrator account is handed out, before a second company shares this deployment, or before any client gets a login that must not see the others. Fix centrally: `scopeOf()` 404s a named customer other than the caller's when `isConfined`; the two id-taking routes check the campaign/customer owner; the directory returns only the caller's customer to a confined admin. |
+| 25 | **Translations are platform-wide, not tenant-scoped.** Any super-admin (including a company super-admin) can change UI copy for every tenant. | Deliberate: the current deployment has one administrator, and the data is static UI copy, not tenant data. Writes are still administrator-only. | Before multiple companies share this deployment, or before a company administrator who should not change global copy gets a login. Then restrict translation writes to the platform super-admin (`customer_id IS NULL`) or make copy tenant-scoped. |
 
 ## Known gaps (not vulnerabilities, but worth knowing)
 
@@ -67,7 +72,8 @@ from the exported file; learn whether an account exists.
   deleting a `customers` row cascades to its campaigns, packages and returns, which is the practical
   erasure path today. If this ever holds customer PII at scale, add explicit retention and an erasure
   endpoint.
-- **No audit log** of who changed what. `returns.recorded_by` is recorded; campaign edits are not.
+- **No audit log** of who changed what. `returns.recorded_by` is recorded; campaign edits and
+translation edits are not (the translation row has only `updated_at`).
 - **CORS origin defaults to the dev server.** `CORS_ORIGIN` falls back to `http://localhost:5173`, and
   the API answers with that origin plus `Access-Control-Allow-Credentials: true`. Harmless while only a
   page on the operator's own machine could use it, but production should set `CORS_ORIGIN` to the real
@@ -76,7 +82,7 @@ from the exported file; learn whether an account exists.
 ## Verification
 
 ```
-npm test            # 235 tests: unit + API isolation + security hardening
+npm test            # 272 tests: unit + API isolation + security + translation permissions
 npm run typecheck:api
 npm run build
 ```
@@ -89,5 +95,7 @@ curl -sD - -o /dev/null http://localhost/api/health | grep -iE "content-security
 
 The test suite covers: security headers present and CSP free of `unsafe-inline`/`unsafe-eval`, signup
 refused when disabled, generic login errors for unknown users, over-long inputs rejected with `400`
-(not a database error), rate-limit budget advertised, successful logins not consuming the budget, and
-lockout after the configured number of failures.
+(not a database error), rate-limit budget advertised, successful logins not consuming the budget,
+lockout after the configured number of failures, the public translation read, administrator-only
+translation writes, validation of empty English/malformed updates, and every `t()` key existing in the
+catalog.

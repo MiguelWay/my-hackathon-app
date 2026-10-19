@@ -65,9 +65,24 @@ The operator removes closed stores from the source database, so the member count
 
 ---
 
+## Current implementation (2026-10-19)
+
+- The app opens in **Spanish** for everyone; an **ES / EN** switch in the header keeps the original
+  English available for comparison.
+- Administrators edit both languages in **Traducciones** (`/translations`), grouped by screen and role.
+  Operators cannot open the editor. The live copy is in MySQL `translations`, seeded from
+  `shared/translations.ts`.
+- Server API error messages remain in English in this phase; static UI copy, client-side validation and
+  download notices are translated.
+- The rest of the intent is unchanged.
+
 ## Cross-cutting
 
-- **Roles & auth:** our own email/password auth with two roles — **Admin** (can upload) and **User** (can process returns). Per-customer isolation is enforced in the **API** (every query scoped by `customer_id`); the database itself has no row-level security.
+- **Roles & auth:** our own email/password auth with two roles — **Admin** (`superadmin`, can upload and
+  administer) and **User** (`user`, can process returns). The login screen's two doors choose the
+  administrator or operator **view**; the door never changes the account role. Per-customer isolation
+  is enforced in the **API** (every query scoped by `customer_id`); the database itself has no
+  row-level security. Translation writes are administrator-only.
 - **Constraints:** none binding.
 - **Success metric:** not important.
 - **Out of scope for v1:** (1) writing back to the source database (V2); (2) Google Sheets / Playwright input (V2); (3) barcode/QR scanning; (4) reporting beyond return-rate-by-category and resend volume; (5) a native mobile app (v1 is the web app, mobile-friendly for the camera); (6) a customer self-service login portal.
@@ -80,7 +95,7 @@ The operator removes closed stores from the source database, so the member count
 
 ## Data model
 
-Customer (1 master DB each) → Campaigns (many per customer) → campaign lists (multiple uploads) → store rows / packages → returns (reason; "closed" scoped per campaign) → resends (linked sender IDs, one Package Chain ID) → flagged export.
+Customer (1 master DB each) → Campaigns (many per customer) → campaign lists (multiple uploads) → store rows / packages → returns (reason; "closed" scoped per campaign) → resends (linked sender IDs, one Package Chain ID) → flagged export. A platform-wide `translations` table (screen, role, English, Spanish) holds the UI copy.
 
 ## Known tech context (from setup, not part of the intent)
 

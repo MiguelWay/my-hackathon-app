@@ -8,7 +8,11 @@ break sign-in as third-party cookies are phased out.
 > **Not yet done:** these steps have not been run against a real Plesk server — I have no access to
 > yours. Everything below was verified locally by running the production build the same way Plesk does
 > (`NODE_ENV=production node server/start.mjs`): the SPA and its deep links are served, `/api` stays
-> JSON, and sign-in, uploads, returns and the export all work.
+> JSON, and sign-in, uploads, returns, translations and the export all work.
+>
+> **One-command path:** steps 4–5 are automated by `scripts/deploy-plesk.sh`. It validates `.env`,
+> installs build dependencies, builds the SPA, type-checks the API, runs migrations (including the
+> translation seed), optionally creates the first super-admin, and requests a Passenger restart.
 
 ## 0. Prerequisites
 
@@ -67,12 +71,36 @@ Notes:
 
 ## 4. Install, build, migrate
 
+From the application root, the short path is:
+
+```sh
+bash scripts/deploy-plesk.sh
+```
+
+The script runs the equivalent of:
+
 ```sh
 npm ci --include=dev   # devDependencies are required by the SPA build step
 npm run build          # writes dist/  (reads .env.production: VITE_API_BASE_URL=/api)
+npm run typecheck:api
 npm run db:migrate     # applies db/migrations/*.sql, tracked in schema_migrations
+
+# first deploy only:
 npm run create:superadmin -- you@example.com 'a-strong-password'
 ```
+
+To create the first super-admin in the same run:
+
+```sh
+CREATE_SUPERADMIN=1 \
+SUPERADMIN_EMAIL=you@example.com \
+SUPERADMIN_PASSWORD='a-strong-password' \
+bash scripts/deploy-plesk.sh
+```
+
+`npm run db:migrate` now also creates and seeds the `translations` table (`013_translations.sql`):
+**321 static UI texts** with English and Spanish. Existing translation edits are preserved; new keys
+are added and keys removed from the catalog are pruned.
 
 Use `--include=dev` even in production mode: if the shell has `NODE_ENV=production`, a plain `npm ci`
 skips TypeScript and Vite, and `npm run build` then fails.
@@ -97,7 +125,8 @@ Plesk → your domain → **Node.js**:
 | Application mode | production |
 | Node.js version | 24.x (or 26.x) |
 
-Then **Restart App**.
+The deploy script requests the Passenger restart itself (`tmp/restart.txt`). If the app does not pick
+up the change, press **Restart App**.
 
 > **Document root:** the repo root also contains Vite's **source** `index.html`. If your web server
 > serves static files before passing misses to Node, a request for `/` may return that source page
@@ -126,6 +155,9 @@ sign-in silently fails over plain HTTP.
 ```sh
 curl -s https://your-domain.example/api/health
 # {"ok":true,"db":"up"}
+
+curl -s https://your-domain.example/api/translations | head -c 160
+# [{"key":"header.brand","english":"Package Returns",...}]
 ```
 
 Then in a browser:
@@ -138,14 +170,26 @@ Then in a browser:
 5. Download the `.xlsx` and check the returned rows are shaded.
 6. Open **Forgot password** on the login screen and confirm the reset email arrives (check the spam
    folder; the link uses `APP_URL`).
+7. The app opens in **Spanish**. Switch to **EN** and back with the header control.
+8. Sign in with **Enter as administrator** (not the operator door), open **Traducciones**, change a
+   text, save, and confirm it applies immediately. Operators do not see this link.
 
 ## Updating the app
+
+```sh
+cd /var/www/vhosts/example.com/httpdocs
+git pull
+bash scripts/deploy-plesk.sh
+```
+
+The script does `npm ci --include=dev`, `npm run build`, `npm run typecheck:api`, `npm run db:migrate`
+(only new migration files run) and a Passenger restart. If you prefer the manual path:
 
 ```sh
 git pull
 npm ci --include=dev
 npm run build
-npm run db:migrate      # only applies new files
+npm run db:migrate
 ```
 
 then Plesk → **Node.js** → *Restart App*.
@@ -155,7 +199,7 @@ then Plesk → **Node.js** → *Restart App*.
 ```sh
 git log --oneline -5
 git checkout <previous-commit>
-npm ci && npm run build
+npm ci --include=dev && npm run build
 ```
 
 then restart. Migrations are additive and recorded in `schema_migrations`; **never edit a migration
@@ -194,6 +238,9 @@ access at all, say so — the fallback is a start-up repair from environment var
 | Deep link 404s | `SERVE_SPA` must be true, or your web server needs an SPA rewrite to `index.html`. |
 | Can't reach the database | On Plesk use `DB_HOST=localhost`; double-check the DB name and user from step 1. |
 | Uploads fail with "invalid campaign id" / 404 | You're hitting the API without the `/api` prefix. |
+| **Traducciones** is missing from the nav | You are in the operator view. Log out and enter through **Enter as administrator**; the operator door hides every admin item. |
+| `npm ci` fails on `xlsx` | The dependency is installed from `cdn.sheetjs.com`; the server needs outbound HTTPS to it. |
+| The app did not restart after the script | Press **Restart App** in Plesk → Node.js. The script only touches `tmp/restart.txt` (Passenger). |
 
 ## Security notes
 

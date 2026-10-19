@@ -88,15 +88,16 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 - [x] A return records end-to-end; a resend links original ↔ new sender ID
 
 ### Phase 4: Outputs
-- [ ] Task 9: Reporting (return rate by category + resend volume)
+- [x] Task 9: Reporting (returned packages by category + resend volume)
 - [x] Task 10: Export .xlsx (API route)
 
 ### Checkpoint: Outputs
-- [ ] Both charts render; the .xlsx exports with returned rows flagged
+- [x] The category bar chart renders per campaign; the .xlsx exports with returned rows flagged
 
 ### Phase 5: Harden & Deploy
 - [x] Task 11: Isolation verification + polish
-- [x] Task 12: Deploy to Plesk (static SPA + Node API + MySQL)
+- [ ] Task 12: Deploy to Plesk (static SPA + Node API + MySQL) — **one-command script ready;
+  awaiting server access**
 
 ### Checkpoint: Complete
 - [ ] All success criteria in `SPECIFICATION.md` met; app live on Plesk; ready for review
@@ -118,7 +119,9 @@ Detailed tasks live in `tasks/todo.md` (task list target = `tasks/todo.md`).
 
 ## Open Questions
 - **Backend language:** **decided — Node.js + Express (TypeScript)** (Plesk Node 24.21.0 / 26.11.0).
-- **Migration runner:** how `db/migrations/*.sql` are applied (a small Node/PHP runner, or a library) — decide with the language.
+- **Migration runner:** resolved — `server/src/migrate.ts` (`npm run db:migrate`) applies
+  `db/migrations/*.sql` in order and records them in `schema_migrations`; it also seeds/prunes the
+  translation catalog.
 - **MySQL vs Postgres:** resolved — MySQL / MariaDB (already on Plesk).
 - Anything else from `SPECIFICATION.md` §11 (currently none open).
 
@@ -249,3 +252,66 @@ One session, four small and sequential edits to the same two screens. No useful 
 
 ## Open Questions
 None — all four items were decided by the owner before any code was written.
+
+---
+
+# Feature Plan: Spanish UI + editable translations
+
+*Requested by the owner on 2026-10-19.*
+
+## Overview
+Display the app in **Spanish** while keeping the original **English** available for easy updating. Add an
+editable translation table for administrators, and a small **ES / EN** switch in the header. Server API
+error messages are explicitly out of scope for this pass.
+
+## Architecture decisions
+
+- **One catalog, one table.** `shared/translations.ts` holds every static text (key, screen, role,
+  context, English, Spanish). Migration `013_translations.sql` creates the `translations` table; the
+  catalog seeds it and is the client fallback. Existing edits are preserved; new keys are inserted and
+  dead keys are pruned by `npm run db:migrate`.
+- **Spanish is the default.** Language lives in `localStorage` (`pkgreturns.language`), not on the
+  account. The switch is in the header and on the auth screens; it is a view choice, not a permission.
+- **The editor is an administrator screen.** `/translations` is behind `isAdmin` (so the operator door
+  hides it) and `requireSuperAdmin` on the API. Operators get `403` from the admin endpoints.
+- **Both columns are editable.** English is the original; Spanish is what the app shows. Saving
+  refreshes the live dictionary immediately. A missing Spanish falls back to English.
+- **Public read, private write.** `GET /api/translations` is public because the login screen needs it
+  before a session; `GET/PUT /api/admin/translations` require a super-admin. The table is platform-wide
+  UI copy, not tenant data.
+- **No view changes.** Existing layouts, permissions and flows are untouched; only the copy moves
+  through `t()`.
+
+## Task List
+
+- [x] Add the catalog and `translations` table (migration 013 + seed/prune)
+- [x] Add the public read and administrator list/update API
+- [x] Convert every page/component to translation keys
+- [x] Add `I18nProvider`, `useI18n`, and the ES/EN switch
+- [x] Add the administrator **Traducciones** screen (grouped by screen/role, search, bulk save)
+- [x] Add API/permission tests and a catalog/source-key test
+- [x] Verify Spanish and English in the browser; save a live edit and restore it
+- [x] Add a one-command Plesk deploy script
+
+### Checkpoint: Feature complete
+- [x] `npm test` — **272 tests**
+- [x] `npx tsc --noEmit`, `npm run typecheck:api`, `npm run build`
+- [x] Browser: Spanish default, ES/EN switch, operator 403/redirect, live translation edit
+- [ ] Plesk deployment itself — the script is ready, but the server target is still needed
+
+## Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| A translation key is missing and the raw key appears | Med | `tests/translationsCatalog.test.ts` scans every `t()`/`translate()` call against the catalog |
+| A catalog change overwrites a hand-edited translation | High | The seed uses `INSERT IGNORE`; existing rows are never overwritten |
+| The operator can reach the editor | High | `/translations` is `SuperAdminOnly`; `GET/PUT /api/admin/translations` are `requireSuperAdmin`; tests cover 401/403 |
+| A translation string is injected as HTML | High | React renders it as text; no `dangerouslySetInnerHTML`/`innerHTML` exists |
+| Server errors remain English | Low | Explicit scope decision; client-side fallbacks and notices are translated |
+
+## Files
+
+`shared/translations.ts`, `db/migrations/013_translations.sql`, `server/src/{translations,translationsRoutes}.ts`,
+`server/src/migrations.ts`, `src/i18n/{runtime.ts,I18nContext.tsx}`, `src/components/LanguageSwitch.tsx`,
+`src/pages/TranslationsPage.tsx`, every `src/pages/*` and shared component, `src/styles.css`,
+`tests/api/translations.test.ts`, `tests/translationsCatalog.test.ts`, `scripts/deploy-plesk.sh`.
