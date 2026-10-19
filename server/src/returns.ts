@@ -9,8 +9,9 @@ import { sendChainsExport, sendReturnListExport, sendStoreReportExport } from ".
 import { loadStoreReport } from "./storeReport";
 import { normalizeSenderId } from "./senderId";
 import { chainRootId, parseResendBody } from "./resends";
-import { isConfined } from "./scope";
-import { MAX_NOTE_LENGTH, optionalPositiveInt } from "./validate";
+import { isConfined, scopedCampaign } from "./scope";
+import { bestMatch, extractTokens } from "./idMatch";
+import { MAX_NOTE_LENGTH, MAX_SENDER_ID_LENGTH, optionalPositiveInt } from "./validate";
 
 // Mounted at /returns. A store operator types a sender ID, sees the package, and picks a reason.
 // Every query is scoped by customer_id.
@@ -409,6 +410,57 @@ returnsRouter.get(
         ...r,
         chain: chains.get(chainRootId(r as unknown as { id: number; chain_id: number | null })) ?? [],
       }))
+    );
+  })
+);
+
+// ---- recover a package ID from an OCR read of the printed label ----------------
+// The operator photographs the ID; the browser reads the characters and sends what it saw. OCR is
+// lossy (see idMatch.ts), so the text is never trusted directly: it is matched against this
+// campaign's own IDs, and a candidate is only accepted when it is both close and unambiguous.
+//
+// Read-only and scoped exactly like /lookup: the campaign names its customer, and a tenant's own
+// administrator may not leave its company.
+returnsRouter.post(
+  "/resolve",
+  ah(async (req, res) => {
+    const body = (req.body ?? {}) as { campaignId?: unknown; tokens?: unknown; text?: unknown };
+
+    const campaignId = optionalPositiveInt(body.campaignId);
+    if (campaignId === null || campaignId === undefined) {
+      return res.status(400).json({ error: "campaignId must be a positive number" });
+    }
+    const campaign = await scopedCampaign(campaignId, currentUser(res));
+    if (!campaign) return res.status(404).json({ error: "campaign not found" });
+
+    // `tokens` is what the client extracts; `text` is the raw OCR output, accepted so the endpoint can
+    // be exercised with a single string (and keeps the tokenising rules on the server).
+    let tokens: string[];
+    if (Array.isArray(body.tokens)) {
+      tokens = body.tokens.map((token) => String(token ?? "").trim());
+    } else if (typeof body.text === "string") {
+      tokens = extractTokens(body.text);
+    } else {
+      return res.status(400).json({ error: "tokens or text is required" });
+    }
+
+    tokens = tokens
+      .filter((token) => token.length > 0 && token.length <= MAX_SENDER_ID_LENGTH)
+      .slice(0, 20);
+    if (!tokens.length) {
+      return res.status(400).json({ error: "no usable tokens" });
+    }
+
+    const [rows] = await pool.query<(RowDataPacket & { sender_id: string })[]>(
+      "SELECT DISTINCT sender_id FROM packages WHERE customer_id = ? AND campaign_id = ?",
+      [campaign.customer_id, campaignId]
+    );
+
+    res.json(
+      bestMatch(
+        tokens,
+        rows.map((row) => String(row.sender_id))
+      )
     );
   })
 );

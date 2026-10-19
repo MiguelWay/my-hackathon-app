@@ -40,7 +40,11 @@ app.use(
       useDefaults: true,
       directives: {
         "default-src": ["'self'"],
-        "script-src": ["'self'"],
+        // 'wasm-unsafe-eval' lets the on-device OCR compile its WebAssembly core; it does not allow
+        // JavaScript eval. The worker script is same-origin (/tesseract/worker.min.js), with blob:
+        // kept for browsers that refuse to start a worker from a URL.
+        "script-src": ["'self'", "'wasm-unsafe-eval'"],
+        "worker-src": ["'self'", "blob:"],
         "style-src": ["'self'"],
         "img-src": ["'self'", "data:"],
         "connect-src": ["'self'"],

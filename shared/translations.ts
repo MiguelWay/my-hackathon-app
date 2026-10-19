@@ -243,6 +243,22 @@ export const translationCatalog: TranslationEntry[] = [
     ["returns.recordAnother", "Button", "Record another package", "Registrar otro paquete"],
     ["returns.searchAgain", "Button", "Search again", "Buscar de nuevo"],
     ["returns.customerFallback", "Back-link fallback", "Customers", "Clientes"],
+
+    // Scanning a printed ID with the phone camera.
+    ["scan.open", "Button next to the package ID field", "Scan", "Escanear"],
+    ["scan.title", "Scanner overlay title", "Scan the package ID", "Escanear el ID de envío"],
+    ["scan.close", "Scanner close button", "Close", "Cerrar"],
+    ["scan.hint", "Guidance above the camera preview", "Centre the ID in the box, then tap Capture.", "Centra el ID dentro del recuadro y pulsa Capturar."],
+    ["scan.starting", "Scanner status", "Opening the camera…", "Abriendo la cámara…"],
+    ["scan.reading", "Scanner status", "Reading the ID…", "Leyendo el ID…"],
+    ["scan.capture", "Scanner button", "Capture", "Capturar"],
+    ["scan.photo", "Scanner button that opens the phone's camera app", "Take a photo", "Hacer foto"],
+    ["scan.cancel", "Scanner button", "Cancel", "Cancelar"],
+    ["scan.choose", "Shown when the read could be more than one package", "More than one ID matches. Which one is it?", "Hay más de un ID posible. ¿Cuál es?"],
+    ["scan.noText", "Error: nothing readable in the frame", "No ID was read. Move closer, avoid glare and try again.", "No se ha leído ningún ID. Acércalo, evita el reflejo y vuelve a intentarlo."],
+    ["scan.noMatch", "Error: the read ID is not in this campaign", "That ID is not in this campaign.", "Ese ID no está en esta campaña."],
+    ["scan.failed", "Error: the image could not be processed", "The image could not be read.", "No se pudo leer la imagen."],
+    ["scan.cameraDenied", "Error: camera permission or support", "The camera could not be opened. Use “Take a photo” or type the ID.", "No se pudo abrir la cámara. Usa «Hacer foto» o escribe el ID."],
   ]),
 
   // ---- Recent returns ----
