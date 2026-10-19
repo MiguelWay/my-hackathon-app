@@ -37,9 +37,12 @@ interface Link {
 export function ReturnPackageList({
   campaignId,
   refreshToken = 0,
+  showDownload = true,
 }: {
   campaignId: number;
   refreshToken?: number;
+  /** Administrators can export the list; the operator's copy is for reading only. */
+  showDownload?: boolean;
 }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [links, setLinks] = useState<Link[]>([]);
@@ -178,7 +181,7 @@ export function ReturnPackageList({
         </>
       )}
 
-      {rows !== null && (
+      {rows !== null && showDownload && (
         <>
           <div className="btn-row">
             <button type="button" className="secondary" disabled={downloading || saving} onClick={download}>

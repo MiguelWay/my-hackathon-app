@@ -21,7 +21,6 @@ import {
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { ReturnCounters } from "../components/ReturnCounters";
 import { ReturnPackageList } from "../components/ReturnPackageList";
-import { StoreIdReport } from "../components/StoreIdReport";
 import { isClosed, localToday } from "../lib/campaignDates";
 
 interface Customer {
@@ -265,8 +264,7 @@ export function CustomersPage() {
           </details>
         )}
 
-        <ReturnPackageList campaignId={camp.id} />
-        <StoreIdReport campaignId={camp.id} />
+        <ReturnPackageList campaignId={camp.id} showDownload={false} />
       </li>
     );
   }

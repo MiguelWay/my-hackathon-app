@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { useAuth } from "../auth/AuthContext";
 import { ReturnCounters } from "../components/ReturnCounters";
 import { ReturnPackageList } from "../components/ReturnPackageList";
 import { StoreIdReport } from "../components/StoreIdReport";
@@ -85,6 +86,7 @@ function parseExtra(value: Match["extra_columns"]): Record<string, string> {
 export function ReturnsPage() {
   const { id } = useParams();
   const campaignId = String(id ?? "");
+  const { isAdmin } = useAuth();
 
   const [head, setHead] = useState<CampaignHead | null>(null);
   const [reasons, setReasons] = useState<Reason[]>([]);
@@ -260,6 +262,39 @@ export function ReturnsPage() {
     );
   }
 
+  // The operator sees this directly under the find row, above the reports; the administrator keeps it
+  // below them, unchanged. It only exists once a package is found and has not been returned yet.
+  const reasonPicker =
+    matches !== null &&
+    matches.length === 1 &&
+    matches[0].return_id === null &&
+    lastResend === null ? (
+      <div className="card reason-pick">
+        <label>
+          Note (optional)
+          <input
+            value={notes[matches[0].id] ?? ""}
+            onChange={(e) => setNotes((n) => ({ ...n, [matches[0].id]: e.target.value }))}
+            placeholder="e.g. second visit"
+          />
+        </label>
+        <p className="muted">Reason</p>
+        <div className="btn-row">
+          {reasons.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => record(matches[0], r)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
   return (
     <div>
       <p>
@@ -295,11 +330,17 @@ export function ReturnsPage() {
         {confirmation && <p className="ok confirmation">✓ {confirmation}</p>}
       </form>
 
-      {head && (
-        <ReturnPackageList campaignId={Number(campaignId)} refreshToken={listRefresh} />
-      )}
+      {!isAdmin && reasonPicker}
 
       {head && (
+        <ReturnPackageList
+          campaignId={Number(campaignId)}
+          refreshToken={listRefresh}
+          showDownload={isAdmin}
+        />
+      )}
+
+      {head && isAdmin && (
         <StoreIdReport campaignId={Number(campaignId)} refreshToken={listRefresh} />
       )}
 
@@ -307,38 +348,7 @@ export function ReturnsPage() {
         <p className="muted">No package with that ID in this campaign.</p>
       )}
 
-      {/* The reason is the next thing an operator needs after finding the package, so it sits directly
-          under the find row rather than at the foot of a long card. A sender ID is unique inside a
-          campaign, so there is at most one package it can be about. */}
-      {matches !== null &&
-        matches.length === 1 &&
-        matches[0].return_id === null &&
-        lastResend === null && (
-        <div className="card reason-pick">
-          <label>
-            Note (optional)
-            <input
-              value={notes[matches[0].id] ?? ""}
-              onChange={(e) => setNotes((n) => ({ ...n, [matches[0].id]: e.target.value }))}
-              placeholder="e.g. second visit"
-            />
-          </label>
-          <p className="muted">Reason</p>
-          <div className="btn-row">
-            {reasons.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                className="secondary"
-                disabled={busy}
-                onClick={() => record(matches[0], r)}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {isAdmin && reasonPicker}
 
       {matches !== null && matches.length === 1 && Object.keys(matchedExtra).length > 0 && (
         <details className="card label-details">
