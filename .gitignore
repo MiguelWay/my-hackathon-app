@@ -2,6 +2,7 @@ node_modules
 dist
 .env
 .env.local
+tmp
 .DS_Store
 *.local
 .playwright-mcp
