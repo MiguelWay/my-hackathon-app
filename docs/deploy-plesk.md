@@ -5,10 +5,12 @@ MySQL/MariaDB database. Keeping them on a single origin is deliberate: the sessi
 `SameSite=Lax`, which browsers will not send on cross-site requests, so a separate API domain would
 break sign-in as third-party cookies are phased out.
 
-> **Not yet done:** these steps have not been run against a real Plesk server — I have no access to
-> yours. Everything below was verified locally by running the production build the same way Plesk does
-> (`NODE_ENV=production node server/start.mjs`): the SPA and its deep links are served, `/api` stays
-> JSON, and sign-in, uploads, returns, translations and the export all work.
+> **Verified on a real Plesk server** (Obsidian 18.0.81, Node.js 26.12.0, MariaDB 10.11) with this exact
+> layout: application root `/<domain>`, document root `/<domain>/dist`, startup file
+> `server/start.mjs`, application mode `production`. `/api/health` returns `{"ok":true,"db":"up"}`,
+> the SPA and its deep links load, and the admin sees Customers · Campaigns · Users · Translations
+> with 321 texts. Everything below was also verified locally with
+> `NODE_ENV=production node server/start.mjs`.
 >
 > **One-command path:** steps 4–5 are automated by `scripts/deploy-plesk.sh`. It validates `.env`,
 > installs build dependencies, builds the SPA, type-checks the API, runs migrations (including the
@@ -41,6 +43,13 @@ git clone git@github.com:MiguelWay/my-hackathon-app.git .
 
 The repo is private, so add a deploy key (Plesk → *Git* extension is the easiest route).
 
+Without SSH, upload a zip of the project through **Files → Add New → Upload File** and extract it with
+*Replace existing files*. Check afterwards that `index.html` is really yours: on a fresh Plesk site it
+already exists as the *Plesk default page*, and extraction can leave it in place. The built app does
+not use it (`dist/` is the document root), but `npm run build` does, so restore it before building —
+locally it is the 337-byte file with `<div id="root">` and `/src/main.tsx`. A build that transforms
+only one module and emits no `dist/assets/*.js` means the wrong `index.html` is on the server.
+
 ## 3. Create `.env` in the application root
 
 ```sh
@@ -51,6 +60,8 @@ DB_USER=pkgreturns
 DB_PASSWORD=<the password from step 1>
 DB_NAME=package_returns
 SESSION_TTL_DAYS=30
+SESSION_IDLE_MINUTES=30
+ALLOW_SELF_SIGNUP=false
 SERVE_SPA=true
 APP_URL=https://example.com
 SMTP_HOST=localhost
@@ -89,6 +100,11 @@ npm run db:migrate     # applies db/migrations/*.sql, tracked in schema_migratio
 npm run create:superadmin -- you@example.com 'a-strong-password'
 ```
 
+Without SSH, the **Node.js** panel's *Run Node.js commands* tab runs commands with an `npm` prefix:
+run `install --include=dev`, `run build`, `run db:migrate` and
+`run create:superadmin -- you@example.com 'a-strong-password'`. For anything else (inspecting files,
+copying a file into place) use `npm exec -- node -e "..."`.
+
 To create the first super-admin in the same run:
 
 ```sh
@@ -119,7 +135,7 @@ Plesk → your domain → **Node.js**:
 
 | Setting | Value |
 |---|---|
-| Document root | the folder containing `package.json` — or `dist/`, see the note below |
+| Document root | `dist/` (the built app) — see the note below |
 | Application root | the folder containing `package.json` |
 | Application startup file | `server/start.mjs` |
 | Application mode | production |
@@ -128,11 +144,11 @@ Plesk → your domain → **Node.js**:
 The deploy script requests the Passenger restart itself (`tmp/restart.txt`). If the app does not pick
 up the change, press **Restart App**.
 
-> **Document root:** the repo root also contains Vite's **source** `index.html`. If your web server
-> serves static files before passing misses to Node, a request for `/` may return that source page
-> instead of the built app. If that happens, set the document root to `dist/` (the built app) and keep
-> `SERVE_SPA=true`; nginx serves the files it finds there, and Passenger hands `/api` and deep links to
-> Node, which still returns the SPA fallback.
+> **Document root:** use `dist/`. The repo root also contains Vite's **source** `index.html`, and nginx
+> serves static files before handing misses to Node, so with the document root at the app root a
+> request for `/` returns the source page (a blank app) instead of the built one. With the document
+> root at `dist/`, nginx serves `index.html` and `/assets/*` from there, while Passenger hands `/api`
+> and deep links to Node; `SERVE_SPA=true` keeps the SPA fallback for those deep links.
 
 `server/start.mjs` registers the tsx loader and loads the TypeScript server, so production runs the
 same source as development with no separate compiled artifact. `tsx` is a normal runtime dependency
@@ -145,7 +161,9 @@ needs no rewrite rules and is what I verified.
 ## 6. HTTPS
 
 Plesk → **SSL/TLS Certificates** → *Install a free Let's Encrypt certificate*, and switch on
-*Redirect from HTTP to HTTPS*.
+*Redirect from HTTP to HTTPS*. Let's Encrypt validation over HTTP (`http-01`) works with the document
+root at `dist/`; the certificate is renewed automatically 30 days before it expires. Note that the
+*www* alias is not covered unless you tick it (or the wildcard) in the Let's Encrypt dialog.
 
 This matters beyond privacy: with `NODE_ENV=production` the session cookie is marked `Secure`, so
 sign-in silently fails over plain HTTP.
