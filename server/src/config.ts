@@ -44,6 +44,9 @@ export const config = {
     secure: (process.env.SMTP_SECURE ?? "false") === "true",
     user: process.env.SMTP_USER ?? "",
     password: process.env.SMTP_PASSWORD ?? "",
+    // Some hosts (Plesk with the mail service off) run an MTA that refuses to relay for localhost.
+    // Then the only working path is to resolve the recipient's MX and deliver straight to it.
+    direct: (process.env.SMTP_DIRECT ?? "false") === "true",
     from: process.env.SMTP_FROM ?? "no-reply@localhost",
   },
   rateLimit: {
