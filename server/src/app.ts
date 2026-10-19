@@ -14,6 +14,7 @@ import { packagesRouter } from "./packages";
 import { returnsRouter } from "./returns";
 import { exportRouter } from "./export";
 import { adminRouter } from "./admin";
+import { adminTranslationsRouter, translationsRouter } from "./translationsRoutes";
 
 // The Express app, exported without listening so tests can mount it on an ephemeral port.
 //
@@ -106,6 +107,10 @@ api.use("/campaigns", campaignsRouter);
 api.use("/campaigns/:campaignId", packagesRouter);
 api.use("/campaigns/:campaignId/export", exportRouter);
 api.use("/returns", returnsRouter);
+// Live translation copy is public: the login screen needs it before there is a session.
+api.use("/translations", translationsRouter);
+// Mounted before the broad /admin router so its own gate and handlers are the first match.
+api.use("/admin/translations", adminTranslationsRouter);
 api.use("/admin", adminRouter);
 // Unknown API paths stay JSON, so the SPA fallback below never swallows them.
 api.use((_req, res) => res.status(404).json({ error: "not found" }));

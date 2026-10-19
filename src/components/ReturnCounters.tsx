@@ -1,3 +1,5 @@
+import { useI18n } from "../i18n/I18nContext";
+
 /** A share, rounded to something readable: 0.7%, 12%, 100%. */
 function share(part: number, whole: number): string {
   if (whole === 0) return "—";
@@ -21,21 +23,28 @@ export function ReturnCounters({
   returns: number;
   resends: number;
 }) {
+  const { t } = useI18n();
   return (
     <div className="stats">
       <div className="stat">
         <span className="stat-number">{sent}</span>
-        <span className="muted">packages sent</span>
+        <span className="muted">{t("counters.sent")}</span>
       </div>
       <div className="stat">
         <span className="stat-number">{returns}</span>
-        <span className="muted">returned package{returns === 1 ? "" : "s"}</span>
-        <span className="stat-share">{share(returns, sent)} of sent</span>
+        <span className="muted">
+          {t(returns === 1 ? "counters.returnedOne" : "counters.returnedOther")}
+        </span>
+        <span className="stat-share">
+          {t("counters.ofSent", { share: share(returns, sent) })}
+        </span>
       </div>
       <div className="stat">
         <span className="stat-number">{resends}</span>
-        <span className="muted">Resent</span>
-        <span className="stat-share">{share(resends, sent)} of sent</span>
+        <span className="muted">{t("counters.resent")}</span>
+        <span className="stat-share">
+          {t("counters.ofSent", { share: share(resends, sent) })}
+        </span>
       </div>
     </div>
   );

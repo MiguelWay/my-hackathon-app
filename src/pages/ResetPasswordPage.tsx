@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { LanguageSwitch } from "../components/LanguageSwitch";
 import { PasswordInput } from "../components/PasswordInput";
+import { useI18n } from "../i18n/I18nContext";
 
 const MIN_PASSWORD_LENGTH = 8;
 
 /** The page a reset link opens. The token comes from the query string and is single-use. */
 export function ResetPasswordPage() {
+  const { t } = useI18n();
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
   const [next, setNext] = useState("");
@@ -19,7 +22,7 @@ export function ResetPasswordPage() {
     e.preventDefault();
     setError(null);
     if (next !== again) {
-      setError("The two passwords are not the same.");
+      setError(t("reset.mismatch"));
       return;
     }
     setBusy(true);
@@ -27,7 +30,7 @@ export function ResetPasswordPage() {
       await api.post("/auth/reset", { token, newPassword: next });
       setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reset the password");
+      setError(err instanceof Error ? err.message : t("reset.failed"));
     } finally {
       setBusy(false);
     }
@@ -36,11 +39,14 @@ export function ResetPasswordPage() {
   if (!token) {
     return (
       <div className="auth-wrap">
+        <div className="auth-language">
+          <LanguageSwitch />
+        </div>
         <div className="card auth-card">
-          <h1>Reset password</h1>
-          <p className="error">That reset link is missing its token. Ask for a new link.</p>
+          <h1>{t("reset.titleMissing")}</h1>
+          <p className="error">{t("reset.missingToken")}</p>
           <p className="muted">
-            <Link to="/forgot-password">Forgot password</Link>
+            <Link to="/forgot-password">{t("reset.forgotLink")}</Link>
           </p>
         </div>
       </div>
@@ -49,19 +55,22 @@ export function ResetPasswordPage() {
 
   return (
     <div className="auth-wrap">
+      <div className="auth-language">
+        <LanguageSwitch />
+      </div>
       <form className="card auth-card" onSubmit={onSubmit}>
-        <h1>Set a new password</h1>
+        <h1>{t("reset.title")}</h1>
         {done ? (
           <>
-            <p className="ok">Your password has been changed. You can now log in.</p>
+            <p className="ok">{t("reset.done")}</p>
             <p className="muted">
-              <Link to="/login">Log in</Link>
+              <Link to="/login">{t("reset.loginLink")}</Link>
             </p>
           </>
         ) : (
           <>
             <label>
-              New password
+              {t("reset.newPassword")}
               <PasswordInput
                 value={next}
                 onChange={setNext}
@@ -71,7 +80,7 @@ export function ResetPasswordPage() {
               />
             </label>
             <label>
-              New password again
+              {t("reset.newPasswordAgain")}
               <PasswordInput
                 value={again}
                 onChange={setAgain}
@@ -80,7 +89,7 @@ export function ResetPasswordPage() {
               />
             </label>
             {error && <p className="error">{error}</p>}
-            <button disabled={busy}>{busy ? "…" : "Change password"}</button>
+            <button disabled={busy}>{busy ? "…" : t("reset.submit")}</button>
           </>
         )}
       </form>

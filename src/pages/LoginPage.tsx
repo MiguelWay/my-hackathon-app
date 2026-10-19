@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { LanguageSwitch } from "../components/LanguageSwitch";
 import { PasswordInput } from "../components/PasswordInput";
+import { useI18n } from "../i18n/I18nContext";
 import { IDLE_MINUTES } from "../lib/idle";
 
 /** The login screen's two doors. Both check the same credentials; a door only picks the view. */
@@ -9,6 +11,7 @@ type Door = "administrator" | "operator";
 
 export function LoginPage() {
   const { login } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const timedOut = params.get("timeout") === "1";
@@ -28,7 +31,7 @@ export function LoginPage() {
       await login(email, password, door === "operator");
       navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : t("login.failed"));
     } finally {
       setPending(null);
     }
@@ -36,19 +39,20 @@ export function LoginPage() {
 
   return (
     <div className="auth-wrap">
+      <div className="auth-language">
+        <LanguageSwitch />
+      </div>
       <form className="card auth-card" onSubmit={onSubmit}>
-        <h1>Log in</h1>
+        <h1>{t("login.title")}</h1>
         {timedOut && !error && (
-          <p className="ok">
-            You were signed out after {IDLE_MINUTES} minutes without activity.
-          </p>
+          <p className="ok">{t("login.timeout", { minutes: IDLE_MINUTES })}</p>
         )}
         <label>
-          Email
+          {t("login.email")}
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
         </label>
         <label>
-          Password
+          {t("login.password")}
           <PasswordInput
             value={password}
             onChange={setPassword}
@@ -60,14 +64,14 @@ export function LoginPage() {
             super-admin may enter either view and an operator account only the operator's. */}
         <div className="btn-row">
           <button type="submit" value="administrator" disabled={pending !== null}>
-            {pending === "administrator" ? "…" : "Enter as administrator"}
+            {pending === "administrator" ? "…" : t("login.enterAdmin")}
           </button>
           <button type="submit" value="operator" className="secondary" disabled={pending !== null}>
-            {pending === "operator" ? "…" : "Enter as operator"}
+            {pending === "operator" ? "…" : t("login.enterOperator")}
           </button>
         </div>
         <p className="muted">
-          <Link to="/forgot-password">Forgot password?</Link>
+          <Link to="/forgot-password">{t("login.forgot")}</Link>
         </p>
       </form>
     </div>

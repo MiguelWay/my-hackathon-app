@@ -1,6 +1,7 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
+import { useI18n } from "../i18n/I18nContext";
 import { guessSenderColumn } from "../lib/senderColumn";
 import { guessStoreColumn } from "../lib/storeColumn";
 
@@ -33,6 +34,7 @@ export function CampaignListUpload({
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
 
   /** Forgets the file that was read, so the next one starts clean. */
@@ -59,7 +61,7 @@ export function CampaignListUpload({
         raw: false,
         defval: "",
       });
-      if (matrix.length < 2) throw new Error("That file has no data rows.");
+      if (matrix.length < 2) throw new Error(t("upload.noData"));
       const hdrs = (matrix[0] as unknown[]).map((h) => String(h));
       const data = matrix
         .slice(1)
@@ -72,21 +74,21 @@ export function CampaignListUpload({
       setStoreIdx(guessStoreColumn(hdrs, guessedSender));
     } catch (err) {
       reset();
-      setError(err instanceof Error ? err.message : "Could not read the file");
+      setError(err instanceof Error ? err.message : t("upload.readFailed"));
     }
   }
 
   async function confirm() {
     if (senderIdx < 0) {
-      setError("Pick the package ID column.");
+      setError(t("upload.pickPackage"));
       return;
     }
     if (storeIdx < 0) {
-      setError("Pick the store ID column.");
+      setError(t("upload.pickStore"));
       return;
     }
     if (storeIdx === senderIdx) {
-      setError("The store ID column must be a different column from the package ID.");
+      setError(t("upload.sameColumn"));
       return;
     }
     setError(null);
@@ -102,17 +104,23 @@ export function CampaignListUpload({
       });
       // Rows with no package ID are left out rather than refused, so say so instead of hiding it.
       const skipped = result.skipped
-        ? ` · left out ${result.skipped} row${result.skipped === 1 ? "" : "s"} with no package ID`
+        ? t(result.skipped === 1 ? "upload.skippedOne" : "upload.skippedOther", {
+            count: result.skipped,
+          })
         : "";
       setNotice(
-        `Imported ${result.imported} lines · package ID column: "${result.senderColumn.name}" · ` +
-          `store ID column: "${result.storeColumn.name}" · ` +
-          `${result.columns.length} columns kept verbatim${skipped}.`
+        t(result.imported === 1 ? "upload.importedOne" : "upload.importedOther", {
+          count: result.imported,
+          packageColumn: result.senderColumn.name,
+          storeColumn: result.storeColumn.name,
+          columns: result.columns.length,
+          skipped,
+        })
       );
       reset();
       await onImported?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed");
+      setError(err instanceof Error ? err.message : t("upload.importFailed"));
     } finally {
       setImporting(false);
     }
@@ -131,59 +139,61 @@ export function CampaignListUpload({
         <>
           <div className="card inline">
             <label>
-              Choose package ID column
+              {t("upload.choosePackage")}
               <select value={senderIdx} onChange={(e) => setSenderIdx(Number(e.target.value))}>
-                {senderIdx < 0 && <option value={-1}>— select a column —</option>}
+                {senderIdx < 0 && <option value={-1}>{t("upload.selectColumn")}</option>}
                 {headers.map((h, i) => (
                   <option key={i} value={i}>
-                    {h || `(column ${i + 1})`}
+                    {h || t("upload.columnFallback", { n: i + 1 })}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              Choose store ID column
+              {t("upload.chooseStore")}
               <select value={storeIdx} onChange={(e) => setStoreIdx(Number(e.target.value))}>
-                {storeIdx < 0 && <option value={-1}>— select a column —</option>}
+                {storeIdx < 0 && <option value={-1}>{t("upload.selectColumn")}</option>}
                 {headers.map((h, i) => (
                   <option key={i} value={i} disabled={i === senderIdx}>
-                    {h || `(column ${i + 1})`}
+                    {h || t("upload.columnFallback", { n: i + 1 })}
                   </option>
                 ))}
               </select>
             </label>
-            <span className="muted">{rows.length} lines</span>
+            <span className="muted">
+              {t(rows.length === 1 ? "upload.lineCountOne" : "upload.lineCountOther", {
+                count: rows.length,
+              })}
+            </span>
             <button type="button" onClick={confirm} disabled={importing || senderIdx < 0 || storeIdx < 0 || storeIdx === senderIdx}>
-              {importing ? "Importing…" : "Confirm mapping & import"}
+              {importing ? t("upload.importing") : t("upload.confirm")}
             </button>
           </div>
 
           {senderIdx < 0 && (
             <p className="muted">
-              Couldn&rsquo;t tell which column holds the package ID — choose it above. The preview
-              below shows the first rows so you can spot the right one.
+              {t("upload.cantTellPackage")}
             </p>
           )}
           {storeIdx < 0 && (
             <p className="muted">
-              Couldn&rsquo;t tell which column holds the store ID — choose it above.
+              {t("upload.cantTellStore")}
             </p>
           )}
           {storeIdx >= 0 && storeIdx === senderIdx && (
             <p className="muted">
-              The package ID and the store ID must be two different columns — choose another store
-              column above.
+              {t("upload.sameColumnHint")}
             </p>
           )}
 
-          <h2>Preview (first 10 rows)</h2>
+          <h2>{t("upload.preview")}</h2>
           <div className="scroll">
             <table className="grid">
               <thead>
                 <tr>
                   {headers.map((h, i) => (
                     <th key={i} className={i === senderIdx ? "hl" : i === storeIdx ? "hl2" : ""}>
-                      {h || `(column ${i + 1})`}
+                      {h || t("upload.columnFallback", { n: i + 1 })}
                     </th>
                   ))}
                 </tr>

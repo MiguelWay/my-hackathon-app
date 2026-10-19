@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import { config } from "./config";
+import { translationCatalog } from "../../shared/translations";
 
 // Applies every db/migrations/*.sql in filename order, once each, tracked in `schema_migrations`.
 export async function runMigrations(): Promise<string[]> {
@@ -47,6 +48,35 @@ export async function runMigrations(): Promise<string[]> {
       await conn.query("INSERT INTO schema_migrations (filename) VALUES (?)", [file]);
       ran.push(file);
     }
+
+    // Seed any catalog keys the table does not hold yet. `INSERT IGNORE` deliberately never overwrites
+    // an edited row: the table becomes the source of truth once a translation has been changed. Keys
+    // the code no longer asks for are removed, so the editor always mirrors the app's copy.
+    const catalogKeys = translationCatalog.map((entry) => entry.key);
+    if (catalogKeys.length > 0) {
+      await conn.query(
+        `DELETE FROM translations WHERE text_key NOT IN (${catalogKeys.map(() => "?").join(",")})`,
+        catalogKeys
+      );
+    }
+    const values = translationCatalog.map((entry, index) => [
+      entry.key,
+      entry.screen,
+      entry.role,
+      entry.context,
+      entry.english,
+      entry.spanish,
+      index,
+    ]);
+    if (values.length > 0) {
+      await conn.query(
+        `INSERT IGNORE INTO translations
+           (text_key, screen, role, context, english, spanish, sort_order)
+         VALUES ?`,
+        [values]
+      );
+    }
+
     return ran;
   } finally {
     await conn.end();

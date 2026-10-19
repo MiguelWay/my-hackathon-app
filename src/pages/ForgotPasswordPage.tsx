@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { LanguageSwitch } from "../components/LanguageSwitch";
+import { useI18n } from "../i18n/I18nContext";
 import { api } from "../lib/api";
 
 /**
@@ -7,6 +9,7 @@ import { api } from "../lib/api";
  * exists, so this screen cannot be used to discover who has a login.
  */
 export function ForgotPasswordPage() {
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +23,7 @@ export function ForgotPasswordPage() {
       await api.post("/auth/forgot", { email });
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send the reset link");
+      setError(err instanceof Error ? err.message : t("forgot.failed"));
     } finally {
       setBusy(false);
     }
@@ -28,25 +31,23 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="auth-wrap">
+      <div className="auth-language">
+        <LanguageSwitch />
+      </div>
       <form className="card auth-card" onSubmit={onSubmit}>
-        <h1>Forgot password</h1>
+        <h1>{t("forgot.title")}</h1>
         {sent ? (
           <>
-            <p className="ok">
-              If an account exists for that email, a reset link has been sent. It expires in 30
-              minutes.
-            </p>
+            <p className="ok">{t("forgot.sent")}</p>
             <p className="muted">
-              <Link to="/login">Back to log in</Link>
+              <Link to="/login">{t("forgot.back")}</Link>
             </p>
           </>
         ) : (
           <>
-            <p className="muted">
-              Type the email of your account and we will send a link to set a new password.
-            </p>
+            <p className="muted">{t("forgot.instructions")}</p>
             <label>
-              Email
+              {t("forgot.email")}
               <input
                 type="email"
                 value={email}
@@ -56,9 +57,9 @@ export function ForgotPasswordPage() {
               />
             </label>
             {error && <p className="error">{error}</p>}
-            <button disabled={busy}>{busy ? "…" : "Send reset link"}</button>
+            <button disabled={busy}>{busy ? "…" : t("forgot.submit")}</button>
             <p className="muted">
-              <Link to="/login">Back to log in</Link>
+              <Link to="/login">{t("forgot.back")}</Link>
             </p>
           </>
         )}

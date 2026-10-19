@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n/I18nContext";
 import { canChooseSaveLocation } from "../lib/campaignExport";
 
 /**
@@ -6,12 +7,7 @@ import { canChooseSaveLocation } from "../lib/campaignExport";
  * the context menu can still put the file wherever the user wants.
  */
 export function SaveLocationHint() {
+  const { t } = useI18n();
   if (canChooseSaveLocation()) return null;
-  return (
-    <p className="muted">
-      This browser saves downloads into its own folder. To choose the place, right-click the button and
-      pick &ldquo;Download linked file as…&rdquo;, or turn on &ldquo;ask where to save&rdquo; in the
-      browser settings.
-    </p>
-  );
+  return <p className="muted">{t("saveHint.text")}</p>;
 }

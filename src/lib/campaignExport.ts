@@ -1,3 +1,4 @@
+import { translate } from "../i18n/runtime";
 import { baseUrl } from "./api";
 
 // Two ways to save an export:
@@ -117,13 +118,10 @@ export interface SaveResult {
 /** The sentence every screen shows after a save attempt, so they all word it the same way. */
 export function saveNotice(result: SaveResult): string {
   if (result.viaDownload) {
-    return (
-      `This browser did not open a save dialog, so ${result.name} went to its download folder. ` +
-      `Right-click the button and pick "Download linked file as…" to choose the folder.`
-    );
+    return translate("export.savedToDownload", { name: result.name ?? "" });
   }
-  if (result.name === null) return "Save cancelled.";
-  return `Saved ${result.name} to the folder you chose.`;
+  if (result.name === null) return translate("export.saveCancelled");
+  return translate("export.savedTo", { name: result.name });
 }
 
 /**
@@ -135,7 +133,7 @@ export function saveNotice(result: SaveResult): string {
  */
 export async function saveExportAs(url: string, suggestedName: string): Promise<SaveResult> {
   const picker = savePicker();
-  if (!picker) throw new Error("this browser cannot open a save dialog");
+  if (!picker) throw new Error(translate("export.noDialog"));
 
   // Asked first, while the click that started this is still fresh: the request can take a moment, and a
   // dialog opened too late is refused.
@@ -144,7 +142,12 @@ export async function saveExportAs(url: string, suggestedName: string): Promise<
   try {
     handle = await picker({
       suggestedName,
-      types: [{ description: "Excel workbook", accept: { [XLSX_MIME]: [".xlsx"] } }],
+      types: [
+        {
+          description: translate("export.excelDescription"),
+          accept: { [XLSX_MIME]: [".xlsx"] },
+        },
+      ],
     });
   } catch (err) {
     const name = (err as { name?: string }).name;

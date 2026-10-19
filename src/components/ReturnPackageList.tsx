@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { useI18n } from "../i18n/I18nContext";
 import {
   canChooseSaveLocation,
   downloadExport,
@@ -61,6 +62,7 @@ export function ReturnPackageList({
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const { t } = useI18n();
   const loading = useRef(false);
   const detailsRef = useRef<HTMLDetailsElement>(null);
 
@@ -79,7 +81,7 @@ export function ReturnPackageList({
       setLinks(res.links);
       setReasons(res.reasons);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load the list");
+      setError(err instanceof Error ? err.message : t("returnList.loadFailed"));
     } finally {
       loading.current = false;
     }
@@ -99,9 +101,9 @@ export function ReturnPackageList({
         returnListExportUrl(campaignId),
         "return-package-list.xlsx"
       );
-      setNotice(`Downloaded ${filename}, in your browser's download folder.`);
+      setNotice(t("returnList.downloaded", { filename }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not download the list");
+      setError(err instanceof Error ? err.message : t("returnList.downloadFailed"));
     } finally {
       setDownloading(false);
     }
@@ -119,7 +121,7 @@ export function ReturnPackageList({
       const result = await saveExportAs(returnListExportUrl(campaignId), "return-package-list.xlsx");
       setNotice(saveNotice(result));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open a save dialog");
+      setError(err instanceof Error ? err.message : t("returnList.saveDialogFailed"));
     } finally {
       setSaving(false);
     }
@@ -133,12 +135,12 @@ export function ReturnPackageList({
         if (e.currentTarget.open) void load();
       }}
     >
-      <summary>Return package list</summary>
+      <summary>{t("returnList.title")}</summary>
 
       {error && <p className="error">{error}</p>}
-      {rows === null && !error && <p className="muted">Loading…</p>}
+      {rows === null && !error && <p className="muted">{t("returnList.loading")}</p>}
       {rows !== null && rows.length === 0 && (
-        <p className="muted">Nothing has been returned or resent in this campaign yet.</p>
+        <p className="muted">{t("returnList.empty")}</p>
       )}
       {rows !== null && rows.length > 0 && (
         <>
@@ -146,9 +148,9 @@ export function ReturnPackageList({
             <table className="grid">
               <thead>
                 <tr>
-                  <th>Package ID</th>
-                  <th>Status</th>
-                  <th>Reason</th>
+                  <th>{t("returnList.packageId")}</th>
+                  <th>{t("returnList.status")}</th>
+                  <th>{t("returnList.reason")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,7 +160,11 @@ export function ReturnPackageList({
                     className={row.status === "Returned" ? "row-returned" : "row-resent"}
                   >
                     <td>{row.sender_id}</td>
-                    <td>{row.status}</td>
+                    <td>
+                      {row.status === "Returned"
+                        ? t("returnList.returned")
+                        : t("returnList.resent")}
+                    </td>
                     <td>{row.reason_label ?? <span className="muted">—</span>}</td>
                   </tr>
                 ))}
@@ -168,16 +174,16 @@ export function ReturnPackageList({
 
           {links.length > 0 && (
             <>
-              <h3>Resend links</h3>
+              <h3>{t("returnList.links")}</h3>
               <div className="scroll">
                 <table className="grid">
                   <thead>
                     <tr>
-                      <th>Returned ID</th>
-                      <th>Reason</th>
-                      <th>Resent ID</th>
-                      <th>Returned ID</th>
-                      <th>Reason</th>
+                      <th>{t("returnList.returnedId")}</th>
+                      <th>{t("returnList.reason")}</th>
+                      <th>{t("returnList.resentId")}</th>
+                      <th>{t("returnList.returnedId")}</th>
+                      <th>{t("returnList.reason")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -200,9 +206,11 @@ export function ReturnPackageList({
 
       {rows !== null && (
         <div className="reason-summary">
-          <h3>Returned packages by category</h3>
+          <h3>{t("returnList.categoryTitle")}</h3>
           <p className="muted">
-            {totalReturned} returned package{totalReturned === 1 ? "" : "s"}
+            {t(totalReturned === 1 ? "returnList.totalOne" : "returnList.totalOther", {
+              count: totalReturned,
+            })}
           </p>
           <div className="reason-bars">
             {reasons.map((reason) => {
@@ -225,7 +233,7 @@ export function ReturnPackageList({
         <>
           <div className="btn-row">
             <button type="button" className="secondary" disabled={downloading || saving} onClick={download}>
-              {downloading ? "Preparing…" : "Download .xlsx"}
+              {downloading ? t("returnList.preparing") : t("returnList.download")}
             </button>
             {canChooseSaveLocation() && (
               <button
@@ -234,12 +242,12 @@ export function ReturnPackageList({
                 disabled={downloading || saving}
                 onClick={saveAs}
               >
-                {saving ? "Preparing…" : "Save as…"}
+                {saving ? t("returnList.preparing") : t("returnList.saveAs")}
               </button>
             )}
           </div>
           <SaveLocationHint />
-          <p className="muted">Both tables and the category summary, one sheet each.</p>
+          <p className="muted">{t("returnList.downloadCaption")}</p>
           {notice && <p className="ok">{notice}</p>}
         </>
       )}

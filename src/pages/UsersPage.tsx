@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../auth/AuthContext";
 import { PasswordInput } from "../components/PasswordInput";
+import { useI18n } from "../i18n/I18nContext";
 
 interface Account {
   id: number;
@@ -33,6 +34,7 @@ const emptyForm = (): NewUserForm => ({
  */
 export function UsersPage() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [form, setForm] = useState<NewUserForm>(emptyForm());
   const [busy, setBusy] = useState(false);
@@ -48,7 +50,7 @@ export function UsersPage() {
 
   useEffect(() => {
     load().catch((e: unknown) =>
-      setError(e instanceof Error ? e.message : "Failed to load the users")
+      setError(e instanceof Error ? e.message : t("users.loadFailed"))
     );
   }, [load]);
 
@@ -69,11 +71,16 @@ export function UsersPage() {
         password: form.password,
         role: form.role,
       });
-      setNotice(`Created ${created.role === "superadmin" ? "super-admin" : "user"} ${created.email}.`);
+      setNotice(
+        t("users.created", {
+          role: t(created.role === "superadmin" ? "users.roleNameSuperadmin" : "users.roleNameUser"),
+          email: created.email,
+        })
+      );
       setForm(emptyForm());
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create the account");
+      setError(err instanceof Error ? err.message : t("users.createFailed"));
     } finally {
       setBusy(false);
     }
@@ -85,11 +92,11 @@ export function UsersPage() {
     setBusy(true);
     try {
       await api.patch(`/admin/users/${account.id}`, { active });
-      setNotice(`${active ? "Activated" : "Deactivated"} ${account.email}.`);
+      setNotice(t(active ? "users.activated" : "users.deactivated", { email: account.email }));
       setConfirmDelete(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not change that account");
+      setError(err instanceof Error ? err.message : t("users.changeFailed"));
     } finally {
       setBusy(false);
     }
@@ -101,11 +108,11 @@ export function UsersPage() {
     setBusy(true);
     try {
       await api.delete(`/admin/users/${account.id}`);
-      setNotice(`Deleted ${account.email}.`);
+      setNotice(t("users.deleted", { email: account.email }));
       setConfirmDelete(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete that account");
+      setError(err instanceof Error ? err.message : t("users.deleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -115,31 +122,27 @@ export function UsersPage() {
 
   return (
     <div>
-      <h1>Users</h1>
-      <p className="muted">
-        Every account that can sign in. Emails are unique across the platform, and a new account can
-        sign in straight away. An operator already reaches every customer, so an account created here
-        needs no customer of its own; a company super-admin's new accounts stay inside its company.
-      </p>
+      <h1>{t("users.title")}</h1>
+      <p className="muted">{t("users.help")}</p>
 
       {error && <p className="error">{error}</p>}
       {notice && <p className="ok">{notice}</p>}
 
       <details className="card" open>
-        <summary>New user</summary>
+        <summary>{t("users.newUser")}</summary>
         <form className="customer-row" onSubmit={addUser}>
           <label>
-            Email
+            {t("users.email")}
             <input
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="them@example.com"
+              placeholder={t("users.emailPlaceholder")}
               required
             />
           </label>
           <label>
-            Password
+            {t("users.password")}
             <PasswordInput
               value={form.password}
               onChange={(password) => setForm({ ...form, password })}
@@ -148,34 +151,34 @@ export function UsersPage() {
             />
           </label>
           <label>
-            Role
+            {t("users.role")}
             <select
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value as "superadmin" | "user" })}
             >
-              <option value="superadmin">super-admin — runs campaigns &amp; accounts</option>
-              <option value="user">user — processes returns</option>
+              <option value="superadmin">{t("users.roleSuperadmin")}</option>
+              <option value="user">{t("users.roleUser")}</option>
             </select>
           </label>
-          <button disabled={busy}>{busy ? "…" : "Add user"}</button>
+          <button disabled={busy}>{busy ? "…" : t("users.addUser")}</button>
         </form>
-        <p className="muted">Passwords must be 8–100 characters.</p>
+        <p className="muted">{t("users.passwordHint")}</p>
       </details>
 
-      <h2>Current users</h2>
+      <h2>{t("users.current")}</h2>
       {accounts.length === 0 ? (
-        <p className="muted">No users yet.</p>
+        <p className="muted">{t("users.empty")}</p>
       ) : (
         <>
           <div className="scroll">
             <table className="grid">
               <thead>
                 <tr>
-                  <th>Email</th>
-                  <th>Customer</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Added</th>
+                  <th>{t("users.emailHeader")}</th>
+                  <th>{t("users.customer")}</th>
+                  <th>{t("users.roleHeader")}</th>
+                  <th>{t("users.status")}</th>
+                  <th>{t("users.added")}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -183,11 +186,25 @@ export function UsersPage() {
                 {accounts.map((u) => (
                   <tr key={u.id}>
                     <td>{u.email}</td>
-                    <td>{u.customer_name ?? <span className="muted">platform</span>}</td>
                     <td>
-                      <span className={`badge role-${u.role}`}>{u.role}</span>
+                      {u.customer_name ?? <span className="muted">{t("users.platform")}</span>}
                     </td>
-                    <td>{u.is_active === 1 ? "active" : <span className="chip">disabled</span>}</td>
+                    <td>
+                      <span className={`badge role-${u.role}`}>
+                        {t(
+                          u.role === "superadmin"
+                            ? "header.roleSuperadmin"
+                            : "header.roleUser"
+                        )}
+                      </span>
+                    </td>
+                    <td>
+                      {u.is_active === 1 ? (
+                        t("users.active")
+                      ) : (
+                        <span className="chip">{t("users.disabled")}</span>
+                      )}
+                    </td>
                     <td className="muted">{u.created_at.slice(0, 10)}</td>
                     <td>
                       <div className="btn-row">
@@ -197,12 +214,12 @@ export function UsersPage() {
                           disabled={busy}
                           onClick={() => setActive(u, u.is_active !== 1)}
                         >
-                          {u.is_active === 1 ? "Deactivate" : "Activate"}
+                          {u.is_active === 1 ? t("users.deactivate") : t("users.activate")}
                         </button>
                         {confirmDelete === u.id ? (
                           <>
                             <button type="button" disabled={busy} onClick={() => remove(u)}>
-                              Confirm delete
+                              {t("users.confirmDelete")}
                             </button>
                             <button
                               type="button"
@@ -210,7 +227,7 @@ export function UsersPage() {
                               disabled={busy}
                               onClick={() => setConfirmDelete(null)}
                             >
-                              Cancel
+                              {t("users.cancel")}
                             </button>
                           </>
                         ) : (
@@ -220,7 +237,7 @@ export function UsersPage() {
                             disabled={busy}
                             onClick={() => setConfirmDelete(u.id)}
                           >
-                            Delete
+                            {t("users.delete")}
                           </button>
                         )}
                       </div>
@@ -231,8 +248,7 @@ export function UsersPage() {
             </table>
           </div>
           <p className="muted">
-            {active} active · {accounts.length - active} disabled. A disabled user cannot log in and its
-            open sessions end at once. A user that recorded returns can only be disabled, never deleted.
+            {t("users.summary", { active, disabled: accounts.length - active })}
           </p>
         </>
       )}

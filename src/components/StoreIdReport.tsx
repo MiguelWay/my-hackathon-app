@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { useI18n } from "../i18n/I18nContext";
 import {
   canChooseSaveLocation,
   downloadExport,
@@ -40,6 +41,7 @@ export function StoreIdReport({
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const { t } = useI18n();
   const loading = useRef(false);
   const detailsRef = useRef<HTMLDetailsElement>(null);
 
@@ -52,7 +54,7 @@ export function StoreIdReport({
       const res = await api.get<{ rows: Row[] }>(`/returns/campaigns/${campaignId}/store-report`);
       setRows(res.rows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load the report");
+      setError(err instanceof Error ? err.message : t("storeReport.loadFailed"));
     } finally {
       loading.current = false;
     }
@@ -72,9 +74,9 @@ export function StoreIdReport({
         storeReportExportUrl(campaignId),
         "returns-store-id.xlsx"
       );
-      setNotice(`Downloaded ${filename}, in your browser's download folder.`);
+      setNotice(t("storeReport.downloaded", { filename }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not download the report");
+      setError(err instanceof Error ? err.message : t("storeReport.downloadFailed"));
     } finally {
       setDownloading(false);
     }
@@ -88,7 +90,7 @@ export function StoreIdReport({
       const result = await saveExportAs(storeReportExportUrl(campaignId), "returns-store-id.xlsx");
       setNotice(saveNotice(result));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open a save dialog");
+      setError(err instanceof Error ? err.message : t("storeReport.saveDialogFailed"));
     } finally {
       setSaving(false);
     }
@@ -102,23 +104,23 @@ export function StoreIdReport({
         if (e.currentTarget.open) void load();
       }}
     >
-      <summary>Returns + Store ID</summary>
+      <summary>{t("storeReport.title")}</summary>
 
       {error && <p className="error">{error}</p>}
-      {rows === null && !error && <p className="muted">Loading…</p>}
+      {rows === null && !error && <p className="muted">{t("storeReport.loading")}</p>}
       {rows !== null && rows.length === 0 && (
-        <p className="muted">No return has been sent again in this campaign yet.</p>
+        <p className="muted">{t("storeReport.empty")}</p>
       )}
       {rows !== null && rows.length > 0 && (
         <div className="scroll">
           <table className="grid">
             <thead>
               <tr>
-                <th>Store ID</th>
-                <th>Return package ID</th>
-                <th>Reason</th>
-                <th>Store ID</th>
-                <th>Resend package ID</th>
+                <th>{t("storeReport.storeId")}</th>
+                <th>{t("storeReport.returnPackageId")}</th>
+                <th>{t("storeReport.reason")}</th>
+                <th>{t("storeReport.storeId")}</th>
+                <th>{t("storeReport.resendPackageId")}</th>
               </tr>
             </thead>
             <tbody>
@@ -140,7 +142,7 @@ export function StoreIdReport({
         <>
           <div className="btn-row">
             <button type="button" className="secondary" disabled={downloading || saving} onClick={download}>
-              {downloading ? "Preparing…" : "Download .xlsx"}
+              {downloading ? t("storeReport.preparing") : t("storeReport.download")}
             </button>
             {canChooseSaveLocation() && (
               <button
@@ -149,12 +151,12 @@ export function StoreIdReport({
                 disabled={downloading || saving}
                 onClick={saveAs}
               >
-                {saving ? "Preparing…" : "Save as…"}
+                {saving ? t("storeReport.preparing") : t("storeReport.saveAs")}
               </button>
             )}
           </div>
           <SaveLocationHint />
-          <p className="muted">One row per return and the resend that followed it.</p>
+          <p className="muted">{t("storeReport.caption")}</p>
           {notice && <p className="ok">{notice}</p>}
         </>
       )}

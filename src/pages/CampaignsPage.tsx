@@ -22,6 +22,7 @@ import { SaveLocationHint } from "../components/SaveLocationHint";
 import { ReturnCounters } from "../components/ReturnCounters";
 import { ReturnPackageList } from "../components/ReturnPackageList";
 import { StoreIdReport } from "../components/StoreIdReport";
+import { useI18n } from "../i18n/I18nContext";
 import { isClosed, localToday } from "../lib/campaignDates";
 
 interface Campaign {
@@ -54,6 +55,7 @@ interface CustomerRef {
 
 export function CampaignsPage() {
   const { user, isAdmin: isSuperAdmin } = useAuth();
+  const { t } = useI18n();
   // A super-admin runs the campaigns; a `user` only processes returns. While a super-admin is in the
   // user view the admin controls are hidden, so this page behaves as it does for a `user`.
   // A platform super-admin has no company of its own, so it has to say whose campaign this is; every
@@ -115,7 +117,9 @@ export function CampaignsPage() {
   }, [picksCompany, selectedCustomerId]);
 
   useEffect(() => {
-    load().catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+    load().catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : t("campaigns.loadFailed"))
+    );
   }, [load]);
 
   // The company selector's options. A company super-admin can read the same admin list, so the one
@@ -131,7 +135,9 @@ export function CampaignsPage() {
           setCustomerId(wantedCustomer);
         }
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load customers"));
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : t("campaigns.loadCustomersFailed"))
+      );
   }, [isSuperAdmin, wantedCustomer]);
 
   async function create(e: FormEvent) {
@@ -153,7 +159,7 @@ export function CampaignsPage() {
       setSaved(true);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create");
+      setError(err instanceof Error ? err.message : t("campaigns.createFailed"));
     }
   }
 
@@ -163,11 +169,11 @@ export function CampaignsPage() {
     setNotice(null);
     try {
       await api.delete(`/campaigns/${campaign.id}`);
-      setNotice(`Deleted ${campaign.name} and its packages.`);
+      setNotice(t("campaigns.deleted", { name: campaign.name }));
       setConfirmDelete(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete that campaign");
+      setError(err instanceof Error ? err.message : t("campaigns.deleteFailed"));
     }
   }
 
@@ -181,9 +187,9 @@ export function CampaignsPage() {
         adminCampaignExportUrl(campaign.id),
         exportFileName(campaign.id, campaign.name)
       );
-      setNotice(`Downloaded ${campaign.name} as ${filename}, in your browser's download folder.`);
+      setNotice(t("campaigns.downloaded", { name: campaign.name, filename }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export failed");
+      setError(err instanceof Error ? err.message : t("campaigns.exportFailed"));
     } finally {
       setExporting(null);
     }
@@ -201,7 +207,7 @@ export function CampaignsPage() {
       );
       setNotice(saveNotice(result));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open a save dialog");
+      setError(err instanceof Error ? err.message : t("campaigns.saveDialogFailed"));
     } finally {
       setExporting(null);
     }
@@ -239,9 +245,9 @@ export function CampaignsPage() {
 
   const emptyMessage = picksCompany
     ? selectedCustomerId
-      ? "This customer has no campaigns yet."
-      : "Pick a customer to see its campaigns."
-    : "No campaigns yet.";
+      ? t("campaigns.emptyCustomer")
+      : t("campaigns.emptyPick")
+    : t("campaigns.empty");
 
   /** One campaign's card; the same markup for active and closed campaigns. */
   function renderCampaign(c: Campaign) {
@@ -256,22 +262,26 @@ export function CampaignsPage() {
             {c.start_date ?? "—"} → {c.finish_date ?? "—"}
           </span>
           <span className="muted">
-            {c.upload_count} list{c.upload_count === 1 ? "" : "s"} · {c.total_rows} line
-            {c.total_rows === 1 ? "" : "s"}
+            {t(c.upload_count === 1 ? "campaigns.listCountOne" : "campaigns.listCountOther", {
+              count: c.upload_count,
+            })}{" · "}
+            {t(c.total_rows === 1 ? "campaigns.lineCountOne" : "campaigns.lineCountOther", {
+              count: c.total_rows,
+            })}
           </span>
           {isSuperAdmin && (
             <span className="campaign-delete">
               {confirmDelete === c.id ? (
                 <span className="btn-row">
                   <button type="button" onClick={() => void removeCampaign(c)}>
-                    Confirm delete
+                    {t("campaigns.confirmDelete")}
                   </button>
                   <button
                     type="button"
                     className="secondary"
                     onClick={() => setConfirmDelete(null)}
                   >
-                    Cancel
+                    {t("campaigns.cancel")}
                   </button>
                 </span>
               ) : (
@@ -280,7 +290,7 @@ export function CampaignsPage() {
                   className="secondary"
                   onClick={() => setConfirmDelete(c.id)}
                 >
-                  Delete
+                  {t("campaigns.delete")}
                 </button>
               )}
             </span>
@@ -295,14 +305,20 @@ export function CampaignsPage() {
         />
 
         {lists.length === 0 ? (
-          <p className="muted">No lists uploaded yet.</p>
+          <p className="muted">{t("campaigns.noLists")}</p>
         ) : (
           <ul className="upload-list">
             {lists.map((u) => (
               <li key={u.id}>
-                <span className="file">{u.filename ?? "unknown file"}</span>
-                <span>{u.row_count} lines</span>
-                <span className="muted">uploaded {u.created_at}</span>
+                <span className="file">{u.filename ?? t("campaigns.unknownFile")}</span>
+                <span>
+                  {t(u.row_count === 1 ? "campaigns.lineCountOne" : "campaigns.lineCountOther", {
+                    count: u.row_count,
+                  })}
+                </span>
+                <span className="muted">
+                  {t("campaigns.uploaded", { date: u.created_at })}
+                </span>
               </li>
             ))}
           </ul>
@@ -316,7 +332,7 @@ export function CampaignsPage() {
               className="secondary"
               onClick={() => setUploadingFor(uploadingFor === c.id ? null : c.id)}
             >
-              {uploadingFor === c.id ? "Close" : "Add a list"}
+              {uploadingFor === c.id ? t("campaigns.close") : t("campaigns.uploadList")}
             </button>
           </div>
         )}
@@ -334,7 +350,7 @@ export function CampaignsPage() {
             belongs to the campaign rather than sitting beside it. */}
         {isSuperAdmin && (
           <details className="section campaign-download">
-            <summary>Results file download</summary>
+            <summary>{t("campaigns.resultsFile")}</summary>
             <div className="btn-row">
               <a
                 className="button secondary"
@@ -343,7 +359,7 @@ export function CampaignsPage() {
                 download
                 onClick={(e) => onExportClick(e, c)}
               >
-                {exporting === c.id ? "Preparing…" : "Download .xlsx"}
+                {exporting === c.id ? t("campaigns.preparing") : t("campaigns.download")}
               </a>
               {canChooseSaveLocation() && (
                 <button
@@ -352,7 +368,7 @@ export function CampaignsPage() {
                   disabled={exporting !== null || c.package_count === 0}
                   onClick={() => void saveCampaignAs(c)}
                 >
-                  Save as…
+                  {t("campaigns.saveAs")}
                 </button>
               )}
             </div>
@@ -365,11 +381,9 @@ export function CampaignsPage() {
 
   return (
     <div>
-      <h1>Campaigns</h1>
+      <h1>{t("campaigns.title")}</h1>
 
-      {!isSuperAdmin && (
-        <p className="muted">Only a super-admin can create campaigns and upload lists.</p>
-      )}
+      {!isSuperAdmin && <p className="muted">{t("campaigns.operatorOnly")}</p>}
 
       {error && <p className="error">{error}</p>}
       {notice && <p className="ok">{notice}</p>}
@@ -383,10 +397,10 @@ export function CampaignsPage() {
             setSaved(false);
           }}
         >
-          <summary>New campaign</summary>
+          <summary>{t("campaigns.newCampaign")}</summary>
           <form className="customer-row" onSubmit={create}>
             <label>
-              Company
+              {t("campaigns.company")}
               <select
                 value={picksCompany ? customerId : String(user?.customerId ?? "")}
                 disabled={!picksCompany}
@@ -398,7 +412,7 @@ export function CampaignsPage() {
               >
                 {picksCompany ? (
                   <>
-                    <option value="">Choose a company…</option>
+                    <option value="">{t("campaigns.chooseCompany")}</option>
                     {customers.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -407,13 +421,13 @@ export function CampaignsPage() {
                   </>
                 ) : (
                   <option value={String(user?.customerId ?? "")}>
-                    {ownCompany?.name ?? "Your company"}
+                    {ownCompany?.name ?? t("campaigns.yourCompany")}
                   </option>
                 )}
               </select>
             </label>
             <label>
-              Campaign name
+              {t("campaigns.name")}
               <input
                 value={name}
                 onChange={(e) => {
@@ -424,7 +438,7 @@ export function CampaignsPage() {
               />
             </label>
             <label>
-              Start date
+              {t("campaigns.startDate")}
               <input
                 type="date"
                 value={startDate}
@@ -436,7 +450,7 @@ export function CampaignsPage() {
               />
             </label>
             <label>
-              Finish date
+              {t("campaigns.finishDate")}
               <input
                 type="date"
                 value={finishDate}
@@ -447,24 +461,24 @@ export function CampaignsPage() {
                 required
               />
             </label>
-            <button>Create</button>
-            {saved && <span className="resend-saved">Saved</span>}
+            <button>{t("campaigns.create")}</button>
+            {saved && <span className="resend-saved">{t("campaigns.saved")}</span>}
           </form>
         </details>
       )}
 
       <details className="card" open>
-        <summary>Campaigns</summary>
+        <summary>{t("campaigns.list")}</summary>
 
         {picksCompany && (
           <div className="customer-row">
             <label>
-              Customer
+              {t("campaigns.customer")}
               <select
                 value={selectedCustomerId}
                 onChange={(e) => setSelectedCustomerId(e.target.value)}
               >
-                <option value="">Pick a customer…</option>
+                <option value="">{t("campaigns.pickCustomer")}</option>
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -482,7 +496,9 @@ export function CampaignsPage() {
             {openCampaigns.map(renderCampaign)}
             {closedCampaigns.length > 0 && (
               <details className="card campaign-archive">
-                <summary>Closed campaigns ({closedCampaigns.length})</summary>
+                <summary>
+                  {t("campaigns.closed", { count: closedCampaigns.length })}
+                </summary>
                 {closedCampaigns.map(renderCampaign)}
               </details>
             )}

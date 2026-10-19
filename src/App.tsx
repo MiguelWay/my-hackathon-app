@@ -11,10 +11,13 @@ import { ReturnsPage } from "./pages/ReturnsPage";
 import { RecentReturnsPage } from "./pages/RecentReturnsPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { UsersPage } from "./pages/UsersPage";
+import { TranslationsPage } from "./pages/TranslationsPage";
+import { useI18n } from "./i18n/I18nContext";
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="loading">Loading…</div>;
+  const { t } = useI18n();
+  if (loading) return <div className="loading">{t("app.loading")}</div>;
   if (!user) return <Navigate to="/login" replace />;
   return <Layout>{children}</Layout>;
 }
@@ -59,6 +62,16 @@ export default function App() {
           <Protected>
             <SuperAdminOnly>
               <UsersPage />
+            </SuperAdminOnly>
+          </Protected>
+        }
+      />
+      <Route
+        path="/translations"
+        element={
+          <Protected>
+            <SuperAdminOnly>
+              <TranslationsPage />
             </SuperAdminOnly>
           </Protected>
         }

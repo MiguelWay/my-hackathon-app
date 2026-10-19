@@ -1,3 +1,5 @@
+import { translate } from "../i18n/runtime";
+
 export const baseUrl = import.meta.env.VITE_API_BASE_URL;
 
 if (!baseUrl) {
@@ -14,12 +16,18 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method,
-    credentials: "include",
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      method,
+      credentials: "include",
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    // A request that never reached the server has no API message to show; say it in the UI's language.
+    throw new ApiError(0, translate("api.connection"));
+  }
   const text = await res.text();
   const data: unknown = text ? JSON.parse(text) : null;
   if (!res.ok) {
@@ -40,6 +48,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   delete: <T>(path: string) => request<T>("DELETE", path),
 };

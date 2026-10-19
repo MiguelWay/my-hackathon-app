@@ -259,6 +259,40 @@ table.grid th {
   width: 100%;
 }
 
+/* The language switch sits in the header after sign-in, and in the corner of the auth screens. */
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.lang-switch button {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lang-switch button + button {
+  border-left: 1px solid var(--border);
+}
+
+.lang-switch button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.auth-language {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
 select {
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -794,6 +828,90 @@ button.campaign-choice .stats {
   margin: 0;
 }
 
+/* ---- Translations editor ---- */
+.translation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.translation-toolbar input {
+  flex: 1 1 220px;
+}
+
+.translation-toolbar select {
+  flex: 0 1 220px;
+}
+
+.translation-unsaved {
+  color: #9a5b00;
+  font-size: 13px;
+}
+
+.translation-count {
+  margin-left: auto;
+}
+
+.translations-table {
+  table-layout: fixed;
+  min-width: 760px;
+}
+
+.translations-table th:nth-child(1) {
+  width: 120px;
+}
+
+.translations-table th:nth-child(2) {
+  width: 240px;
+}
+
+.translations-table td {
+  vertical-align: top;
+}
+
+.translation-screen > td {
+  background: #eef3fb;
+  font-weight: 600;
+  border-left: 3px solid var(--accent);
+}
+
+.translation-row.dirty > td {
+  background: #fff7d6;
+}
+
+.translation-context {
+  display: block;
+  font-size: 13px;
+}
+
+.translation-key {
+  display: block;
+  margin-top: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.translations-table textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: #fff;
+  resize: vertical;
+}
+
+.translations-table textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
 /* ---- Narrow screens: rows that cannot fit side by side move onto their own lines ---- */
 @media (max-width: 900px) {
   .content {
@@ -852,6 +970,15 @@ button.campaign-choice .stats {
   /* The list opens inside a table cell; let it shrink so its tables scroll, not the page. */
   .return-list-panel {
     min-width: 0;
+  }
+
+  .translation-toolbar input,
+  .translation-toolbar select {
+    flex: 1 1 100%;
+  }
+
+  .translation-count {
+    margin-left: 0;
   }
 
   /* The category chart keeps its three columns but gives the label and bar less room. */

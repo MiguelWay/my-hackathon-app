@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { CampaignListUpload } from "../components/CampaignListUpload";
 import { useAuth } from "../auth/AuthContext";
+import { useI18n } from "../i18n/I18nContext";
 
 interface Campaign {
   id: number;
@@ -18,6 +19,7 @@ interface Campaign {
 export function CampaignDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
+  const { t } = useI18n();
   const isSuperAdmin = user?.role === "superadmin";
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -29,19 +31,24 @@ export function CampaignDetailPage() {
 
   useEffect(() => {
     load().catch((e: unknown) =>
-      setError(e instanceof Error ? e.message : "Failed to load campaign")
+      setError(e instanceof Error ? e.message : t("campaignDetail.loadFailed"))
     );
   }, [load]);
 
   return (
     <div>
       <p>
-        <Link to="/">← Campaigns</Link>
+        <Link to="/">{t("campaignDetail.back")}</Link>
       </p>
-      <h1>{campaign ? campaign.name : `Campaign ${id}`}</h1>
+      <h1>
+        {campaign ? campaign.name : t("campaignDetail.heading", { id: String(id ?? "") })}
+      </h1>
       {campaign && (
         <p className="muted">
-          Start {campaign.start_date ?? "—"} · Finish {campaign.finish_date ?? "—"}
+          {t("campaignDetail.window", {
+            start: campaign.start_date ?? "—",
+            finish: campaign.finish_date ?? "—",
+          })}
         </p>
       )}
 
@@ -49,11 +56,11 @@ export function CampaignDetailPage() {
 
       {isSuperAdmin ? (
         <details className="card">
-          <summary>Add a list to this campaign</summary>
+          <summary>{t("campaignDetail.addList")}</summary>
           <CampaignListUpload campaignId={Number(id)} onImported={load} />
         </details>
       ) : (
-        <p className="muted">Only a super-admin can upload lists.</p>
+        <p className="muted">{t("campaignDetail.onlyAdmin")}</p>
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent } from "react";
+import { useI18n } from "../i18n/I18nContext";
 
 interface Props {
   value: string;
@@ -15,6 +16,7 @@ interface Props {
  */
 export function PasswordInput({ value, onChange, autoComplete, minLength, autoFocus }: Props) {
   const [visible, setVisible] = useState(false);
+  const { t } = useI18n();
 
   return (
     <span className="pw-row">
@@ -32,10 +34,10 @@ export function PasswordInput({ value, onChange, autoComplete, minLength, autoFo
         className="secondary"
         onClick={() => setVisible((v) => !v)}
         aria-pressed={visible}
-        aria-label={visible ? "Hide password" : "Show password"}
-        title={visible ? "Hide password" : "Show password"}
+        aria-label={visible ? t("password.hideAria") : t("password.showAria")}
+        title={visible ? t("password.hideAria") : t("password.showAria")}
       >
-        {visible ? "Hide" : "Show"}
+        {visible ? t("password.hide") : t("password.show")}
       </button>
     </span>
   );

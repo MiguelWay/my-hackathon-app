@@ -21,6 +21,7 @@ import {
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { ReturnCounters } from "../components/ReturnCounters";
 import { ReturnPackageList } from "../components/ReturnPackageList";
+import { useI18n } from "../i18n/I18nContext";
 import { isClosed, localToday } from "../lib/campaignDates";
 
 interface Customer {
@@ -45,6 +46,7 @@ export function CustomersPage() {
   // operator's view — which is what makes this screen look like what a `user` sees. One page, two
   // roles: the only difference is which controls render.
   const { user, isAdmin: isSuperAdmin } = useAuth();
+  const { t } = useI18n();
   const canDeleteCustomers = isSuperAdmin && user?.customerId == null;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -77,7 +79,9 @@ export function CustomersPage() {
   }, [isSuperAdmin]);
 
   useEffect(() => {
-    load().catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+    load().catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : t("customers.loadFailed"))
+    );
   }, [load]);
 
   // A customer is created on its own, and you are taken straight to the campaign form with this customer
@@ -92,7 +96,7 @@ export function CustomersPage() {
       await load();
       navigate(`/campaigns?customer=${created.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create");
+      setError(err instanceof Error ? err.message : t("customers.createFailed"));
     }
   }
 
@@ -102,7 +106,7 @@ export function CustomersPage() {
     setNotice(null);
     try {
       await api.delete(`/admin/customers/${customer.id}`);
-      setNotice(`Deleted ${customer.name} and its campaigns.`);
+      setNotice(t("customers.deleted", { name: customer.name }));
       setConfirmDelete(null);
       if (openId === customer.id) {
         setOpenId(null);
@@ -110,7 +114,7 @@ export function CustomersPage() {
       }
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete that customer");
+      setError(err instanceof Error ? err.message : t("customers.deleteFailed"));
     }
   }
 
@@ -137,7 +141,7 @@ export function CustomersPage() {
       setCampaigns(loaded);
     } catch (err) {
       if (openRef.current !== customerId) return;
-      setError(err instanceof Error ? err.message : "Failed to load that customer's data");
+      setError(err instanceof Error ? err.message : t("customers.loadCustomerFailed"));
     }
   }
 
@@ -150,9 +154,9 @@ export function CustomersPage() {
         adminCampaignExportUrl(campaign.id),
         exportFileName(campaign.id, campaign.name)
       );
-      setNotice(`Downloaded ${campaign.name} as ${filename}, in your browser's download folder.`);
+      setNotice(t("customers.downloaded", { name: campaign.name, filename }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export failed");
+      setError(err instanceof Error ? err.message : t("customers.exportFailed"));
     } finally {
       setExporting(null);
     }
@@ -170,7 +174,7 @@ export function CustomersPage() {
       );
       setNotice(saveNotice(result));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open a save dialog");
+      setError(err instanceof Error ? err.message : t("customers.saveDialogFailed"));
     } finally {
       setExporting(null);
     }
@@ -215,7 +219,7 @@ export function CustomersPage() {
         <Link
           className="campaign-choice"
           to={`/campaigns/${camp.id}/returns`}
-          aria-label={`Record returns for ${camp.name}`}
+          aria-label={t("customers.ariaRecordReturns", { name: camp.name })}
         >
           <span className="campaign-name">{camp.name}</span>
           <ReturnCounters
@@ -230,15 +234,15 @@ export function CustomersPage() {
           <Link
             className="button"
             to={`/campaigns/${camp.id}/returns`}
-            aria-label={`Open the returns of ${camp.name}`}
+            aria-label={t("customers.ariaOpenReturns", { name: camp.name })}
           >
-            Record returns
+            {t("customers.recordReturns")}
           </Link>
         )}
         {/* The results file is part of the campaign, so its download lives inside the campaign. */}
         {isSuperAdmin && (
           <details className="section campaign-download">
-            <summary>Results file download</summary>
+            <summary>{t("customers.resultsFile")}</summary>
             <div className="btn-row">
               <a
                 className="button secondary"
@@ -247,7 +251,7 @@ export function CustomersPage() {
                 download
                 onClick={(e) => onCampaignChoiceClick(e, camp)}
               >
-                {exporting === camp.id ? "Preparing…" : "Download .xlsx"}
+                {exporting === camp.id ? t("customers.preparing") : t("customers.download")}
               </a>
               {canChooseSaveLocation() && (
                 <button
@@ -256,7 +260,7 @@ export function CustomersPage() {
                   disabled={exporting !== null || camp.package_count === 0}
                   onClick={() => saveCampaignAs(camp)}
                 >
-                  Save as…
+                  {t("customers.saveAs")}
                 </button>
               )}
             </div>
@@ -271,20 +275,18 @@ export function CustomersPage() {
 
   return (
     <div>
-      <h1>Customers</h1>
-      {!isSuperAdmin && (
-        <p className="muted">Pick a customer to see its campaigns, then a campaign to record its returns.</p>
-      )}
+      <h1>{t("customers.title")}</h1>
+      {!isSuperAdmin && <p className="muted">{t("customers.operatorHelp")}</p>}
 
       {isSuperAdmin && (
         <details className="card">
-          <summary>New customer</summary>
+          <summary>{t("customers.newCustomer")}</summary>
           <form className="customer-row" onSubmit={create}>
             <label>
-              Name
+              {t("customers.name")}
               <input value={name} onChange={(e) => setName(e.target.value)} required />
             </label>
-            <button>Create</button>
+            <button>{t("customers.create")}</button>
           </form>
         </details>
       )}
@@ -294,15 +296,15 @@ export function CustomersPage() {
 
       {items.length === 0 ? (
         <p className="muted">
-          No customers yet.{" "}
-          {isSuperAdmin && "Create the first one above."}
+          {t("customers.empty")}{" "}
+          {isSuperAdmin && t("customers.emptyAdmin")}
         </p>
       ) : (
         <table className="grid customers-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Name</th>
+              <th>{t("customers.id")}</th>
+              <th>{t("customers.name")}</th>
               {canDeleteCustomers && <th></th>}
               {!isSuperAdmin && <th></th>}
             </tr>
@@ -329,7 +331,7 @@ export function CustomersPage() {
                                 void removeCustomer(c);
                               }}
                             >
-                              Confirm delete
+                              {t("customers.confirmDelete")}
                             </button>
                             <button
                               type="button"
@@ -339,7 +341,7 @@ export function CustomersPage() {
                                 setConfirmDelete(null);
                               }}
                             >
-                              Cancel
+                              {t("customers.cancel")}
                             </button>
                           </div>
                         ) : (
@@ -351,7 +353,7 @@ export function CustomersPage() {
                               setConfirmDelete(c.id);
                             }}
                           >
-                            Delete
+                            {t("customers.delete")}
                           </button>
                         )}
                       </td>
@@ -363,7 +365,10 @@ export function CustomersPage() {
                           className="disclosure"
                           aria-expanded={open}
                           aria-controls={`customer-${c.id}-panel`}
-                          aria-label={`${open ? "Hide" : "Show"} the campaigns of ${c.name}`}
+                          aria-label={t(
+                            open ? "customers.hideCampaigns" : "customers.showCampaigns",
+                            { name: c.name }
+                          )}
                           onClick={(e) => {
                             e.stopPropagation();
                             void toggle(c.id);
@@ -379,27 +384,32 @@ export function CustomersPage() {
                     <tr className="expand" id={`customer-${c.id}-panel`} ref={expandRef}>
                       <td colSpan={canDeleteCustomers ? 4 : 3}>
                         <section className="customer-group">
-                          <h2 className="group-title">Campaigns</h2>
+                          <h2 className="group-title">{t("customers.campaigns")}</h2>
                           {campaigns === null ? (
-                            <p className="muted">Loading…</p>
+                            <p className="muted">{t("customers.loading")}</p>
                           ) : campaigns.length === 0 ? (
                             <p className="muted">
-                              <strong>{c.name}</strong> has no campaigns yet.
-                              {isSuperAdmin && " Create one from the Campaigns screen."}
+                              <strong>{c.name}</strong>
+                              {t("customers.noCampaignsSuffix")}
+                              {isSuperAdmin && ` ${t("customers.createFromCampaigns")}`}
                             </p>
                           ) : (
                             <>
                               <p className="muted">
-                                <strong>{c.name}</strong> — {campaigns.length} campaign
-                                {campaigns.length === 1 ? "" : "s"}.{" "}
-                                Click one to record its returns and resends.
+                                <strong>{c.name}</strong>
+                                {t(
+                                  campaigns.length === 1
+                                    ? "customers.campaignCountOne"
+                                    : "customers.campaignCountOther",
+                                  { count: campaigns.length }
+                                )}
                               </p>
                               {isSuperAdmin ? (
                                 <ul className="campaign-list">{campaigns.map(campaignRow)}</ul>
                               ) : (
                                 <>
                                   {openCampaigns.length === 0 ? (
-                                    <p className="muted">No open campaigns right now.</p>
+                                    <p className="muted">{t("customers.noOpenCampaigns")}</p>
                                   ) : (
                                     <ul className="campaign-list">
                                       {openCampaigns.map(campaignRow)}
@@ -407,7 +417,11 @@ export function CustomersPage() {
                                   )}
                                   {closedCampaigns.length > 0 && (
                                     <details className="section campaign-archive">
-                                      <summary>Closed campaigns ({closedCampaigns.length})</summary>
+                                      <summary>
+                                        {t("customers.closedCampaigns", {
+                                          count: closedCampaigns.length,
+                                        })}
+                                      </summary>
                                       <ul className="campaign-list">
                                         {closedCampaigns.map(campaignRow)}
                                       </ul>

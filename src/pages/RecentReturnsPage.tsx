@@ -14,6 +14,7 @@ import {
 } from "../lib/campaignExport";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { useAuth } from "../auth/AuthContext";
+import { useI18n } from "../i18n/I18nContext";
 
 interface RecentReturnRow {
   id: number;
@@ -56,14 +57,6 @@ interface ChainRow {
   resends: string[];
 }
 
-/**
- * The heading for the nth resend column: "Resent as", "Resent again as", "Resent a 3rd time as"…
- * Worded to match the .xlsx (`chainColumns` in `server/src/exportLayout.ts`); keep the two in step.
- */
-const RESEND_WORDS = ["as", "again as", "a 3rd time as", "a 4th time as", "a 5th time as"];
-function resendHeader(i: number): string {
-  return `Resent ${RESEND_WORDS[i - 1] ?? `${i}th time as`}`;
-}
 
 /** Handed over by /returns after a resend is saved, so the operator sees it confirmed here. */
 interface ResentNotice {
@@ -75,6 +68,7 @@ interface ResentNotice {
 /** The most recently recorded returns, newest first. */
 export function RecentReturnsPage() {
   const { user, isAdmin: isSuperAdmin } = useAuth();
+  const { t } = useI18n();
   const hasCompany = user?.customerId != null;
   const location = useLocation();
   const resent = (location.state as { resent?: ResentNotice } | null)?.resent;
@@ -105,7 +99,9 @@ export function RecentReturnsPage() {
   useEffect(() => {
     if (!hasCompany) return;
     load()
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : t("recent.loadFailed"))
+      )
       .finally(() => setLoading(false));
   }, [hasCompany, load]);
 
@@ -118,14 +114,14 @@ export function RecentReturnsPage() {
         setSelectedCampaign(list.length ? String(list[0].id) : "");
       })
       .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Failed to load the campaign list")
+        setError(e instanceof Error ? e.message : t("recent.campaignListFailed"))
       );
   }, [hasCompany, isSuperAdmin]);
 
   async function runExport() {
     const campaign = campaigns.find((c) => String(c.id) === selectedCampaign);
     if (!campaign) {
-      setError("Pick a campaign to download.");
+      setError(t("recent.pickCampaignDownload"));
       return;
     }
     setError(null);
@@ -136,11 +132,9 @@ export function RecentReturnsPage() {
         campaignExportUrl(campaign.id),
         exportFileName(campaign.id, campaign.name)
       );
-      setExportNotice(
-        `Downloaded ${campaign.name} as ${filename}, in your browser's download folder.`
-      );
+      setExportNotice(t("recent.downloaded", { name: campaign.name, filename }));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Export failed");
+      setError(e instanceof Error ? e.message : t("recent.exportFailed"));
     } finally {
       setExporting(false);
     }
@@ -150,7 +144,7 @@ export function RecentReturnsPage() {
   async function runSaveAs() {
     const campaign = campaigns.find((c) => String(c.id) === selectedCampaign);
     if (!campaign) {
-      setError("Pick a campaign to save.");
+      setError(t("recent.pickCampaignSave"));
       return;
     }
     setError(null);
@@ -163,7 +157,7 @@ export function RecentReturnsPage() {
       );
       setExportNotice(saveNotice(result));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Could not open a save dialog");
+      setError(e instanceof Error ? e.message : t("recent.saveDialogFailed"));
     } finally {
       setExporting(false);
     }
@@ -176,11 +170,9 @@ export function RecentReturnsPage() {
     setChainsExporting(true);
     try {
       const filename = await downloadExport(chainsExportUrl(), CHAINS_EXPORT_FILENAME);
-      setExportNotice(
-        `Downloaded the chain report as ${filename}, in your browser's download folder.`
-      );
+      setExportNotice(t("recent.chainDownloaded", { filename }));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Export failed");
+      setError(e instanceof Error ? e.message : t("recent.exportFailed"));
     } finally {
       setChainsExporting(false);
     }
@@ -194,7 +186,7 @@ export function RecentReturnsPage() {
       const result = await saveExportAs(chainsExportUrl(), CHAINS_EXPORT_FILENAME);
       setExportNotice(saveNotice(result));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Could not open a save dialog");
+      setError(e instanceof Error ? e.message : t("recent.saveDialogFailed"));
     } finally {
       setChainsExporting(false);
     }
@@ -203,12 +195,15 @@ export function RecentReturnsPage() {
   if (!hasCompany) {
     return (
       <div>
-        <h1>Returned Packages</h1>
-        <p className="muted">
-          This account is not attached to a company, so it has no returns to show.
-        </p>
+        <h1>{t("recent.title")}</h1>
+        <p className="muted">{t("recent.noCompany")}</p>
       </div>
     );
+  }
+
+  /** The heading for the nth resend column. The .xlsx export keeps its own English headings. */
+  function resendHeader(i: number): string {
+    return t(i <= 5 ? `recent.resend${i}` : "recent.resendN", { n: i });
   }
 
   // As many resend columns as the longest chain needs.
@@ -219,13 +214,16 @@ export function RecentReturnsPage() {
 
   return (
     <div>
-      <h1>Returned Packages</h1>
-      <p className="muted">Your company&rsquo;s most recent returns, newest first.</p>
+      <h1>{t("recent.title")}</h1>
+      <p className="muted">{t("recent.subtitle")}</p>
 
       {resent && (
         <p className="ok">
-          Linked {resent.replacement} as a resend of {resent.original} in &ldquo;{resent.campaignName}
-          &rdquo;.
+          {t("recent.linked", {
+            replacement: resent.replacement,
+            original: resent.original,
+            campaign: resent.campaignName,
+          })}
         </p>
       )}
 
@@ -240,21 +238,20 @@ export function RecentReturnsPage() {
             resends={summary.resends}
           />
           {summary.returns > summary.recent && (
-            <p className="muted">The list below shows the latest {summary.recent}.</p>
+            <p className="muted">
+              {t("recent.latest", { count: summary.recent })}
+            </p>
           )}
         </>
       )}
 
       {isSuperAdmin && campaigns.length > 0 && (
         <div className="card">
-          <h2>Download a campaign</h2>
-          <p className="muted">
-            The flagged .xlsx: every uploaded column, plus the return status, the reason and the
-            resend of each package. Any of your company&rsquo;s campaigns can be downloaded.
-          </p>
+          <h2>{t("recent.downloadCampaign")}</h2>
+          <p className="muted">{t("recent.downloadHelp")}</p>
           <div className="btn-row">
             <label>
-              Campaign
+              {t("recent.campaign")}
               <select
                 value={selectedCampaign}
                 onChange={(e) => setSelectedCampaign(e.target.value)}
@@ -276,11 +273,11 @@ export function RecentReturnsPage() {
                 void runExport();
               }}
             >
-              {exporting ? "Preparing…" : "Download .xlsx"}
+              {exporting ? t("recent.preparing") : t("recent.download")}
             </a>
             {canChooseSaveLocation() && (
               <button type="button" className="secondary" disabled={exporting} onClick={runSaveAs}>
-                Save as…
+                {t("recent.saveAs")}
               </button>
             )}
           </div>
@@ -290,21 +287,18 @@ export function RecentReturnsPage() {
 
       {chains.length > 0 && (
         <div className="card">
-          <h2>Resend chains</h2>
-          <p className="muted">
-            Each package that went out again, next to the ID it replaced. The first column is the
-            package the store sent back.
-          </p>
+          <h2>{t("recent.chains")}</h2>
+          <p className="muted">{t("recent.chainsHelp")}</p>
           <div className="scroll">
             <table className="grid">
               <thead>
                 <tr>
-                  <th>Original ID</th>
+                  <th>{t("recent.originalId")}</th>
                   {resendHeaders.map((h, i) => (
                     <th key={i}>{h}</th>
                   ))}
-                  <th>Campaign</th>
-                  <th>Return Reason</th>
+                  <th>{t("recent.campaign")}</th>
+                  <th>{t("recent.returnReason")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -336,7 +330,7 @@ export function RecentReturnsPage() {
                 void runChainsExport();
               }}
             >
-              {chainsExporting ? "Preparing…" : "Download .xlsx"}
+              {chainsExporting ? t("recent.preparing") : t("recent.download")}
             </a>
             {canChooseSaveLocation() && (
               <button
@@ -345,7 +339,7 @@ export function RecentReturnsPage() {
                 disabled={chainsExporting}
                 onClick={runChainsSaveAs}
               >
-                Save as…
+                {t("recent.saveAs")}
               </button>
             )}
           </div>
@@ -354,19 +348,19 @@ export function RecentReturnsPage() {
       )}
 
       {loading ? (
-        <p className="muted">Loading…</p>
+        <p className="muted">{t("recent.loading")}</p>
       ) : items.length === 0 ? (
-        <p className="muted">Nothing recorded yet.</p>
+        <p className="muted">{t("recent.nothing")}</p>
       ) : (
         <div className="scroll">
           <table className="grid">
             <thead>
               <tr>
-                <th>Package ID</th>
-                <th>Resent as</th>
-                <th>Campaign</th>
-                <th>Reason</th>
-                <th>When</th>
+                <th>{t("recent.packageId")}</th>
+                <th>{t("recent.resentAs")}</th>
+                <th>{t("recent.campaign")}</th>
+                <th>{t("recent.reason")}</th>
+                <th>{t("recent.when")}</th>
               </tr>
             </thead>
             <tbody>
@@ -385,7 +379,9 @@ export function RecentReturnsPage() {
                   </td>
                   <td>
                     {r.reason_label}
-                    {r.closed_store === 1 && <span className="chip">closed store</span>}
+                    {r.closed_store === 1 && (
+                      <span className="chip">{t("recent.closedStore")}</span>
+                    )}
                     {r.note ? <span className="muted"> · {r.note}</span> : null}
                   </td>
                   <td>{r.returned_at}</td>

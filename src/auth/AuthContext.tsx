@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { translate } from "../i18n/runtime";
 import { api } from "../lib/api";
 import { useIdleLogout } from "../lib/idle";
 
@@ -79,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // by that attempt is dropped again straight away.
     if (me.role !== "superadmin" && !asOperator) {
       await api.post("/auth/logout").catch(() => undefined);
-      throw new Error('This is an operator account — use "Enter as operator".');
+      throw new Error(translate("login.operatorDoor"));
     }
     // A super-admin enters whichever view they asked for; an operator is always in the operator's.
     setView(asOperator || me.role !== "superadmin");

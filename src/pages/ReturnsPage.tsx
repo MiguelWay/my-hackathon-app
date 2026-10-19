@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { ReturnCounters } from "../components/ReturnCounters";
 import { ReturnPackageList } from "../components/ReturnPackageList";
 import { StoreIdReport } from "../components/StoreIdReport";
+import { useI18n } from "../i18n/I18nContext";
 
 interface Reason {
   id: number;
@@ -87,6 +88,7 @@ export function ReturnsPage() {
   const { id } = useParams();
   const campaignId = String(id ?? "");
   const { isAdmin } = useAuth();
+  const { t } = useI18n();
 
   const [head, setHead] = useState<CampaignHead | null>(null);
   const [reasons, setReasons] = useState<Reason[]>([]);
@@ -117,7 +119,7 @@ export function ReturnsPage() {
 
   useEffect(() => {
     loadHead().catch((e: unknown) =>
-      setError(e instanceof Error ? e.message : "Failed to load this campaign")
+      setError(e instanceof Error ? e.message : t("returns.loadFailed"))
     );
   }, [loadHead]);
 
@@ -127,7 +129,7 @@ export function ReturnsPage() {
       .get<Reason[]>("/returns/reasons")
       .then(setReasons)
       .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Failed to load return reasons")
+        setError(e instanceof Error ? e.message : t("returns.reasonsLoadFailed"))
       );
   }, []);
 
@@ -158,7 +160,7 @@ export function ReturnsPage() {
     e.preventDefault();
     const senderId = term.trim();
     if (!senderId) {
-      setError("Type a package ID first.");
+      setError(t("returns.typeId"));
       return;
     }
     setError(null);
@@ -171,7 +173,7 @@ export function ReturnsPage() {
       setMatches(await lookup(senderId));
     } catch (err) {
       setMatches(null);
-      setError(err instanceof Error ? err.message : "Search failed");
+      setError(err instanceof Error ? err.message : t("returns.searchFailed"));
     } finally {
       setBusy(false);
     }
@@ -189,12 +191,14 @@ export function ReturnsPage() {
         reasonCode: reason.code,
         note: notes[match.id] ?? "",
       });
-      setConfirmation(`Return recorded — "${res.reasonLabel}" for ${match.sender_id}.`);
+      setConfirmation(
+        t("returns.recorded", { reason: res.reasonLabel, id: match.sender_id })
+      );
       setMatches(await lookup(match.sender_id));
       await loadHead();
       setListRefresh((n) => n + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not record the return");
+      setError(err instanceof Error ? err.message : t("returns.recordFailed"));
     } finally {
       setBusy(false);
     }
@@ -203,7 +207,7 @@ export function ReturnsPage() {
   async function saveResend(match: Match) {
     const form = resends[match.id];
     if (!form || !form.senderId.trim()) {
-      setResendError("Type the new package ID.");
+      setResendError(t("returns.typeNewId"));
       return;
     }
     setResendError(null);
@@ -225,7 +229,7 @@ export function ReturnsPage() {
       await loadHead();
       setListRefresh((n) => n + 1);
     } catch (err) {
-      setResendError(err instanceof Error ? err.message : "Could not save the resend");
+      setResendError(err instanceof Error ? err.message : t("returns.resendFailed"));
     } finally {
       setBusy(false);
     }
@@ -254,9 +258,9 @@ export function ReturnsPage() {
     return (
       <div>
         <p>
-          <Link to="/customers">← Customers</Link>
+          <Link to="/customers">{t("returns.backCustomers")}</Link>
         </p>
-        <h1>Packages returns</h1>
+        <h1>{t("returns.title")}</h1>
         <p className="error">{error}</p>
       </div>
     );
@@ -271,14 +275,14 @@ export function ReturnsPage() {
     lastResend === null ? (
       <div className="card reason-pick">
         <label>
-          Note (optional)
+          {t("returns.note")}
           <input
             value={notes[matches[0].id] ?? ""}
             onChange={(e) => setNotes((n) => ({ ...n, [matches[0].id]: e.target.value }))}
-            placeholder="e.g. second visit"
+            placeholder={t("returns.notePlaceholder")}
           />
         </label>
-        <p className="muted">Reason</p>
+        <p className="muted">{t("returns.reason")}</p>
         <div className="btn-row">
           {reasons.map((r) => (
             <button
@@ -299,10 +303,10 @@ export function ReturnsPage() {
     <div>
       <p>
         <Link to={`/customers?customer=${head?.customer_id ?? ""}`}>
-          ← {head ? head.customer_name : "Customers"}
+          ← {head ? head.customer_name : t("returns.customerFallback")}
         </Link>
       </p>
-      <h1>{head ? head.name : "Loading…"}</h1>
+      <h1>{head ? head.name : t("returns.loading")}</h1>
       {head && (
         <p className="muted">
           {head.customer_name} · {head.start_date ?? "—"} → {head.finish_date ?? "—"}
@@ -315,17 +319,17 @@ export function ReturnsPage() {
 
       <form className="card inline" onSubmit={search}>
         <label>
-          Package ID
+          {t("returns.packageId")}
           <input
             ref={searchRef}
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            placeholder="e.g. PortaP_1"
+            placeholder={t("returns.searchPlaceholder")}
             autoFocus
           />
         </label>
         <button type="submit" disabled={busy}>
-          {busy ? "Working…" : "Find package"}
+          {busy ? t("returns.working") : t("returns.find")}
         </button>
         {confirmation && <p className="ok confirmation">✓ {confirmation}</p>}
       </form>
@@ -345,14 +349,14 @@ export function ReturnsPage() {
       )}
 
       {matches !== null && matches.length === 0 && (
-        <p className="muted">No package with that ID in this campaign.</p>
+        <p className="muted">{t("returns.noMatch")}</p>
       )}
 
       {isAdmin && reasonPicker}
 
       {matches !== null && matches.length === 1 && Object.keys(matchedExtra).length > 0 && (
         <details className="card label-details">
-          <summary>Label details</summary>
+          <summary>{t("returns.labelDetails")}</summary>
           <div className="kv">
             {Object.entries(matchedExtra).map(([k, v]) => (
               <div key={k}>
@@ -371,19 +375,19 @@ export function ReturnsPage() {
           {resendSaved ? (
             <>
               <label>
-                New package ID
+                {t("returns.newPackageId")}
                 <input value={resendSaved} readOnly />
               </label>
               <button type="button" disabled>
-                Save resend
+                {t("returns.saveResend")}
               </button>
-              <span className="resend-saved">Saved</span>
+              <span className="resend-saved">{t("returns.saved")}</span>
             </>
           ) : (
             onlyMatch && (
               <>
                 <label>
-                  New package ID
+                  {t("returns.newPackageId")}
                   <input
                     value={resends[onlyMatch.id]?.senderId ?? ""}
                     onChange={(e) => {
@@ -393,11 +397,11 @@ export function ReturnsPage() {
                         [onlyMatch.id]: { senderId: e.target.value },
                       }));
                     }}
-                    placeholder="a package ID in this campaign, e.g. PortaP_21"
+                    placeholder={t("returns.resendPlaceholder")}
                   />
                 </label>
                 <button type="button" disabled={busy} onClick={() => saveResend(onlyMatch)}>
-                  Save resend
+                  {t("returns.saveResend")}
                 </button>
                 {resendError && (
                   <span className="resend-error" role="alert">
@@ -418,7 +422,7 @@ export function ReturnsPage() {
           </div>
           {Object.keys(createdExtra).length > 0 && (
             <details className="section label-details">
-              <summary>Label details</summary>
+              <summary>{t("returns.labelDetails")}</summary>
               <div className="kv">
                 {Object.entries(createdExtra).map(([k, v]) => (
                   <div key={k}>
@@ -435,7 +439,7 @@ export function ReturnsPage() {
       {matches !== null && (
         <div className="btn-row next-action">
           <button type="button" onClick={recordAnother} disabled={busy}>
-            {matches.length > 0 ? "Record another package" : "Search again"}
+            {matches.length > 0 ? t("returns.recordAnother") : t("returns.searchAgain")}
           </button>
         </div>
       )}
