@@ -67,6 +67,8 @@ APP_URL=https://example.com
 SMTP_HOST=localhost
 SMTP_PORT=25
 SMTP_FROM=no-reply@example.com
+# Set to true when the local MTA refuses to relay (see the SMTP note below).
+SMTP_DIRECT=false
 EOF
 chmod 600 .env
 ```
@@ -79,6 +81,16 @@ Notes:
 - `APP_URL` is the public HTTPS address; the **Forgot password** link is built from it.
 - `SMTP_HOST=localhost` + `SMTP_PORT=25` uses Plesk's own mail server. Set `SMTP_USER`/`SMTP_PASSWORD`
   only if your server requires authentication.
+- If that server answers `554 5.7.1 ... Relay access denied` (common when Plesk's **mail service is off**
+  for the domain), the local MTA cannot deliver to outside addresses and the reset email never leaves the
+  box. Plesk's Node.js console shows the error in the app log; a one-off check is `node --import tsx -e
+  "import('./server/src/mailer.ts').then(m => m.sendPasswordReset('you@example.com', 'test'))"`.
+  Set `SMTP_DIRECT=true` in that case: the app then resolves the recipient domain's MX records and
+  delivers straight to them over port 25, trying each host in priority order. `SMTP_FROM` must use a
+  domain that resolves (it is the EHLO name and the address recipients see); `no-reply@<your domain>` is
+  right. Direct delivery needs outbound port 25, and IP reputation matters — many providers want matching
+  forward/reverse DNS and a DMARC record, so set one up before relying on this for anything important.
+  When set, `SMTP_DIRECT=true` takes precedence over `SMTP_HOST`.
 
 ## 4. Install, build, migrate
 
