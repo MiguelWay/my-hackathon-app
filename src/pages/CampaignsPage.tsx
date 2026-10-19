@@ -21,6 +21,7 @@ import { CampaignListUpload } from "../components/CampaignListUpload";
 import { SaveLocationHint } from "../components/SaveLocationHint";
 import { ReturnCounters } from "../components/ReturnCounters";
 import { ReturnPackageList } from "../components/ReturnPackageList";
+import { StoreIdReport } from "../components/StoreIdReport";
 import { isClosed, localToday } from "../lib/campaignDates";
 
 interface Campaign {
@@ -79,6 +80,8 @@ export function CampaignsPage() {
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [finishDate, setFinishDate] = useState("");
+  // Shown beside Create after a campaign has been created; cleared as soon as the form is edited.
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // Which campaign's results file is being prepared, so only its own accordion says "Preparing…".
@@ -134,6 +137,7 @@ export function CampaignsPage() {
   async function create(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setSaved(false);
     try {
       await api.post("/campaigns", {
         name,
@@ -146,6 +150,7 @@ export function CampaignsPage() {
       setName("");
       setStartDate("");
       setFinishDate("");
+      setSaved(true);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create");
@@ -323,6 +328,7 @@ export function CampaignsPage() {
         )}
 
         <ReturnPackageList campaignId={c.id} />
+        <StoreIdReport campaignId={c.id} />
 
         {/* The campaign's own results file, as an accordion inside the campaign: the download
             belongs to the campaign rather than sitting beside it. */}
@@ -372,7 +378,10 @@ export function CampaignsPage() {
         <details
           className="card"
           open={newCampaignOpen}
-          onToggle={(e) => setNewCampaignOpen(e.currentTarget.open)}
+          onToggle={(e) => {
+            setNewCampaignOpen(e.currentTarget.open);
+            setSaved(false);
+          }}
         >
           <summary>New campaign</summary>
           <form className="customer-row" onSubmit={create}>
@@ -382,7 +391,10 @@ export function CampaignsPage() {
                 value={picksCompany ? customerId : String(user?.customerId ?? "")}
                 disabled={!picksCompany}
                 required={picksCompany}
-                onChange={(e) => setCustomerId(e.target.value)}
+                onChange={(e) => {
+                  setCustomerId(e.target.value);
+                  setSaved(false);
+                }}
               >
                 {picksCompany ? (
                   <>
@@ -402,14 +414,24 @@ export function CampaignsPage() {
             </label>
             <label>
               Campaign name
-              <input value={name} onChange={(e) => setName(e.target.value)} required />
+              <input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setSaved(false);
+                }}
+                required
+              />
             </label>
             <label>
               Start date
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setSaved(false);
+                }}
                 required
               />
             </label>
@@ -418,11 +440,15 @@ export function CampaignsPage() {
               <input
                 type="date"
                 value={finishDate}
-                onChange={(e) => setFinishDate(e.target.value)}
+                onChange={(e) => {
+                  setFinishDate(e.target.value);
+                  setSaved(false);
+                }}
                 required
               />
             </label>
             <button>Create</button>
+            {saved && <span className="resend-saved">Saved</span>}
           </form>
         </details>
       )}
