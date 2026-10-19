@@ -4,6 +4,12 @@ import { api } from "../lib/api";
 import { useI18n } from "../i18n/I18nContext";
 import { guessSenderColumn } from "../lib/senderColumn";
 import { guessStoreColumn } from "../lib/storeColumn";
+import {
+  ACCEPT_ATTRIBUTE,
+  decodeSpreadsheetText,
+  guessDelimiter,
+  isDelimitedFile,
+} from "../lib/tableFile";
 
 export interface ImportResult {
   uploadId: number;
@@ -53,8 +59,15 @@ export function CampaignListUpload({
     setError(null);
     setNotice(null);
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
+      // CSV/TSV must be decoded as text (and with the right separator); the binary formats are read
+      // straight from the bytes. `accept` already offers both, so a picked file always lands here.
+      let wb: XLSX.WorkBook;
+      if (isDelimitedFile(file.name)) {
+        const text = decodeSpreadsheetText(new Uint8Array(await file.arrayBuffer()));
+        wb = XLSX.read(text, { type: "string", FS: guessDelimiter(text, file.name) });
+      } else {
+        wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      }
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
         header: 1,
@@ -129,7 +142,7 @@ export function CampaignListUpload({
   return (
     <>
       <div className="upload-input">
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} />
+        <input ref={inputRef} type="file" accept={ACCEPT_ATTRIBUTE} onChange={onFile} />
       </div>
 
       {error && <p className="error">{error}</p>}
