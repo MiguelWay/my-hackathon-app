@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { Worker } from "tesseract.js";
 import { api } from "../lib/api";
+import { extractTokens } from "../../shared/ocrTokens";
 import { useI18n } from "../i18n/I18nContext";
 
 // Photograph a printed package ID and turn it into one of this campaign's IDs.
@@ -10,6 +11,9 @@ import { useI18n } from "../i18n/I18nContext";
 // campaign's own IDs and decides whether the read is trustworthy — see server/src/idMatch.ts. A tie
 // comes back as a short list and the operator picks, because recording a return against the wrong
 // package is worse than one extra tap.
+//
+// With `lookup={false}` there is no API call: the ID is new, so the best token the OCR saw is written
+// into the caller's field for the operator to confirm.
 
 interface ResolveResponse {
   senderId: string | null;
@@ -23,6 +27,11 @@ interface ScanPackageIdProps {
   /** Called with a confirmed ID; the caller fills the search field and looks it up. */
   onResolved: (senderId: string) => void;
   disabled?: boolean;
+  /**
+   * When false, the read text is handed back as-is instead of being matched against the campaign.
+   * Used for a new package ID, which by definition is not in the campaign yet.
+   */
+  lookup?: boolean;
 }
 
 type Phase = "starting" | "live" | "reading" | "choosing" | "error";
@@ -109,7 +118,7 @@ function stopStream(stream: MediaStream | null) {
   for (const track of stream?.getTracks() ?? []) track.stop();
 }
 
-export function ScanPackageId({ campaignId, onResolved, disabled }: ScanPackageIdProps) {
+export function ScanPackageId({ campaignId, onResolved, disabled, lookup = true }: ScanPackageIdProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("starting");
@@ -245,6 +254,20 @@ export function ScanPackageId({ campaignId, onResolved, disabled }: ScanPackageI
 
   const resolveText = useCallback(
     async (text: string) => {
+      if (!lookup) {
+        // A new ID is not in the campaign yet, so there is nothing to match: take the most ID-shaped
+        // token the OCR saw and let the operator confirm it in the field before saving.
+        const token = extractTokens(text, 1)[0];
+        if (!token) {
+          setPhase("error");
+          setError(t("scan.noText"));
+          return;
+        }
+        onResolved(token);
+        close();
+        return;
+      }
+
       // Nothing readable, or nothing long enough to be an ID: skip the round-trip.
       if (!text.trim() || !/[A-Za-z0-9]{4}/.test(text)) {
         setPhase("error");
@@ -270,7 +293,7 @@ export function ScanPackageId({ campaignId, onResolved, disabled }: ScanPackageI
       setPhase("error");
       setError(t("scan.noMatch"));
     },
-    [campaignId, close, onResolved, t]
+    [campaignId, close, lookup, onResolved, t]
   );
 
   const readCanvas = useCallback(

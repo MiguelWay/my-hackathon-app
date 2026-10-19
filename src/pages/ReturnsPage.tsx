@@ -413,6 +413,17 @@ export function ReturnsPage() {
                     placeholder={t("returns.resendPlaceholder")}
                   />
                 </label>
+                {/* Same scanner as the search field, but the read ID is only written into this input:
+                    the new package does not exist yet, so there is nothing to look up. */}
+                <ScanPackageId
+                  campaignId={campaignId}
+                  lookup={false}
+                  disabled={busy}
+                  onResolved={(senderId) => {
+                    setResendError(null);
+                    setResends((r) => ({ ...r, [onlyMatch.id]: { senderId } }));
+                  }}
+                />
                 <button type="button" disabled={busy} onClick={() => saveResend(onlyMatch)}>
                   {t("returns.saveResend")}
                 </button>
