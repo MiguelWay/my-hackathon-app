@@ -66,6 +66,12 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
   store reference and may repeat across packages.
 - Return capture: **manual sender-ID entry** → validate against the campaign → reason choice
   (tienda cerrada, ausente, dirección incorrecta, estacionada, otro); one return per package.
+- **Package ID scan** (added post-v1): photograph the printed ID and the app fills the field. The OCR
+  runs **on the phone** (Tesseract.js in a Web Worker, assets served from `/tesseract`), so no photo
+  leaves the device. The characters are then matched against the campaign's own IDs
+  (`POST /returns/resolve`): routinely confused characters (`0/O/Q`, `1/I/L`, `2/Z`, `5/S`, `8/B`,
+  `6/G`, `4/A`, `U/V`), a dropped or doubled character and a missing separator are tolerated, and a
+  tie is shown as a short list for the operator to settle. Manual typing stays available.
 - Resend linking: the returned package → an existing package of the same campaign, as the next attempt
   of the chain; one resend per package; a returned package cannot be a resend target.
 - Admin deletion: a super-admin can delete a campaign (with its uploads, packages and returns) and a
@@ -87,7 +93,7 @@ sent to again — plus return-rate reporting. The app reads a per-customer send 
   red winning; scope per campaign & customer.
 
 **Later (v2+)**
-- Optional OCR (photo capture) or barcode/QR scanning to speed up sender-ID entry.
+- Barcode / QR scanning (the printed ID is text; the scan path reads it with OCR).
 - Google Sheets / Playwright as an alternative input source.
 - Optional write-back to the source database.
 - More reports/charts; customer self-service portal.
@@ -134,7 +140,8 @@ As implemented in `db/migrations/`:
 
 ## 7. External integrations
 - Correos España — outbound shipping (labels printed outside the app; no API assumed).
-- (No Supabase, no OCR, no Solana / blockchain.)
+- No third-party OCR service: the package-ID scan runs on-device (see §4).
+- (No Supabase, no Solana / blockchain.)
 
 ## 8. Security & privacy boundaries
 - **Always:** scope every API query to the single customer the request names (isolation is enforced in
@@ -178,7 +185,9 @@ As implemented in `db/migrations/`:
 - **Return reasons (decided):** data-driven, seeded with the five — tienda cerrada, ausente, dirección
   incorrecta, estacionada, otro — editable per customer/campaign later.
 - **Extra per-customer columns:** no decision needed; every uploaded column is stored verbatim.
-- **OCR:** out of v1 (manual sender-ID entry); optional OCR / barcode is deferred to v2.
+- **OCR:** shipped after v1 as an on-device scan (see §4). The browser reads the label; the server only
+  receives the text it read and matches it against the campaign, so no image is stored or uploaded.
+  Barcode/QR decoding remains out of scope.
 - **Language (decided):** Spanish is the default for everyone, with an **ES / EN** switch in the header;
   English is kept beside every text for easy updating. Only administrators edit the table; operators
   never see the editor. Server API error messages remain English in this phase.

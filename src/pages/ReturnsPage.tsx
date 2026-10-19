@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../auth/AuthContext";
 import { ReturnCounters } from "../components/ReturnCounters";
 import { ReturnPackageList } from "../components/ReturnPackageList";
+import { ScanPackageId } from "../components/ScanPackageId";
 import { StoreIdReport } from "../components/StoreIdReport";
 import { useI18n } from "../i18n/I18nContext";
 
@@ -156,13 +157,8 @@ export function ReturnsPage() {
     searchRef.current?.focus();
   }
 
-  async function search(e: FormEvent) {
-    e.preventDefault();
-    const senderId = term.trim();
-    if (!senderId) {
-      setError(t("returns.typeId"));
-      return;
-    }
+  /** Runs a lookup and shows its outcome; shared by typing an ID and scanning one. */
+  async function runLookup(senderId: string) {
     setError(null);
     setConfirmation(null);
     setLastResend(null);
@@ -177,6 +173,22 @@ export function ReturnsPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function search(e: FormEvent) {
+    e.preventDefault();
+    const senderId = term.trim();
+    if (!senderId) {
+      setError(t("returns.typeId"));
+      return;
+    }
+    await runLookup(senderId);
+  }
+
+  /** A scan produced an ID: fill the field and look it up, exactly as if it had been typed. */
+  async function scanned(senderId: string) {
+    setTerm(senderId);
+    await runLookup(senderId);
   }
 
   async function record(match: Match, reason: Reason) {
@@ -331,6 +343,7 @@ export function ReturnsPage() {
         <button type="submit" disabled={busy}>
           {busy ? t("returns.working") : t("returns.find")}
         </button>
+        <ScanPackageId campaignId={campaignId} onResolved={scanned} disabled={busy} />
         {confirmation && <p className="ok confirmation">✓ {confirmation}</p>}
       </form>
 

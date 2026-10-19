@@ -53,9 +53,19 @@ describe("security headers", () => {
     expect(csp).toContain("script-src 'self'");
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'self'");
+
+    // Compare directive values as whole tokens: `'wasm-unsafe-eval'` would trip a substring match on
+    // "unsafe-eval" even though it only lets the on-device OCR compile WebAssembly and never eval().
+    const scriptSrc = csp
+      .split(";")
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith("script-src ")) ?? "";
+    const scriptTokens = scriptSrc.split(/\s+/);
     // Inline script/style would otherwise be required to make the SPA work — it isn't.
     expect(csp).not.toContain("'unsafe-inline'");
-    expect(csp).not.toContain("unsafe-eval");
+    expect(scriptTokens).not.toContain("'unsafe-eval'");
+    expect(scriptTokens).not.toContain("'unsafe-inline'");
+    expect(scriptTokens).toContain("'wasm-unsafe-eval'");
 
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
