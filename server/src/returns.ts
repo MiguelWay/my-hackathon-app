@@ -181,7 +181,7 @@ returnsRouter.get(
       return res.status(404).json({ error: "campaign not found" });
     }
 
-    const { rows, links } = await loadReturnList(Number(campaign.customer_id), campaignId);
+    const { rows, links, reasons } = await loadReturnList(Number(campaign.customer_id), campaignId);
 
     res.json({
       campaign: { id: campaign.id, name: campaign.name },
@@ -189,13 +189,17 @@ returnsRouter.get(
       // One row per resend link: the package that came back, and the package it went out as next —
       // with that package's own return, when it came back too.
       links,
+      // Returned packages per seeded reason, zeroes included.
+      reasons,
     });
   })
 );
 
-// The same rows as a one-sheet .xlsx, so the list can leave the screen.
+// The same rows as a one-sheet .xlsx, so the list can leave the screen. Downloads are an
+// administrator's action; an operator can read the lists but not export them.
 returnsRouter.get(
   "/campaigns/:id/return-list/export",
+  requireSuperAdmin,
   ah(async (req, res) => {
     const campaignId = optionalPositiveInt(req.params.id);
     if (campaignId === null || campaignId === undefined) {
@@ -236,6 +240,7 @@ returnsRouter.get(
 
 returnsRouter.get(
   "/campaigns/:id/store-report/export",
+  requireSuperAdmin,
   ah(async (req, res) => {
     const campaignId = optionalPositiveInt(req.params.id);
     if (campaignId === null || campaignId === undefined) {

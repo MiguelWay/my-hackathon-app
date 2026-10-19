@@ -698,6 +698,63 @@ ul.campaign-list details.return-list-panel,
   margin: 8px 0 0;
 }
 
+/* Returned packages per category: a compact bar chart under the list's tables. Every seeded
+   category is listed, so the bars keep the same order from one campaign to the next. */
+.reason-summary {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.reason-summary h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.reason-summary .muted {
+  margin: 0 0 10px;
+}
+
+.reason-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reason-bar-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 170px) minmax(0, 1fr) 2.5em;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.reason-bar-label {
+  overflow-wrap: anywhere;
+}
+
+.reason-bar-track {
+  display: block;
+  height: 14px;
+  background: #eef1f5;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.reason-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 7px 0 0 7px;
+}
+
+.reason-bar-count {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 button.campaign-choice,
 a.campaign-choice {
   display: flex;
@@ -795,6 +852,12 @@ button.campaign-choice .stats {
   /* The list opens inside a table cell; let it shrink so its tables scroll, not the page. */
   .return-list-panel {
     min-width: 0;
+  }
+
+  /* The category chart keeps its three columns but gives the label and bar less room. */
+  .reason-bar-row {
+    grid-template-columns: minmax(80px, 110px) minmax(0, 1fr) 2em;
+    gap: 6px;
   }
 
   ul.campaign-list a.button {

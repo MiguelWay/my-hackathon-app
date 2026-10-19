@@ -21,6 +21,12 @@ export interface ResendLink {
   returned_again_reason: string | null;
 }
 
+export interface ReasonCount {
+  code: string;
+  label: string;
+  count: number;
+}
+
 interface PackageRow extends RowDataPacket {
   id: number;
   sender_id: string;
@@ -29,6 +35,7 @@ interface PackageRow extends RowDataPacket {
   resent_at: string | null;
   return_id: number | null;
   returned_at: string | null;
+  reason_code: string | null;
   reason_label: string | null;
 }
 
@@ -39,10 +46,11 @@ const chainKey = (p: { id: number; chain_id: number | null }): number =>
 export async function loadReturnList(
   customerId: number,
   campaignId: number
-): Promise<{ rows: ReturnListRow[]; links: ResendLink[] }> {
+): Promise<{ rows: ReturnListRow[]; links: ResendLink[]; reasons: ReasonCount[] }> {
   const [packages] = await pool.query<PackageRow[]>(
     `SELECT p.id, p.sender_id, p.chain_id, p.attempt_no, p.resent_at,
-            r.id AS return_id, r.returned_at, rr.label AS reason_label
+            r.id AS return_id, r.returned_at,
+            rr.code AS reason_code, rr.label AS reason_label
        FROM packages p
        LEFT JOIN returns r ON r.package_id = p.id
        LEFT JOIN return_reasons rr ON rr.id = r.reason_id
@@ -50,6 +58,20 @@ export async function loadReturnList(
       ORDER BY p.id`,
     [campaignId, customerId]
   );
+
+  // Every seeded reason is listed, including the ones with no returns, so the chart is stable.
+  const [reasonRows] = await pool.query<(RowDataPacket & { code: string; label: string })[]>(
+    "SELECT code, label FROM return_reasons ORDER BY sort_order, id"
+  );
+  const counts = new Map<string, number>();
+  for (const p of packages) {
+    if (p.reason_code) counts.set(p.reason_code, (counts.get(p.reason_code) ?? 0) + 1);
+  }
+  const reasons: ReasonCount[] = reasonRows.map((r) => ({
+    code: r.code,
+    label: r.label,
+    count: counts.get(r.code) ?? 0,
+  }));
 
   const rows: ReturnListRow[] = packages
     .filter((p) => p.return_id !== null || Number(p.attempt_no) > 1)
@@ -90,5 +112,5 @@ export async function loadReturnList(
   }
   ordered.sort((a, b) => a.chain - b.chain || a.attempt - b.attempt);
 
-  return { rows, links: ordered.map((entry) => entry.link) };
+  return { rows, links: ordered.map((entry) => entry.link), reasons };
 }

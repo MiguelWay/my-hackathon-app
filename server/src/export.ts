@@ -315,7 +315,7 @@ export async function sendReturnListExport(
     return;
   }
 
-  const { rows, links } = await loadReturnList(customerId, campaignId);
+  const { rows, links, reasons } = await loadReturnList(customerId, campaignId);
 
   const header = ["Package ID", "Status", "Reason"];
   const workbook = new ExcelJS.Workbook();
@@ -357,6 +357,15 @@ export async function sendReturnListExport(
     ]);
   }
   sizeColumns(linksSheet, linkHeader);
+
+  // Returned packages per category, so the administrator can take the summary away with the lists.
+  const reasonHeader = ["Category", "Returned packages"];
+  const reasonsSheet = workbook.addWorksheet("Returns by category");
+  writeHeader(reasonsSheet, reasonHeader);
+  for (const reason of reasons) {
+    reasonsSheet.addRow([reason.label, reason.count]);
+  }
+  sizeColumns(reasonsSheet, reasonHeader);
 
   const buffer = await workbook.xlsx.writeBuffer();
   res.setHeader(

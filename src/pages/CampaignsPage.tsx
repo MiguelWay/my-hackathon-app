@@ -327,7 +327,7 @@ export function CampaignsPage() {
           </div>
         )}
 
-        <ReturnPackageList campaignId={c.id} />
+        <ReturnPackageList campaignId={c.id} showDownload={isSuperAdmin} />
         <StoreIdReport campaignId={c.id} />
 
         {/* The campaign's own results file, as an accordion inside the campaign: the download

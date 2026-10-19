@@ -1614,10 +1614,16 @@ describe("a campaign's return package list", () => {
     returned_again_id: string | null;
     returned_again_reason: string | null;
   }
+  interface ReasonRow {
+    code: string;
+    label: string;
+    count: number;
+  }
   interface ListBody {
     campaign: { id: number; name: string };
     rows: ListRow[];
     links: LinkRow[];
+    reasons: ReasonRow[];
   }
 
   it("lists every returned and resent package once, a return winning", async () => {
@@ -1654,6 +1660,27 @@ describe("a campaign's return package list", () => {
       returned_again_id: null,
       returned_again_reason: null,
     });
+
+    // The category summary counts returned packages only, and keeps every seeded category in its
+    // configured order — zeroes included, so the chart never changes shape between campaigns.
+    expect(res.body.reasons.map((r) => r.code)).toEqual([
+      "tienda_cerrada",
+      "ausente",
+      "direccion_incorrecta",
+      "estacionada",
+      "otro",
+    ]);
+    const returnedByLabel = new Map<string, number>();
+    for (const r of res.body.rows) {
+      if (r.status !== "Returned" || !r.reason_label) continue;
+      returnedByLabel.set(r.reason_label, (returnedByLabel.get(r.reason_label) ?? 0) + 1);
+    }
+    for (const reason of res.body.reasons) {
+      expect(reason.count).toBe(returnedByLabel.get(reason.label) ?? 0);
+    }
+    expect(res.body.reasons.reduce((n, r) => n + r.count, 0)).toBe(
+      res.body.rows.filter((r) => r.status === "Returned").length
+    );
   });
 
   it("is open to an operator, and never mixes campaigns", async () => {
@@ -1676,15 +1703,27 @@ describe("a campaign's return package list", () => {
     expect((await alpha.get("/returns/campaigns/abc/return-list")).status).toBe(400);
   });
 
-  it("downloads the same rows as a one-sheet .xlsx, marked red and green", async () => {
-    const res = await alphaUser.raw(`/returns/campaigns/${alphaCampaign}/return-list/export`);
+  it("keeps the workbook for an administrator", async () => {
+    // The operator can read the list, but not take it away; the route refuses the same way the
+    // hidden button does.
+    expect(
+      (await alphaUser.raw(`/returns/campaigns/${alphaCampaign}/return-list/export`)).status
+    ).toBe(403);
+  });
+
+  it("downloads the same rows and the category summary as an .xlsx, marked red and green", async () => {
+    const res = await alpha.raw(`/returns/campaigns/${alphaCampaign}/return-list/export`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("spreadsheetml");
     expect(res.headers.get("content-disposition")).toContain("return-package-list");
 
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(res.buffer);
-    expect(wb.worksheets.map((w) => w.name)).toEqual(["Return package list", "Resend links"]);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      "Return package list",
+      "Resend links",
+      "Returns by category",
+    ]);
     const sheet = wb.worksheets[0];
     expect(sheet.getRow(1).values.slice(1)).toEqual(["Package ID", "Status", "Reason"]);
 
@@ -1722,6 +1761,25 @@ describe("a campaign's return package list", () => {
       | { fgColor?: { argb?: string } }
       | undefined;
     expect(linkFill?.fgColor?.argb).toBeUndefined();
+
+    // The third sheet is the category summary, in the same seeded order as the screen.
+    const reasonsSheet = wb.worksheets[2];
+    expect(reasonsSheet.getRow(1).values.slice(1)).toEqual(["Category", "Returned packages"]);
+    const categories: string[] = [];
+    let exportedTotal = 0;
+    reasonsSheet.eachRow((row, n) => {
+      if (n === 1) return;
+      categories.push(String(row.getCell(1).value));
+      exportedTotal += Number(row.getCell(2).value);
+    });
+    expect(categories).toEqual([
+      "tienda cerrada",
+      "ausente",
+      "dirección incorrecta",
+      "estacionada",
+      "otro",
+    ]);
+    expect(exportedTotal).toBe([...fills.values()].filter((argb) => argb === "FFFFC7CE").length);
   });
 });
 
@@ -1775,8 +1833,14 @@ describe("a campaign's returns + store ID report", () => {
     expect((await alpha.get("/returns/campaigns/abc/store-report")).status).toBe(400);
   });
 
+  it("keeps the workbook for an administrator", async () => {
+    expect(
+      (await alphaUser.raw(`/returns/campaigns/${alphaCampaign}/store-report/export`)).status
+    ).toBe(403);
+  });
+
   it("downloads as one plain sheet with both pairs of columns", async () => {
-    const res = await alphaUser.raw(`/returns/campaigns/${alphaCampaign}/store-report/export`);
+    const res = await alpha.raw(`/returns/campaigns/${alphaCampaign}/store-report/export`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("spreadsheetml");
     expect(res.headers.get("content-disposition")).toContain("returns-store-id");

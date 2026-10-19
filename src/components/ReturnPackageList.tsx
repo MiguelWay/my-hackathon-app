@@ -24,12 +24,22 @@ interface Link {
   returned_again_reason: string | null;
 }
 
+/** Returned packages per seeded reason, zeroes included. */
+interface ReasonCount {
+  code: string;
+  label: string;
+  count: number;
+}
+
 /**
  * A campaign's return package list, as a collapsed accordion.
  *
  * Opened, it shows every package that came back or was used as a resend, one row each, with returned
  * rows red and resent rows green (red wins). Under it, the resend links: one row per return → resend
  * pair, with the resent package's own return beside it when it came back too — uncoloured.
+ *
+ * Under the tables, the same returns summarised per category as a small bar chart — every seeded
+ * category is listed, including the ones with no returns.
  *
  * The list is fetched the first time it is opened and refreshed on every later open, or when
  * `refreshToken` changes while it is open, so a closed accordion costs nothing.
@@ -46,6 +56,7 @@ export function ReturnPackageList({
 }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [links, setLinks] = useState<Link[]>([]);
+  const [reasons, setReasons] = useState<ReasonCount[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -58,13 +69,15 @@ export function ReturnPackageList({
     loading.current = true;
     setRows(null);
     setLinks([]);
+    setReasons([]);
     setError(null);
     try {
-      const res = await api.get<{ rows: Row[]; links: Link[] }>(
+      const res = await api.get<{ rows: Row[]; links: Link[]; reasons: ReasonCount[] }>(
         `/returns/campaigns/${campaignId}/return-list`
       );
       setRows(res.rows);
       setLinks(res.links);
+      setReasons(res.reasons);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load the list");
     } finally {
@@ -93,6 +106,10 @@ export function ReturnPackageList({
       setDownloading(false);
     }
   }
+
+  const totalReturned = reasons.reduce((n, reason) => n + reason.count, 0);
+  // Bars are scaled to the busiest category, so the chart stays readable at any volume.
+  const maxReturned = reasons.reduce((most, reason) => Math.max(most, reason.count), 0);
 
   async function saveAs() {
     setError(null);
@@ -181,6 +198,29 @@ export function ReturnPackageList({
         </>
       )}
 
+      {rows !== null && (
+        <div className="reason-summary">
+          <h3>Returned packages by category</h3>
+          <p className="muted">
+            {totalReturned} returned package{totalReturned === 1 ? "" : "s"}
+          </p>
+          <div className="reason-bars">
+            {reasons.map((reason) => {
+              const width = maxReturned === 0 ? 0 : Math.round((reason.count / maxReturned) * 100);
+              return (
+                <div className="reason-bar-row" key={reason.code}>
+                  <span className="reason-bar-label">{reason.label}</span>
+                  <span className="reason-bar-track" aria-hidden="true">
+                    <span className="reason-bar-fill" style={{ width: `${width}%` }} />
+                  </span>
+                  <span className="reason-bar-count">{reason.count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {rows !== null && showDownload && (
         <>
           <div className="btn-row">
@@ -199,7 +239,7 @@ export function ReturnPackageList({
             )}
           </div>
           <SaveLocationHint />
-          <p className="muted">Both tables, one sheet each.</p>
+          <p className="muted">Both tables and the category summary, one sheet each.</p>
           {notice && <p className="ok">{notice}</p>}
         </>
       )}
